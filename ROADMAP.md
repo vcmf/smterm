@@ -96,21 +96,58 @@ click → focus specific pane (cross-platform action routing); session glance/gr
 
 ---
 
-## M3 — Polish ⬜
+## M3 — Polish ⬜ _(next)_
 
-**Goal:** the quality-of-life layer that makes it pleasant daily.
+**Goal:** the quality-of-life layer that makes it pleasant daily — led by **file-first settings**.
 
-| ID  | Feature             | Description                                                                         | Status |
-| --- | ------------------- | ----------------------------------------------------------------------------------- | ------ |
-| F9  | Scrollback + search | xterm scrollback + `search` addon (find in buffer)                                  | ⬜     |
-| F10 | Copy / paste        | Selection + clipboard; right-click / keybindings                                    | ⬜     |
-| F8+ | WebGL renderer      | `@xterm/addon-webgl` (canvas fallback) for perf                                     | ⬜     |
-| F13 | Themes / fonts      | Theme object + font family/size in settings                                         | ⬜     |
-| F11 | Persist layout      | Save tabs / cwd / split tree / prefs to config JSON; restore (fresh PTYs) on launch | ⬜     |
-| —   | Settings UI         | Minimal preferences panel                                                           | ⬜     |
+### M3a — Settings, fonts & themes (next up)
 
-**Exit criteria:** relaunch restores the tab/split layout at the right cwds; search, copy/paste,
-theme switching all work; large output stays smooth with WebGL.
+**Design — one source of truth, two editors:** `~/.config/smterm/settings.json` (`%APPDATA%\smterm\`
+on Windows) is authoritative and hand-editable. A GUI settings panel and manual edits both write
+the same file; a live file watcher re-applies on any change. The panel is just a friendlier editor.
+
+Locked decisions (2026-07-06): **canvas renderer + ligatures** (no WebGL); **live file watcher**;
+v1 scope = font + theme + core (plain form, shadcn/Tailwind deferred). Default font **JetBrains Mono**.
+
+Example `settings.json`:
+
+```jsonc
+{
+  "font": { "family": "JetBrains Mono", "size": 13, "ligatures": true, "lineHeight": 1.2 },
+  "theme": "dark",
+  "cursorBlink": true,
+  "scrollback": 5000,
+}
+```
+
+| ID  | Feature               | Description                                                                                                               | Status |
+| --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------ |
+| —   | **Schema + defaults** | Typed settings + pure `merge(defaults, partial)` + tolerant validation (bad JSON → defaults)                              | ⬜     |
+| —   | **File layer (Rust)** | Resolve config path; `get_settings`/`save_settings`; `notify` watcher → `settings-changed`; `open_settings_file` (opener) | ⬜     |
+| —   | **Load + apply**      | Load on startup, subscribe to changes, `TerminalManager.applySettings()` updates all live panes                           | ⬜     |
+| F13 | **Fonts + ligatures** | Bundle JetBrains Mono (OFL) `@font-face`; `@xterm/addon-ligatures` on canvas; family/size/lineHeight                      | ⬜     |
+| F13 | **Theme tokens**      | CSS variables (dark/light) as source → derived xterm theme; `theme` switches UI + terminal                                | ⬜     |
+| —   | **Settings panel**    | Form editing the same fields (writes via `save_settings`) + "Open settings.json" button + path                            | ⬜     |
+
+**Tests:** pure merge/validation (missing/partial/invalid/unknown keys); Rust path + read/write
+round-trip + load-with-merge + watcher-fires; verify ligatures render and hand-edit applies live.
+
+**Risks:** ligatures ↔ renderer/font-loading (canvas + bundled font, verify); watcher debounce/loops;
+live font/size change must re-`fit()` + `pty_resize` all panes.
+
+### M3b — Remaining polish (after settings)
+
+| ID  | Feature             | Description                                                                     | Status |
+| --- | ------------------- | ------------------------------------------------------------------------------- | ------ |
+| F9  | Scrollback + search | xterm scrollback + `search` addon (find in buffer)                              | ⬜     |
+| F10 | Copy / paste        | Selection + clipboard; right-click / keybindings                                | ⬜     |
+| F11 | Persist layout      | Save tabs / cwd / split tree to the same config; restore (fresh PTYs) on launch | ⬜     |
+
+**Exit criteria:** hand-editing `settings.json` updates the app live; the panel edits the same file;
+JetBrains Mono ligatures render; theme switches UI + terminal; relaunch restores layout; search +
+copy/paste work.
+
+**Note:** WebGL renderer dropped in favor of ligatures (canvas). Revisit only if perf demands it.
 
 ---
 
