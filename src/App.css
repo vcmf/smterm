@@ -1,3 +1,18 @@
+/* Theme tokens — overwritten at runtime by applyThemeVars(); dark defaults here
+   so the first paint is styled before JS runs. */
+:root {
+  --bg: #1e1e1e;
+  --bg-elevated: #252526;
+  --fg: #d4d4d4;
+  --fg-muted: #969696;
+  --border: #1a1a1a;
+  --accent: #007acc;
+  --hover: #ffffff22;
+  --control-bg: #3c3c3c;
+  --control-fg: #dddddd;
+  --control-hover: #4c4c4c;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -12,8 +27,8 @@ body,
 }
 
 body {
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: var(--bg);
+  color: var(--fg);
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -32,8 +47,8 @@ body {
   justify-content: space-between;
   height: 36px;
   flex: 0 0 auto;
-  background: #252526;
-  border-bottom: 1px solid #1a1a1a;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
   user-select: none;
 }
 
@@ -50,14 +65,14 @@ body {
   padding: 0 10px;
   max-width: 200px;
   font-size: 13px;
-  color: #969696;
-  border-right: 1px solid #1a1a1a;
+  color: var(--fg-muted);
+  border-right: 1px solid var(--border);
   cursor: default;
 }
 
 .tab.active {
-  background: #1e1e1e;
-  color: #fff;
+  background: var(--bg);
+  color: var(--fg);
 }
 
 .tab-title {
@@ -68,9 +83,9 @@ body {
 
 .tab-rename {
   width: 110px;
-  background: #1e1e1e;
-  color: #fff;
-  border: 1px solid #007acc;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--accent);
   border-radius: 3px;
   padding: 1px 4px;
   font: inherit;
@@ -91,8 +106,8 @@ body {
 }
 
 .tab-close:hover {
-  background: #ffffff22;
-  color: #fff;
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .toolbar {
@@ -104,9 +119,9 @@ body {
 
 .shell-select,
 .tb-btn {
-  background: #3c3c3c;
-  color: #ddd;
-  border: 1px solid #1a1a1a;
+  background: var(--control-bg);
+  color: var(--control-fg);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 8px;
   font-size: 12px;
@@ -117,12 +132,18 @@ body {
 }
 
 .tb-btn:hover:not(:disabled) {
-  background: #4c4c4c;
+  background: var(--control-hover);
 }
 
 .tb-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ── Content / panes ─────────────────────────────────── */
@@ -136,7 +157,7 @@ body {
   display: grid;
   place-items: center;
   height: 100%;
-  color: #666;
+  color: var(--fg-muted);
 }
 
 .terminal-pane {
@@ -144,7 +165,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #1e1e1e;
+  background: var(--bg);
 }
 
 .terminal-mount {
@@ -165,7 +186,7 @@ body {
   top: 2px;
   right: 6px;
   z-index: 5;
-  color: #aaa;
+  color: var(--fg-muted);
   opacity: 0;
   transition: opacity 0.1s;
 }
@@ -175,36 +196,8 @@ body {
 }
 
 .pane-close:hover {
-  background: #ffffff22;
-  color: #fff;
-}
-
-/* react-resizable-panels group fills its container */
-[data-group] {
-  height: 100%;
-  width: 100%;
-}
-
-/* ── Resize handles (Separator) ──────────────────────── */
-.resize-handle {
-  background: #1a1a1a;
-  transition: background 0.1s;
-}
-
-.resize-handle:hover,
-[data-separator][data-active],
-[data-separator][data-dragging] {
-  background: #007acc;
-}
-
-.resize-handle.row {
-  width: 4px;
-  cursor: col-resize;
-}
-
-.resize-handle.column {
-  height: 4px;
-  cursor: row-resize;
+  background: var(--hover);
+  color: var(--fg);
 }
 
 /* ── Status badges ───────────────────────────────────── */
@@ -239,10 +232,108 @@ body {
   }
 }
 
-/* pane-level badge sits in the top-left corner */
 .terminal-pane > .badge {
   position: absolute;
   top: 6px;
   left: 6px;
   z-index: 5;
+}
+
+/* react-resizable-panels group fills its container */
+[data-group] {
+  height: 100%;
+  width: 100%;
+}
+
+.resize-handle {
+  background: var(--border);
+  transition: background 0.1s;
+}
+
+.resize-handle:hover,
+[data-separator][data-active],
+[data-separator][data-dragging] {
+  background: var(--accent);
+}
+
+.resize-handle.row {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.resize-handle.column {
+  height: 4px;
+  cursor: row-resize;
+}
+
+/* ── Settings panel ──────────────────────────────────── */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: #00000066;
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+
+.settings-panel {
+  width: 420px;
+  max-width: 92vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  box-shadow: 0 12px 40px #00000066;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.settings-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-row input[type="text"],
+.settings-row input:not([type]),
+.settings-row input[type="number"],
+.settings-row select {
+  width: 190px;
+  background: var(--control-bg);
+  color: var(--control-fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.settings-footer {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-path {
+  font-size: 11px;
+  color: var(--fg-muted);
+  word-break: break-all;
 }

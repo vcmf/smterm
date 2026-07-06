@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Settings as SettingsIcon } from "lucide-react";
 import { useStore } from "../store";
 import { allSessionIds } from "../lib/paneTree";
 import { aggregateBadge } from "../lib/sessionStatus";
@@ -121,6 +122,13 @@ export function TabBar() {
           onClick={() => currentShell && useStore.getState().splitActive("column", currentShell)}
         >
           ⬍
+        </button>
+        <button
+          className="tb-btn icon-btn"
+          title="Settings"
+          onClick={() => useStore.getState().setSettingsOpen(true)}
+        >
+          <SettingsIcon size={14} />
         </button>
       </div>
     </div>

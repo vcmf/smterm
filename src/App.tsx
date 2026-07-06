@@ -1,10 +1,14 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { TabBar } from "./components/TabBar";
 import { PaneLayout } from "./components/PaneLayout";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { TerminalManager } from "./terminal/TerminalManager";
 import { useStore } from "./store";
 import { ensureNotificationPermission } from "./lib/notify";
+import { loadSettings } from "./settings/io";
+import { applyThemeVars, getTheme } from "./settings/themes";
 import type { ShellOption } from "./types";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
@@ -12,6 +16,8 @@ import "./App.css";
 function App() {
   const tabs = useStore((s) => s.tabs);
   const activeTabId = useStore((s) => s.activeTabId);
+  const settings = useStore((s) => s.settings);
+  const settingsOpen = useStore((s) => s.settingsOpen);
 
   // Load available shells once, then open the first tab.
   useEffect(() => {
@@ -35,6 +41,24 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  // Load settings.json, and re-load whenever the file changes (GUI or hand-edit).
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      useStore.getState().setSettings(await loadSettings());
+      unlisten = await listen("settings-changed", async () => {
+        useStore.getState().setSettings(await loadSettings());
+      });
+    })();
+    return () => unlisten?.();
+  }, []);
+
+  // Apply settings to CSS theme + all terminals whenever they change.
+  useEffect(() => {
+    applyThemeVars(getTheme(settings.theme));
+    TerminalManager.applySettings(settings);
+  }, [settings]);
 
   // Notification permission + window focus tracking (drives focus-aware badges).
   useEffect(() => {
@@ -71,6 +95,7 @@ function App() {
           <div className="empty">No sessions — open a tab.</div>
         )}
       </div>
+      {settingsOpen && <SettingsPanel />}
     </div>
   );
 }

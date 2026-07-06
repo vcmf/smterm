@@ -14,6 +14,7 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{Manager, State};
 
+pub mod settings;
 pub mod shell_integration;
 
 /// One live terminal session.
@@ -283,8 +284,15 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
-            list_shells
+            list_shells,
+            settings::settings_file_path,
+            settings::read_settings_file,
+            settings::write_settings_file
         ])
+        .setup(|app| {
+            settings::start_watcher(app.handle().clone());
+            Ok(())
+        })
         .on_window_event(|window, event| {
             // Kill all child shells when the window closes — no orphans.
             if let tauri::WindowEvent::CloseRequested { .. } = event {

@@ -1,38 +1,57 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Session } from "../types";
 import { useStore, isSessionVisible } from "../store";
 import { notify } from "../lib/notify";
+import { getTheme } from "../settings/themes";
+import type { Settings } from "../settings/schema";
+import { ligatureRanges } from "./ligatures";
 
 interface Entry {
   term: Terminal;
   fit: FitAddon;
   host: HTMLDivElement;
   opened: boolean;
+  joinerId: number | undefined;
 }
 
-// xterm.js + PTY live here, keyed by session id — OUTSIDE the React tree.
-// That way splitting a pane or switching tabs (which remounts React components)
-// re-attaches the same terminal instead of destroying and respawning the shell.
+// xterm.js + PTY live here, keyed by session id — OUTSIDE the React tree, so
+// splitting a pane or switching tabs re-attaches instead of respawning the shell.
 const entries = new Map<string, Entry>();
 
+const fontStack = (family: string) => `"${family}", Menlo, "Cascadia Code", monospace`;
+
 function build(): Entry {
+  const s = useStore.getState().settings;
   const host = document.createElement("div");
   host.className = "terminal-host";
   const term = new Terminal({
-    fontFamily: 'Menlo, Monaco, "Cascadia Code", "Fira Code", Consolas, monospace',
-    fontSize: 13,
-    cursorBlink: true,
-    theme: { background: "#1e1e1e", foreground: "#d4d4d4", cursor: "#d4d4d4" },
+    fontFamily: fontStack(s.font.family),
+    fontSize: s.font.size,
+    lineHeight: s.font.lineHeight,
+    cursorBlink: s.cursorBlink,
+    scrollback: s.scrollback,
+    theme: getTheme(s.theme).terminal,
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
   // Clicking a URL opens it in the OS default browser (no embedded browser).
   term.loadAddon(new WebLinksAddon((_event, uri) => void openUrl(uri)));
-  return { term, fit, host, opened: false };
+  return { term, fit, host, opened: false, joinerId: undefined };
+}
+
+/** Register/deregister the ligature character joiner to match the setting. */
+function applyLigatures(entry: Entry, on: boolean) {
+  if (on && entry.joinerId === undefined) {
+    entry.joinerId = entry.term.registerCharacterJoiner(ligatureRanges);
+  } else if (!on && entry.joinerId !== undefined) {
+    entry.term.deregisterCharacterJoiner(entry.joinerId);
+    entry.joinerId = undefined;
+  }
 }
 
 function spawn(session: Session, entry: Entry) {
@@ -42,7 +61,6 @@ function spawn(session: Session, entry: Entry) {
   const onData = new Channel<number[]>();
   onData.onmessage = (bytes) => {
     term.write(new Uint8Array(bytes));
-    // Flag background activity (once) so hidden tabs show an unread dot.
     const s = useStore.getState().sessions[session.id];
     if (s && !s.unread && !isSessionVisible(session.id)) {
       store.signalSession(session.id, { type: "output" });
@@ -60,14 +78,12 @@ function spawn(session: Session, entry: Entry) {
 
   term.onData((data) => void invoke("pty_write", { id: session.id, data }));
 
-  // OSC 9 — a program/agent explicitly asks for attention → toast if off-screen.
+  // OSC 9 — attention; OSC 133;C/D — command start/finish.
   term.parser.registerOscHandler(9, (data) => {
     store.signalSession(session.id, { type: "attention" });
     if (!isSessionVisible(session.id)) void notify(session.title, data || "smterm");
     return true;
   });
-
-  // OSC 133 — shell-integration marks: C = command started, D = finished.
   term.parser.registerOscHandler(133, (data) => {
     const kind = data.charAt(0);
     if (kind === "C") store.signalSession(session.id, { type: "command-start" });
@@ -93,11 +109,17 @@ export const TerminalManager = {
       entry = build();
       entries.set(session.id, entry);
     }
-    // appendChild moves the node here if it was mounted elsewhere before.
     container.appendChild(entry.host);
     if (!entry.opened) {
       entry.term.open(entry.host);
       entry.opened = true;
+      // Canvas renderer supports character joiners (needed for ligatures).
+      try {
+        entry.term.loadAddon(new CanvasAddon());
+      } catch {
+        // Falls back to the DOM renderer; ligatures won't render but term works.
+      }
+      applyLigatures(entry, useStore.getState().settings.font.ligatures);
       syncSize(session.id, entry);
       spawn(session, entry);
     } else {
@@ -106,18 +128,31 @@ export const TerminalManager = {
     entry.term.focus();
   },
 
-  /** Re-fit a session after its container resized. */
   fit(id: string) {
     const entry = entries.get(id);
     if (entry?.opened) syncSize(id, entry);
   },
 
-  /** Focus a session's terminal so keystrokes reach the PTY. */
   focus(id: string) {
     entries.get(id)?.term.focus();
   },
 
-  /** Permanently dispose a session's terminal + kill its PTY. */
+  /** Apply settings (font/theme/ligatures/etc.) to every live terminal. */
+  applySettings(settings: Settings) {
+    const theme = getTheme(settings.theme).terminal;
+    for (const [id, entry] of entries) {
+      const o = entry.term.options;
+      o.fontFamily = fontStack(settings.font.family);
+      o.fontSize = settings.font.size;
+      o.lineHeight = settings.font.lineHeight;
+      o.cursorBlink = settings.cursorBlink;
+      o.scrollback = settings.scrollback;
+      o.theme = theme;
+      applyLigatures(entry, settings.font.ligatures);
+      if (entry.opened) syncSize(id, entry);
+    }
+  },
+
   dispose(id: string) {
     const entry = entries.get(id);
     if (!entry) return;

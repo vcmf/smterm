@@ -3,6 +3,8 @@ import type { PaneNode, Session, ShellOption, Tab } from "./types";
 import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "./lib/paneTree";
 import { reduceSignals } from "./lib/sessionStatus";
 import type { SignalEvent } from "./lib/sessionStatus";
+import { defaultSettings } from "./settings/schema";
+import type { Settings } from "./settings/schema";
 
 const newId = () => crypto.randomUUID();
 
@@ -23,7 +25,11 @@ interface AppState {
   activeTabId: string | null;
   shells: ShellOption[];
   windowFocused: boolean;
+  settings: Settings;
+  settingsOpen: boolean;
 
+  setSettingsOpen: (open: boolean) => void;
+  setSettings: (settings: Settings) => void;
   setShells: (shells: ShellOption[]) => void;
   newTab: (shell: ShellOption) => void;
   closeTab: (tabId: string) => void;
@@ -53,7 +59,11 @@ export const useStore = create<AppState>((set, get) => ({
   activeTabId: null,
   shells: [],
   windowFocused: true,
+  settings: defaultSettings,
+  settingsOpen: false,
 
+  setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  setSettings: (settings) => set({ settings }),
   setShells: (shells) => set({ shells }),
 
   newTab: (shell) =>

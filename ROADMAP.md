@@ -120,20 +120,25 @@ Example `settings.json`:
 }
 ```
 
-| ID  | Feature               | Description                                                                                                               | Status |
-| --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------ |
-| —   | **Schema + defaults** | Typed settings + pure `merge(defaults, partial)` + tolerant validation (bad JSON → defaults)                              | ⬜     |
-| —   | **File layer (Rust)** | Resolve config path; `get_settings`/`save_settings`; `notify` watcher → `settings-changed`; `open_settings_file` (opener) | ⬜     |
-| —   | **Load + apply**      | Load on startup, subscribe to changes, `TerminalManager.applySettings()` updates all live panes                           | ⬜     |
-| F13 | **Fonts + ligatures** | Bundle JetBrains Mono (OFL) `@font-face`; `@xterm/addon-ligatures` on canvas; family/size/lineHeight                      | ⬜     |
-| F13 | **Theme tokens**      | CSS variables (dark/light) as source → derived xterm theme; `theme` switches UI + terminal                                | ⬜     |
-| —   | **Settings panel**    | Form editing the same fields (writes via `save_settings`) + "Open settings.json" button + path                            | ⬜     |
+| ID  | Feature               | Description                                                                                                   | Status                     |
+| --- | --------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| —   | **Schema + defaults** | Typed settings + pure `mergeSettings` + tolerant `parseSettings` (bad JSON → defaults)                        | ✅                         |
+| —   | **File layer (Rust)** | `~/.config/smterm/settings.json`; read/write commands; `notify` watcher → `settings-changed`; open in editor  | ✅                         |
+| —   | **Load + apply**      | Load on startup, subscribe to `settings-changed`, `TerminalManager.applySettings()` updates all live panes    | ✅                         |
+| F13 | **Fonts + ligatures** | Bundle JetBrains Mono (OFL); canvas renderer + custom character-joiner ligatures; family/size/lineHeight      | ✅ (visual verify pending) |
+| F13 | **Theme tokens**      | CSS variables (dark/light) as source → derived xterm theme; `theme` switches UI + terminal                    | ✅ (dark/light)            |
+| —   | **Settings panel**    | Gear-icon panel editing the same file (writes via `write_settings_file`) + "Open settings.json" button + path | ✅                         |
 
-**Tests:** pure merge/validation (missing/partial/invalid/unknown keys); Rust path + read/write
-round-trip + load-with-merge + watcher-fires; verify ligatures render and hand-edit applies live.
+**Verified:** lint + 22 Rust + 32 frontend tests green (incl. merge/validation, ligature-joiner,
+config-path); app builds + launches (~123 MB with canvas renderer). **Pending:** visual check that
+JetBrains Mono ligatures render and that hand-editing settings.json applies live.
 
-**Risks:** ligatures ↔ renderer/font-loading (canvas + bundled font, verify); watcher debounce/loops;
-live font/size change must re-`fit()` + `pty_resize` all panes.
+**Notes:** dropped `@xterm/addon-ligatures` (Node-only `font-finder` dep breaks the webview bundle);
+ligatures done via a small custom character-joiner on the canvas renderer. Pinned to the xterm 5.5
+ecosystem (v6 addons not yet available).
+
+**Risks (addressed):** ligatures ↔ renderer (canvas + custom joiner); live font/size change
+re-`fit()`s + `pty_resize`s all panes.
 
 ### M3b — Remaining polish (after settings)
 
