@@ -1,0 +1,31 @@
+# smterm shell integration — bash (loaded via `bash --rcfile`).
+# Load the user's real config first.
+if [[ -f /etc/bash.bashrc ]]; then source /etc/bash.bashrc; fi
+if [[ -f "$HOME/.bashrc" ]]; then source "$HOME/.bashrc"; fi
+
+# Only instrument interactive shells, once.
+case "$-" in *i*) ;; *) return ;; esac
+[[ -n "$__SMTERM_BASH_HOOKS" ]] && return
+__SMTERM_BASH_HOOKS=1
+
+__smterm_armed=0
+
+# Fires (via the DEBUG trap) before a top-level command runs. The DEBUG trap is
+# not inherited by functions, so PROMPT_COMMAND's internals don't trip it; the
+# guard skips PROMPT_COMMAND itself and the `armed` flag limits it to one mark
+# per command line.
+__smterm_preexec() {
+  [[ "$BASH_COMMAND" == "$PROMPT_COMMAND" ]] && return
+  [[ $__smterm_armed == 1 ]] && return
+  __smterm_armed=1
+  printf '\033]133;C\007'
+}
+
+__smterm_precmd() {
+  local ret=$?
+  printf '\033]133;D;%s\007' "$ret"
+  __smterm_armed=0
+}
+
+PROMPT_COMMAND="__smterm_precmd${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+trap '__smterm_preexec' DEBUG

@@ -14,6 +14,8 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{Manager, State};
 
+pub mod shell_integration;
+
 /// One live terminal session.
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
@@ -180,9 +182,19 @@ fn pty_spawn(
     let shell = shell
         .filter(|s| !s.is_empty())
         .unwrap_or_else(default_shell);
+    // Best-effort shell integration (OSC 133 marks); None → plain shell.
+    let injection = shell_integration::integration_for(&shell);
     let mut cmd = CommandBuilder::new(shell);
     if let Some(args) = args {
         for arg in args {
+            cmd.arg(arg);
+        }
+    }
+    if let Some(inj) = injection {
+        for (key, value) in inj.env {
+            cmd.env(key, value);
+        }
+        for arg in inj.args {
             cmd.arg(arg);
         }
     }

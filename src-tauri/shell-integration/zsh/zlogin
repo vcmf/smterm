@@ -1,0 +1,4 @@
+# smterm shell integration — zsh .zlogin (login shells)
+if [[ -f "${SMTERM_USER_ZDOTDIR:-$HOME}/.zlogin" ]]; then
+  source "${SMTERM_USER_ZDOTDIR:-$HOME}/.zlogin"
+fi

@@ -74,14 +74,14 @@ terminals — solved by decoupling terminal lifetime from the React tree via `Te
 **Goal:** the part that makes smterm _cmux-like_ rather than "just a terminal" — know when a
 session needs attention and tell the user via native notifications.
 
-| ID  | Feature                          | Description                                                                       | Status                                      |
-| --- | -------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------- |
-| F6  | **Native notifications**         | `tauri-plugin-notification`; toast on OSC 9 when the session's tab isn't visible  | ✅ (macOS delivery needs signed build — M4) |
-| —   | **OSC 9 handler**                | xterm OSC 9 handler — `printf '\e]9;msg\a'` raises a toast + attention badge      | ✅                                          |
-| F15 | **Per-session status/attention** | `idle / working / attention` via OSC 133 + OSC 9; badges on tabs + panes          | ✅ (working/idle/attention)                 |
-| —   | **Status detection**             | OSC 133;C/D marks (working/idle) + OSC 9 (attention) + output→unread heuristic    | ✅ (idle heuristic deferred)                |
-| —   | **Focus-aware delivery**         | Notify/flag only when the session's tab isn't visible (window focus + active tab) | ✅                                          |
-| F16 | **Session overview**             | Tab badges (attention/working/unread) + per-pane status dot                       | ✅ badges; glance grid later                |
+| ID  | Feature                          | Description                                                                                                                 | Status                                      |
+| --- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| F6  | **Native notifications**         | `tauri-plugin-notification`; toast on OSC 9 when the session's tab isn't visible                                            | ✅ (macOS delivery needs signed build — M4) |
+| —   | **OSC 9 handler**                | xterm OSC 9 handler — `printf '\e]9;msg\a'` raises a toast + attention badge                                                | ✅                                          |
+| F15 | **Per-session status/attention** | `idle / working / attention` via OSC 133 + OSC 9; badges on tabs + panes                                                    | ✅ (working/idle/attention)                 |
+| —   | **Status detection**             | Auto shell-integration (zsh + bash) injects OSC 133;C/D → working/idle with no user setup; OSC 9 = attention; output→unread | ✅ (fish/pwsh/WSL later)                    |
+| —   | **Focus-aware delivery**         | Notify/flag only when the session's tab isn't visible (window focus + active tab)                                           | ✅                                          |
+| F16 | **Session overview**             | Tab badges (attention/working/unread) + per-pane status dot                                                                 | ✅ badges; glance grid later                |
 
 **Exit criteria:** an agent finishing/attention in a background tab raises a native notification;
 the tab shows a badge; no notification spam for the visible tab.
