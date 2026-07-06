@@ -264,6 +264,7 @@ fn pty_kill(state: State<PtyManager>, id: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(PtyManager::default())
         .invoke_handler(tauri::generate_handler![
             pty_spawn,

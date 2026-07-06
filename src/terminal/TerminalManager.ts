@@ -4,6 +4,8 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Session } from "../types";
+import { useStore, isSessionVisible } from "../store";
+import { notify } from "../lib/notify";
 
 interface Entry {
   term: Terminal;
@@ -34,17 +36,44 @@ function build(): Entry {
 }
 
 function spawn(session: Session, entry: Entry) {
+  const { term } = entry;
+  const store = useStore.getState();
+
   const onData = new Channel<number[]>();
-  onData.onmessage = (bytes) => entry.term.write(new Uint8Array(bytes));
+  onData.onmessage = (bytes) => {
+    term.write(new Uint8Array(bytes));
+    // Flag background activity (once) so hidden tabs show an unread dot.
+    const s = useStore.getState().sessions[session.id];
+    if (s && !s.unread && !isSessionVisible(session.id)) {
+      store.signalSession(session.id, { type: "output" });
+    }
+  };
+
   invoke("pty_spawn", {
     id: session.id,
-    cols: entry.term.cols,
-    rows: entry.term.rows,
+    cols: term.cols,
+    rows: term.rows,
     shell: session.command,
     args: session.args,
     onData,
-  }).catch((e) => entry.term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`));
-  entry.term.onData((data) => void invoke("pty_write", { id: session.id, data }));
+  }).catch((e) => term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`));
+
+  term.onData((data) => void invoke("pty_write", { id: session.id, data }));
+
+  // OSC 9 — a program/agent explicitly asks for attention → toast if off-screen.
+  term.parser.registerOscHandler(9, (data) => {
+    store.signalSession(session.id, { type: "attention" });
+    if (!isSessionVisible(session.id)) void notify(session.title, data || "smterm");
+    return true;
+  });
+
+  // OSC 133 — shell-integration marks: C = command started, D = finished.
+  term.parser.registerOscHandler(133, (data) => {
+    const kind = data.charAt(0);
+    if (kind === "C") store.signalSession(session.id, { type: "command-start" });
+    else if (kind === "D") store.signalSession(session.id, { type: "command-end" });
+    return true;
+  });
 }
 
 function syncSize(id: string, entry: Entry) {

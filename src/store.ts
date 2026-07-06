@@ -1,11 +1,20 @@
 import { create } from "zustand";
 import type { PaneNode, Session, ShellOption, Tab } from "./types";
 import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "./lib/paneTree";
+import { reduceSignals } from "./lib/sessionStatus";
+import type { SignalEvent } from "./lib/sessionStatus";
 
 const newId = () => crypto.randomUUID();
 
 function makeSession(shell: ShellOption): Session {
-  return { id: newId(), title: shell.label, command: shell.command, args: shell.args };
+  return {
+    id: newId(),
+    title: shell.label,
+    command: shell.command,
+    args: shell.args,
+    status: "idle",
+    unread: false,
+  };
 }
 
 interface AppState {
@@ -13,6 +22,7 @@ interface AppState {
   tabs: Tab[];
   activeTabId: string | null;
   shells: ShellOption[];
+  windowFocused: boolean;
 
   setShells: (shells: ShellOption[]) => void;
   newTab: (shell: ShellOption) => void;
@@ -22,13 +32,27 @@ interface AppState {
   splitActive: (direction: "row" | "column", shell: ShellOption) => void;
   closePane: (tabId: string, sessionId: string) => void;
   setActivePane: (tabId: string, sessionId: string) => void;
+  setWindowFocused: (focused: boolean) => void;
+  signalSession: (sessionId: string, ev: SignalEvent) => void;
+  revealTab: (tabId: string) => void;
 }
 
-export const useStore = create<AppState>((set) => ({
+/** Whether a session is currently on-screen (window focused + in the active tab). */
+export function isVisibleIn(state: AppState, sessionId: string): boolean {
+  if (!state.windowFocused || !state.activeTabId) return false;
+  const tab = state.tabs.find((t) => t.id === state.activeTabId);
+  return tab ? allSessionIds(tab.root).includes(sessionId) : false;
+}
+
+export const isSessionVisible = (sessionId: string): boolean =>
+  isVisibleIn(useStore.getState(), sessionId);
+
+export const useStore = create<AppState>((set, get) => ({
   sessions: {},
   tabs: [],
   activeTabId: null,
   shells: [],
+  windowFocused: true,
 
   setShells: (shells) => set({ shells }),
 
@@ -60,7 +84,10 @@ export const useStore = create<AppState>((set) => ({
       return { sessions, tabs, activeTabId };
     }),
 
-  setActiveTab: (tabId) => set({ activeTabId: tabId }),
+  setActiveTab: (tabId) => {
+    set({ activeTabId: tabId });
+    get().revealTab(tabId);
+  },
 
   renameTab: (tabId, title) =>
     set((state) => ({
@@ -95,7 +122,6 @@ export const useStore = create<AppState>((set) => ({
       delete sessions[sessionId];
       const root = removeNode(tab.root, sessionId);
       if (root === null) {
-        // Last pane closed — drop the tab.
         const tabs = state.tabs.filter((t) => t.id !== tabId);
         const activeTabId =
           state.activeTabId === tabId ? (tabs[tabs.length - 1]?.id ?? null) : state.activeTabId;
@@ -113,4 +139,41 @@ export const useStore = create<AppState>((set) => ({
     set((state) => ({
       tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, activeSessionId: sessionId } : t)),
     })),
+
+  setWindowFocused: (focused) => {
+    set({ windowFocused: focused });
+    const { activeTabId, revealTab } = get();
+    if (focused && activeTabId) revealTab(activeTabId);
+  },
+
+  signalSession: (sessionId, ev) =>
+    set((state) => {
+      const session = state.sessions[sessionId];
+      if (!session) return {};
+      const next = reduceSignals(
+        { status: session.status, unread: session.unread },
+        ev,
+        isVisibleIn(state, sessionId),
+      );
+      if (next.status === session.status && next.unread === session.unread) return {};
+      return { sessions: { ...state.sessions, [sessionId]: { ...session, ...next } } };
+    }),
+
+  revealTab: (tabId) =>
+    set((state) => {
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (!tab) return {};
+      const sessions = { ...state.sessions };
+      let changed = false;
+      for (const id of allSessionIds(tab.root)) {
+        const s = sessions[id];
+        if (!s) continue;
+        const status = s.status === "attention" ? "idle" : s.status;
+        if (s.unread || status !== s.status) {
+          sessions[id] = { ...s, status, unread: false };
+          changed = true;
+        }
+      }
+      return changed ? { sessions } : {};
+    }),
 }));

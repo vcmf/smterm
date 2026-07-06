@@ -206,3 +206,43 @@ body {
   height: 4px;
   cursor: row-resize;
 }
+
+/* ── Status badges ───────────────────────────────────── */
+.badge {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.badge.attention {
+  background: #e0902f;
+}
+
+.badge.working {
+  background: #3794ff;
+  animation: badge-pulse 1s ease-in-out infinite;
+}
+
+.badge.unread {
+  background: #6a6a6a;
+}
+
+@keyframes badge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* pane-level badge sits in the top-left corner */
+.terminal-pane > .badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 5;
+}

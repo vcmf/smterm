@@ -6,6 +6,7 @@ import { useStore } from "../store";
  *  TerminalManager, so this component can mount/unmount freely. */
 export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: string }) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const status = useStore((s) => s.sessions[sessionId]?.status ?? "idle");
 
   useEffect(() => {
     const el = mountRef.current;
@@ -28,6 +29,7 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
       // PTY (WKWebView doesn't reliably keep xterm's textarea focused).
       onMouseUp={() => TerminalManager.focus(sessionId)}
     >
+      {status !== "idle" && <span className={`badge ${status}`} title={status} />}
       <button
         className="pane-close"
         title="Close pane"

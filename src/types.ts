@@ -5,11 +5,15 @@ export interface ShellOption {
   args: string[];
 }
 
+import type { SessionStatus } from "./lib/sessionStatus";
+
 export interface Session {
   id: string;
   title: string;
   command: string;
   args: string[];
+  status: SessionStatus;
+  unread: boolean;
 }
 
 /** A tab's layout: a binary tree of leaves (terminals) and splits. */

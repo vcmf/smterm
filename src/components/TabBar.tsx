@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
+import { allSessionIds } from "../lib/paneTree";
+import { aggregateBadge } from "../lib/sessionStatus";
 
 export function TabBar() {
   const tabs = useStore((s) => s.tabs);
   const activeTabId = useStore((s) => s.activeTabId);
   const shells = useStore((s) => s.shells);
+  const sessions = useStore((s) => s.sessions);
   const [shellId, setShellId] = useState<string | null>(null);
 
   // Inline tab rename (window.prompt is unavailable in the Tauri webview).
@@ -37,41 +40,50 @@ export function TabBar() {
   return (
     <div className="tabbar">
       <div className="tabs">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={`tab${tab.id === activeTabId ? " active" : ""}`}
-            onMouseDown={() => useStore.getState().setActiveTab(tab.id)}
-            onDoubleClick={() => startRename(tab.id, tab.title)}
-          >
-            {editingId === tab.id ? (
-              <input
-                ref={inputRef}
-                className="tab-rename"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={commitRename}
-                onMouseDown={(e) => e.stopPropagation()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitRename();
-                  else if (e.key === "Escape") setEditingId(null);
-                }}
-              />
-            ) : (
-              <span className="tab-title">{tab.title}</span>
-            )}
-            <button
-              className="tab-close"
-              title="Close tab"
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                useStore.getState().closeTab(tab.id);
-              }}
+        {tabs.map((tab) => {
+          const badge = aggregateBadge(
+            allSessionIds(tab.root).flatMap((id) => {
+              const s = sessions[id];
+              return s ? [{ status: s.status, unread: s.unread }] : [];
+            }),
+          );
+          return (
+            <div
+              key={tab.id}
+              className={`tab${tab.id === activeTabId ? " active" : ""}`}
+              onMouseDown={() => useStore.getState().setActiveTab(tab.id)}
+              onDoubleClick={() => startRename(tab.id, tab.title)}
             >
-              ×
-            </button>
-          </div>
-        ))}
+              {badge && <span className={`badge ${badge}`} title={badge} />}
+              {editingId === tab.id ? (
+                <input
+                  ref={inputRef}
+                  className="tab-rename"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitRename();
+                    else if (e.key === "Escape") setEditingId(null);
+                  }}
+                />
+              ) : (
+                <span className="tab-title">{tab.title}</span>
+              )}
+              <button
+                className="tab-close"
+                title="Close tab"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  useStore.getState().closeTab(tab.id);
+                }}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       <div className="toolbar">

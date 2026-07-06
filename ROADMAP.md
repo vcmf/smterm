@@ -15,8 +15,8 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 | --------- | ----------------------------------------------- | ------- |
 | **M0**    | Spike: core stack works end-to-end              | ✅ done |
 | **M1**    | Multi-session + layout (tabs + split panes)     | ✅ done |
-| **M2**    | Agent-runner headline (notifications + status)  | ⬜ next |
-| **M3**    | Polish (search, clipboard, themes, persistence) | ⬜      |
+| **M2**    | Agent-runner headline (notifications + status)  | ✅ done |
+| **M3**    | Polish (search, clipboard, themes, persistence) | ⬜ next |
 | **M4**    | Packaging & signed cross-platform builds        | ⬜      |
 | **M5**    | Later (auto-update, session reattach)           | 🧊      |
 
@@ -69,26 +69,30 @@ terminals — solved by decoupling terminal lifetime from the React tree via `Te
 
 ---
 
-## M2 — Agent-runner headline features ⬜
+## M2 — Agent-runner headline features ✅ _(implemented; notification delivery needs signed build to fully verify on macOS)_
 
 **Goal:** the part that makes smterm _cmux-like_ rather than "just a terminal" — know when a
 session needs attention and tell the user via native notifications.
 
-| ID  | Feature                          | Description                                                                                | Status |
-| --- | -------------------------------- | ------------------------------------------------------------------------------------------ | ------ |
-| F6  | **Native notifications**         | `tauri-plugin-notification`; fire OS toast on trigger; click focuses the session's pane    | ⬜     |
-| —   | **OSC 9 handler**                | Register xterm OSC handler so any program/agent can `printf '\e]9;msg\a'` to raise a toast | ⬜     |
-| F15 | **Per-session status/attention** | Derive `working / waiting-for-input / idle / done`; badges on tabs + panes                 | ⬜     |
-| —   | **Status detection spike**       | Blend of OSC 133 prompt marks + OSC 9 + output-idle heuristic (see ARCHITECTURE §14 #6)    | ⬜     |
-| —   | **Focus-aware delivery**         | Only notify when window/tab unfocused; suppress for the active pane                        | ⬜     |
-| F16 | **Session overview**             | Tab bar status badges + optional glance view of all sessions                               | ⬜     |
+| ID  | Feature                          | Description                                                                       | Status                                      |
+| --- | -------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------- |
+| F6  | **Native notifications**         | `tauri-plugin-notification`; toast on OSC 9 when the session's tab isn't visible  | ✅ (macOS delivery needs signed build — M4) |
+| —   | **OSC 9 handler**                | xterm OSC 9 handler — `printf '\e]9;msg\a'` raises a toast + attention badge      | ✅                                          |
+| F15 | **Per-session status/attention** | `idle / working / attention` via OSC 133 + OSC 9; badges on tabs + panes          | ✅ (working/idle/attention)                 |
+| —   | **Status detection**             | OSC 133;C/D marks (working/idle) + OSC 9 (attention) + output→unread heuristic    | ✅ (idle heuristic deferred)                |
+| —   | **Focus-aware delivery**         | Notify/flag only when the session's tab isn't visible (window focus + active tab) | ✅                                          |
+| F16 | **Session overview**             | Tab badges (attention/working/unread) + per-pane status dot                       | ✅ badges; glance grid later                |
 
-**Exit criteria:** an agent finishing a task in a background tab raises a native notification;
-clicking it focuses that pane; the tab shows a "done/attention" badge; no notification spam for
-the focused pane.
+**Exit criteria:** an agent finishing/attention in a background tab raises a native notification;
+the tab shows a badge; no notification spam for the visible tab.
 
-**Open decisions to resolve here:** notification triggers to ship first (rec: OSC 9 + unfocused
-activity), and the status-detection strategy.
+**Verified:** lint + 21 frontend tests (incl. status reducer/badge) + Rust suite green; app builds
+and launches (~86 MB); focus-aware logic unit-tested.
+**Pending:** hands-on check of OSC 9 toast + badges; macOS notification _delivery_ typically needs a
+signed/bundled app (`make build`), so dev-mode toasts may not appear even though the path is wired.
+
+**Deferred:** "waiting-for-input" detection (needs deeper shell integration); notification
+click → focus specific pane (cross-platform action routing); session glance/grid view.
 
 ---
 

@@ -4,6 +4,7 @@ import { TabBar } from "./components/TabBar";
 import { PaneLayout } from "./components/PaneLayout";
 import { TerminalManager } from "./terminal/TerminalManager";
 import { useStore } from "./store";
+import { ensureNotificationPermission } from "./lib/notify";
 import type { ShellOption } from "./types";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
@@ -32,6 +33,19 @@ function App() {
     })();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  // Notification permission + window focus tracking (drives focus-aware badges).
+  useEffect(() => {
+    void ensureNotificationPermission();
+    const onFocus = () => useStore.getState().setWindowFocused(true);
+    const onBlur = () => useStore.getState().setWindowFocused(false);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onBlur);
     };
   }, []);
 
