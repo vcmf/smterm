@@ -30,6 +30,7 @@ function build(): Entry {
   const host = document.createElement("div");
   host.className = "terminal-host";
   const term = new Terminal({
+    allowProposedApi: true, // required for registerCharacterJoiner (ligatures)
     fontFamily: fontStack(s.font.family),
     fontSize: s.font.size,
     lineHeight: s.font.lineHeight,
