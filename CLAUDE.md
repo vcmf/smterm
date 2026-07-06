@@ -32,8 +32,11 @@ src-tauri/tests/pty.rs     integration tests vs a real shell
 
 - **Docstrings**: one short line on non-obvious functions/types — scannable, not verbose.
 - **Commits**: semantic (`feat:`, `fix:`, `chore:`, `docs:`), imperative, scope like `fix(M1):`.
-- **Tests**: push logic into pure functions (paneTree, resolve_shell) and test those; PTY code
-  gets real-shell integration tests. Add tests with the feature, not after.
+- **Tests (with the feature, not after)**: extract logic into pure functions and test those
+  exhaustively — edge cases, not just the happy path. **Rust especially**: the compiler proves it
+  builds, not that it's correct, so every new command/behavior gets a test; prefer real integration
+  tests (spawn an actual shell/PTY) over mocks; work through the PTY edge-case catalog in
+  TESTING.md §3b (resize, UTF-8 boundaries, isolation, no orphans). Rust changed with no test = incomplete.
 - **Lint is a gate**: clippy `-D warnings`, strict `tsc`, eslint, prettier — all green before
   commit (pre-commit hook enforces it). Run `make fmt` first.
 - Keep the Rust surface small; put app logic in TypeScript.
