@@ -1,69 +1,64 @@
-import { useEffect, useRef } from "react";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { invoke, Channel } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { TabBar } from "./components/TabBar";
+import { PaneLayout } from "./components/PaneLayout";
+import { TerminalManager } from "./terminal/TerminalManager";
+import { useStore } from "./store";
+import type { ShellOption } from "./types";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
 
 function App() {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const tabs = useStore((s) => s.tabs);
+  const activeTabId = useStore((s) => s.activeTabId);
 
+  // Load available shells once, then open the first tab.
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const term = new Terminal({
-      fontFamily: 'Menlo, Monaco, "Cascadia Code", "Fira Code", Consolas, monospace',
-      fontSize: 13,
-      cursorBlink: true,
-      theme: {
-        background: "#1e1e1e",
-        foreground: "#d4d4d4",
-        cursor: "#d4d4d4",
-      },
-    });
-
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    // Clicking a detected URL opens it in the OS default browser (no embedded browser).
-    term.loadAddon(new WebLinksAddon((_event, uri) => void openUrl(uri)));
-
-    term.open(el);
-    fit.fit();
-
-    const id = crypto.randomUUID();
-
-    // Backend -> frontend: stream of raw PTY bytes.
-    const onData = new Channel<number[]>();
-    onData.onmessage = (bytes) => term.write(new Uint8Array(bytes));
-
-    invoke("pty_spawn", { id, cols: term.cols, rows: term.rows, onData }).catch((e) =>
-      term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`),
-    );
-
-    // Frontend -> backend: keystrokes / pasted text.
-    const dataSub = term.onData((data) => {
-      void invoke("pty_write", { id, data });
-    });
-
-    const doResize = () => {
-      fit.fit();
-      void invoke("pty_resize", { id, cols: term.cols, rows: term.rows });
-    };
-    const ro = new ResizeObserver(doResize);
-    ro.observe(el);
-
+    let cancelled = false;
+    (async () => {
+      let shells: ShellOption[] = [];
+      try {
+        shells = await invoke<ShellOption[]>("list_shells");
+      } catch {
+        // Running without a backend (e.g. plain browser) — fall through.
+      }
+      if (cancelled) return;
+      if (shells.length === 0) {
+        shells = [{ id: "default", label: "shell", command: "", args: [] }];
+      }
+      const store = useStore.getState();
+      store.setShells(shells);
+      if (store.tabs.length === 0 && shells[0]) store.newTab(shells[0]);
+    })();
     return () => {
-      ro.disconnect();
-      dataSub.dispose();
-      void invoke("pty_kill", { id });
-      term.dispose();
+      cancelled = true;
     };
   }, []);
 
-  return <div className="term-root" ref={containerRef} />;
+  // Dispose terminals whose sessions have left the store (pane/tab closed).
+  useEffect(() => {
+    return useStore.subscribe((state, prev) => {
+      const current = new Set(Object.keys(state.sessions));
+      for (const id of Object.keys(prev.sessions)) {
+        if (!current.has(id)) TerminalManager.dispose(id);
+      }
+    });
+  }, []);
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+
+  return (
+    <div className="app">
+      <TabBar />
+      <div className="content">
+        {activeTab ? (
+          <PaneLayout key={activeTab.id} node={activeTab.root} tabId={activeTab.id} />
+        ) : (
+          <div className="empty">No sessions — open a tab.</div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default App;

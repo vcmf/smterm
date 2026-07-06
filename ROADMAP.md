@@ -14,8 +14,8 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 | Milestone | Theme                                           | Status  |
 | --------- | ----------------------------------------------- | ------- |
 | **M0**    | Spike: core stack works end-to-end              | ✅ done |
-| **M1**    | Multi-session + layout (tabs + split panes)     | ⬜ next |
-| **M2**    | Agent-runner headline (notifications + status)  | ⬜      |
+| **M1**    | Multi-session + layout (tabs + split panes)     | ✅ done |
+| **M2**    | Agent-runner headline (notifications + status)  | ⬜ next |
 | **M3**    | Polish (search, clipboard, themes, persistence) | ⬜      |
 | **M4**    | Packaging & signed cross-platform builds        | ⬜      |
 | **M5**    | Later (auto-update, session reattach)           | 🧊      |
@@ -40,28 +40,32 @@ interactive shell confirmed by hand.
 
 ---
 
-## M1 — Multi-session + layout ⬜ _(next)_
+## M1 — Multi-session + layout ✅ _(implemented; interactive + WSL checks pending)_
 
 **Goal:** turn the single terminal into a real workspace: many sessions, tabs, resizable split
 panes, per-OS shell selection incl. WSL. This is the structural milestone.
 
-| ID  | Feature                       | Description                                                                                                                      | Status |
-| --- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| —   | **Session store**             | Zustand store: `sessions` map + per-tab **pane tree** + active tab/pane. PTY lifecycle driven by store actions, not mount timing | ⬜     |
-| —   | **`<TerminalPane>` refactor** | Reusable component keyed by `sessionId`; stays mounted in background for instant switching                                       | ⬜     |
-| F2  | **Tabs**                      | Create / close / rename / reorder tabs                                                                                           | ⬜     |
-| F14 | **Split panes**               | Split current pane H/V; resizable dividers; close pane; focus-follows-click. Each pane resize → fit → `pty_resize`               | ⬜     |
-| F3  | **Cross-platform shells**     | Per-OS default shell resolution (zsh/bash/PowerShell)                                                                            | ⬜     |
-| F4  | **WSL sessions**              | On Windows, spawn `wsl.exe [-d <distro>]`; enumerate distros via `wsl.exe -l -q`                                                 | ⬜     |
-| —   | **`list_shells()` command**   | Rust command returning available shells/distros for the "New ▾" picker                                                           | ⬜     |
-| F12 | **Session titles**            | Track OSC 0/2 title escapes; manual rename                                                                                       | ⬜     |
-| —   | **Lifecycle hardening**       | Kill all child PTYs on window close (no orphaned shells)                                                                         | ⬜     |
+| ID  | Feature                       | Description                                                                                                                      | Status                                     |
+| --- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| —   | **Session store**             | Zustand store: `sessions` map + per-tab **pane tree** + active tab/pane. PTY lifecycle driven by store actions, not mount timing | ✅                                         |
+| —   | **`<TerminalPane>` refactor** | Terminal lives in `TerminalManager` (outside React tree) so splits/tab-switches re-attach instead of respawning                  | ✅                                         |
+| F2  | **Tabs**                      | Create / close / rename tabs                                                                                                     | 🚧 create/close/rename ✅; reorder later   |
+| F14 | **Split panes**               | Split active pane H/V (react-resizable-panels v4); resizable dividers; close pane; focus-on-click; per-pane fit → `pty_resize`   | ✅                                         |
+| F3  | **Cross-platform shells**     | Per-OS default shell resolution (zsh/bash/PowerShell)                                                                            | ✅                                         |
+| F4  | **WSL sessions**              | On Windows, spawn `wsl.exe [-d <distro>]`; enumerate distros via `wsl.exe -l -q`                                                 | ✅ coded, **untested (no Windows access)** |
+| —   | **`list_shells()` command**   | Rust command returning available shells/distros for the picker                                                                   | ✅                                         |
+| F12 | **Session titles**            | Manual tab rename (double-click)                                                                                                 | 🚧 rename ✅; OSC 0/2 auto-title later     |
+| —   | **Lifecycle hardening**       | Kill all child PTYs on window close (no orphaned shells)                                                                         | ✅ (`on_window_event`)                     |
 
 **Exit criteria:** open ≥3 sessions across tabs + a split; each is an independent shell; resizing
 any pane reflows only that pane; closing the window leaves no orphaned shell processes; WSL tab
 works on a Windows box (or documented as untested if no Windows access yet).
 
-**Key risks:** resize wiring across N panes; focus management; background-mounted terminals.
+**Verified:** lint + 16 frontend tests + Rust suite green; app builds and launches (~82 MB).
+**Pending:** hands-on interactive check (tabs/splits/shell-preservation); WSL on a real Windows box.
+
+**Key risks (addressed):** resize wiring across N panes; focus management; background-mounted
+terminals — solved by decoupling terminal lifetime from the React tree via `TerminalManager`.
 
 ---
 

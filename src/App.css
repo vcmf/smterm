@@ -13,18 +13,184 @@ body,
 
 body {
   background: #1e1e1e;
+  color: #d4d4d4;
   overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.term-root {
-  width: 100vw;
+.app {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
-  padding: 6px 8px;
+  width: 100vw;
+}
+
+/* ── Tab bar ─────────────────────────────────────────── */
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  height: 36px;
+  flex: 0 0 auto;
+  background: #252526;
+  border-bottom: 1px solid #1a1a1a;
+  user-select: none;
+}
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  max-width: 200px;
+  font-size: 13px;
+  color: #969696;
+  border-right: 1px solid #1a1a1a;
+  cursor: default;
+}
+
+.tab.active {
+  background: #1e1e1e;
+  color: #fff;
+}
+
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close,
+.pane-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.tab-close:hover {
+  background: #ffffff22;
+  color: #fff;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.shell-select,
+.tb-btn {
+  background: #3c3c3c;
+  color: #ddd;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.tb-btn {
+  cursor: pointer;
+}
+
+.tb-btn:hover:not(:disabled) {
+  background: #4c4c4c;
+}
+
+.tb-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Content / panes ─────────────────────────────────── */
+.content {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0;
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: #666;
+}
+
+.terminal-pane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   background: #1e1e1e;
 }
 
-/* Let the xterm viewport fill the container. */
-.term-root .xterm,
-.term-root .xterm-viewport {
+.terminal-mount {
+  width: 100%;
   height: 100%;
+  padding: 2px 4px;
+}
+
+.terminal-host,
+.terminal-host .xterm,
+.terminal-host .xterm-viewport {
+  height: 100%;
+  width: 100%;
+}
+
+.pane-close {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  z-index: 5;
+  color: #aaa;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.terminal-pane:hover .pane-close {
+  opacity: 1;
+}
+
+.pane-close:hover {
+  background: #ffffff22;
+  color: #fff;
+}
+
+/* react-resizable-panels group fills its container */
+[data-group] {
+  height: 100%;
+  width: 100%;
+}
+
+/* ── Resize handles (Separator) ──────────────────────── */
+.resize-handle {
+  background: #1a1a1a;
+  transition: background 0.1s;
+}
+
+.resize-handle:hover,
+[data-separator][data-active],
+[data-separator][data-dragging] {
+  background: #007acc;
+}
+
+.resize-handle.row {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.resize-handle.column {
+  height: 4px;
+  cursor: row-resize;
 }

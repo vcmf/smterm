@@ -10,8 +10,9 @@ use std::sync::Mutex;
 use std::thread;
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use serde::Serialize;
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{Manager, State};
 
 /// One live terminal session.
 struct PtySession {
@@ -45,6 +46,116 @@ fn resolve_shell(is_windows: bool, env_shell: Option<String>) -> String {
     }
 }
 
+/// A shell/profile the user can launch from the "New" picker.
+#[derive(Serialize)]
+struct ShellOption {
+    id: String,
+    label: String,
+    command: String,
+    args: Vec<String>,
+}
+
+/// Basename of a shell path, used as a friendly label.
+fn shell_label(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
+/// Parse `wsl.exe -l -q` output (one distro name per line) into a list.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn parse_wsl_distros(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .map(|line| line.trim_matches(|c: char| c.is_whitespace() || c == '\0'))
+        .filter(|line| !line.is_empty())
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/// Decode `wsl.exe` output, which is UTF-16LE on Windows.
+#[cfg(target_os = "windows")]
+fn decode_wsl(bytes: &[u8]) -> String {
+    if bytes.len() >= 2 && bytes.iter().any(|&b| b == 0) {
+        let units: Vec<u16> = bytes
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        String::from_utf16_lossy(&units)
+    } else {
+        String::from_utf8_lossy(bytes).into_owned()
+    }
+}
+
+/// Enumerate installed WSL distros (Windows only).
+#[cfg(target_os = "windows")]
+fn wsl_distros() -> Vec<String> {
+    match std::process::Command::new("wsl.exe")
+        .args(["-l", "-q"])
+        .output()
+    {
+        Ok(out) => parse_wsl_distros(&decode_wsl(&out.stdout)),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// The shells/profiles available on this machine, for the "New" picker.
+#[tauri::command]
+fn list_shells() -> Vec<ShellOption> {
+    let mut out = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        out.push(ShellOption {
+            id: "powershell".into(),
+            label: "PowerShell".into(),
+            command: "powershell.exe".into(),
+            args: vec![],
+        });
+        out.push(ShellOption {
+            id: "cmd".into(),
+            label: "Command Prompt".into(),
+            command: "cmd.exe".into(),
+            args: vec![],
+        });
+        for distro in wsl_distros() {
+            out.push(ShellOption {
+                id: format!("wsl:{distro}"),
+                label: format!("WSL: {distro}"),
+                command: "wsl.exe".into(),
+                args: vec!["-d".into(), distro],
+            });
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let default = default_shell();
+        out.push(ShellOption {
+            id: "default".into(),
+            label: shell_label(&default),
+            command: default,
+            args: vec![],
+        });
+        for candidate in ["/bin/zsh", "/bin/bash", "/bin/sh"] {
+            if std::path::Path::new(candidate).exists()
+                && !out.iter().any(|s| s.command == candidate)
+            {
+                out.push(ShellOption {
+                    id: candidate.into(),
+                    label: shell_label(candidate),
+                    command: candidate.into(),
+                    args: vec![],
+                });
+            }
+        }
+    }
+
+    out
+}
+
 /// Spawn a shell in a new PTY and stream its output back over `on_data`.
 #[tauri::command]
 fn pty_spawn(
@@ -53,6 +164,7 @@ fn pty_spawn(
     cols: u16,
     rows: u16,
     shell: Option<String>,
+    args: Option<Vec<String>>,
     on_data: Channel<Vec<u8>>,
 ) -> Result<(), String> {
     let pty_system = native_pty_system();
@@ -68,7 +180,12 @@ fn pty_spawn(
     let shell = shell
         .filter(|s| !s.is_empty())
         .unwrap_or_else(default_shell);
-    let cmd = CommandBuilder::new(shell);
+    let mut cmd = CommandBuilder::new(shell);
+    if let Some(args) = args {
+        for arg in args {
+            cmd.arg(arg);
+        }
+    }
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
 
     // Drop the slave handle so the reader sees EOF once the child exits.
@@ -149,15 +266,40 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(PtyManager::default())
         .invoke_handler(tauri::generate_handler![
-            pty_spawn, pty_write, pty_resize, pty_kill
+            pty_spawn,
+            pty_write,
+            pty_resize,
+            pty_kill,
+            list_shells
         ])
+        .on_window_event(|window, event| {
+            // Kill all child shells when the window closes — no orphans.
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let Some(state) = window.try_state::<PtyManager>() {
+                    let mut map = state.0.lock().unwrap();
+                    for (_, mut session) in map.drain() {
+                        let _ = session.child.kill();
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_shell;
+    use super::{parse_wsl_distros, resolve_shell};
+
+    #[test]
+    fn parses_wsl_distro_list() {
+        let out = "Ubuntu\r\nDebian\r\nkali-linux\r\n";
+        assert_eq!(
+            parse_wsl_distros(out),
+            vec!["Ubuntu", "Debian", "kali-linux"]
+        );
+        assert!(parse_wsl_distros("\r\n   \r\n").is_empty());
+    }
 
     #[test]
     fn uses_env_shell_when_set() {
