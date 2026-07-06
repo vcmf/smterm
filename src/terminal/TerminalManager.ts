@@ -23,7 +23,11 @@ interface Entry {
 // splitting a pane or switching tabs re-attaches instead of respawning the shell.
 const entries = new Map<string, Entry>();
 
-const fontStack = (family: string) => `"${family}", Menlo, "Cascadia Code", monospace`;
+// Primary font handles text + ligatures; the Nerd Font fallbacks cover
+// Powerline/icon glyphs (e.g. p10k prompts) that JetBrains Mono lacks.
+const fontStack = (family: string) =>
+  `"${family}", "Symbols Nerd Font Mono", "Symbols Nerd Font", "MesloLGS NF", ` +
+  `"JetBrainsMono Nerd Font", Menlo, "Cascadia Code", monospace`;
 
 function build(): Entry {
   const s = useStore.getState().settings;
