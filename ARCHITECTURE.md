@@ -275,7 +275,7 @@ CI: GitHub Actions matrix (macos, ubuntu, windows) building all targets. Auto-up
   recreate tabs with fresh shells at the saved cwd.
 - **Future — reattach to running sessions:** requires a detached backend (a small daemon holding the
   PTYs, or leveraging `tmux`/`zellij` under the hood). Out of scope for v1; noted so we don't design
-  ourselves into a corner.
+  ourselves into a corner. **Full design sketch in [Appendix A](#appendix-a--session-persistence-via-a-detached-daemon-design-sketch).**
 
 ---
 
@@ -317,4 +317,143 @@ vs "done"? Options: (a) shell-integration escape sequences (OSC 133), (b) agents
 - **M2 — Headline features:** native notifications (OSC 9 + unfocused activity), per-session status/attention badges, clickable links → default browser.
 - **M3 — Polish:** search, copy/paste, themes/fonts, persist layout, session overview.
 - **M4 — Packaging:** signed builds for macOS/Windows/Linux via CI.
-- **M5 (later):** auto-update, session reattach (daemon/tmux), advanced agent-status detection.
+- **M5 (later):** auto-update, session reattach (daemon/tmux — see [Appendix A](#appendix-a--session-persistence-via-a-detached-daemon-design-sketch)), advanced agent-status detection.
+
+---
+
+## Appendix A — Session persistence via a detached daemon (design sketch)
+
+> **Status: exploratory, post-v1.** This is _not_ on the v1 path. It's written down now only so the
+> M0/M1 code doesn't paint us into a corner. The single actionable takeaway for v1 is in
+> [A.6](#a6-what-to-do-in-v1-so-this-stays-cheap-later).
+
+### A.1 What it buys us (and what it doesn't)
+
+"tmux-style persistence" means the **session outlives the UI**: an agent keeps running after you
+close the window (or it crashes), and you reattach later to the live screen. Concretely:
+
+- ✅ Close/reopen the app → sessions still running, reattach to current screen.
+- ✅ GUI crash → shells survive (they're owned by a different process).
+- ✅ (Later) attach the same session from a second window / view.
+- ❌ **Survive a machine reboot** — out of scope; tmux doesn't do this either (no process migration).
+- ❌ **Own remote daemon on every server** — explicitly rejected; we wrap existing `tmux`/`mosh`
+  instead (see [A.5](#a5-remote-sessions-dont-build-a-remote-daemon)).
+
+### A.2 The core move: split the PTY owner from the UI
+
+Today (M0) a _single_ process — the Tauri app — both owns the PTYs and renders them. `PtyManager`
+(the `Mutex<HashMap<String, PtySession>>` in `lib.rs`) lives inside the GUI process, and the reader
+thread streams bytes straight to the webview over a Tauri `ipc::Channel`. When the app dies, the
+`HashMap` dies with it, children get killed on `CloseRequested`, and everything is gone.
+
+Persistence requires moving PTY ownership **out** of the GUI into a long-lived **session daemon**:
+
+```
+        Today (M0/M1) — one process                Future — client / daemon split
+   ┌──────────────────────────────┐          ┌───────────────┐   ┌──────────────────────────┐
+   │  Tauri GUI process            │          │  Tauri GUI    │   │  smterm-daemon (detached) │
+   │   webview (xterm.js)          │          │  (thin client)│   │   owns all PTYs           │
+   │      ▲ Channel                │          │   xterm.js    │   │   headless VT state model │
+   │      │                        │   ──►     │      ▲        │   │      ▲   per session      │
+   │   PtyManager  ── owns PTYs    │          │      │ socket  │   │      │                    │
+   │      │ spawns                 │          │      └─────────┼───┼──────┘  IPC (framed)      │
+   │   zsh / agent                 │          │  dies freely   │   │   zsh / agent (survive)   │
+   └──────────────────────────────┘          └───────────────┘   └──────────────────────────┘
+```
+
+The GUI becomes a **thin client**: it connects to the daemon, sends keystrokes/resizes, and paints
+byte streams. The daemon holds all the state. This is the same client/server split tmux and
+`zellij` use.
+
+### A.3 The genuinely hard part: the daemon must model the _screen_, not pipe bytes
+
+This is what people underestimate. A reattaching client wasn't connected while output flowed, so it
+can't just resume the byte stream — it needs the **current screen contents** to repaint. Therefore
+the daemon can't be a dumb pipe; per session it must maintain a **headless terminal emulator**:
+
+- grid of cells (glyph + fg/bg + attributes),
+- cursor position + saved cursor,
+- scrollback ring buffer,
+- modes (alt-screen for vim/htop, bracketed paste, mouse, wrap),
+- current title (OSC 0/2), and the pending-notification / status state we already track (§9, §15).
+
+We do **not** write a VT parser — mature Rust libraries do exactly this: **`wezterm-term`** (same
+project as our `portable-pty`, so natural fit), `alacritty_terminal`, or `vt100`. The daemon feeds
+PTY output into the parser (updating the model) _and_ forwards raw bytes to any attached client.
+
+**Attach protocol** per session:
+
+1. Client connects, sends `attach(session_id, cols, rows)`.
+2. Daemon serializes the current screen model → sends an **initial paint** (either a state snapshot
+   the client applies, or a stream of escape sequences that reconstruct the screen — the latter lets
+   the client stay a plain xterm.js with no model of its own).
+3. Daemon then streams **live bytes** as they arrive.
+4. On client disconnect the daemon keeps the PTY + model alive; output keeps updating the model.
+
+### A.4 IPC transport & lifecycle
+
+| Concern             | Approach                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| Transport (mac/lin) | **Unix domain socket** in the app runtime dir                                                     |
+| Transport (Windows) | **Named pipe** (`\\.\pipe\smterm-…`)                                                              |
+| Framing             | Length-prefixed messages; a tiny tagged protocol (`attach`, `write`, `resize`, `data`, `exit`)    |
+| Daemon spawn        | GUI auto-spawns the daemon on first launch if not already running (discover via pidfile/socket)   |
+| Daemon shutdown     | Reference-count sessions; auto-exit when the last session closes **and** no client is attached    |
+| Resize w/ 2 clients | Per-session "owner" sets size, or smallest-attached-wins (tmux's model); propagate via `SIGWINCH` |
+| Child cleanup       | Daemon owns the kill-on-exit responsibility; **remove** the GUI's `CloseRequested` kill-all       |
+
+The daemon is the _same Rust binary_ in a different mode (`smterm --daemon`) or a small sibling
+crate — it already has the `portable-pty` code; it just adds the parser + socket server.
+
+### A.5 Remote sessions: don't build a remote daemon
+
+The HN complaint that cmux "doesn't work on remote terminals" is about persistence living on the
+_server_. Building our own remote daemon means **shipping and running our binary on every host we
+SSH into** — a distribution problem, not a coding one, and the reason nobody does it. `tmux` is
+already on virtually every machine.
+
+**Pragmatic design: wrap the remote's existing multiplexer.** A "remote session" is just a local
+session whose command is:
+
+```
+ssh <host> -t 'tmux new -A -s <name>'        # or: mosh <host> -- tmux new -A -s <name>
+```
+
+The persistence lives in the remote's tmux; our daemon only needs to hold the _local_ SSH process
+(so a dropped GUI doesn't drop the SSH pipe). This gets reattach-on-the-server essentially for free.
+
+| Capability                     | Own local daemon (A.2–A.4) | Wrap remote `tmux`/`mosh` (A.5)    |
+| ------------------------------ | -------------------------- | ---------------------------------- |
+| Survive GUI quit/crash (local) | ✅                         | ✅ (via local daemon holding ssh)  |
+| Survive on a **remote** server | ❌                         | ✅ (tmux on the host)              |
+| Roaming / flaky connection     | n/a                        | ✅ with `mosh`                     |
+| Requires deploying our binary  | no (local only)            | **no** — uses what's already there |
+
+### A.6 What to do in v1 so this stays cheap later
+
+The refactor is only expensive if v1 hard-wires the GUI to the PTY. One cheap insulation now:
+
+- **Put the session backend behind a trait/interface**, e.g. `SessionBackend { spawn, write, resize,
+kill, subscribe }`. v1 ships the trivial **in-process** implementation (today's `PtyManager`,
+  unchanged behaviour). The daemon becomes a _second_ implementation of the same trait later; the
+  frontend contract (`pty_spawn`/`pty_write`/`pty_resize`/`pty_kill` + output channel) doesn't change.
+- Keep the frontend talking to that stable command/channel surface — never let it assume the PTY is
+  in-process.
+- That's it. Don't build the daemon, the socket, or the parser in v1 — just don't foreclose them.
+
+### A.7 Effort & risk
+
+| Item                                            | Effort | Note                                                              |
+| ----------------------------------------------- | ------ | ----------------------------------------------------------------- |
+| Client/daemon split + framed socket IPC         | Medium | Plumbing; well-trodden. Windows named-pipe path adds a little     |
+| Headless screen model + attach/replay           | Medium | The real work; use `wezterm-term`/`alacritty_terminal`, don't DIY |
+| Multi-client resize semantics                   | Small  | Copy tmux's smallest-wins rule                                    |
+| Daemon lifecycle/supervision (spawn, auto-exit) | Small  | Pidfile + socket discovery + refcount                             |
+| Remote via wrapped `tmux`/`mosh`                | Small  | It's just a shell command; no daemon of our own                   |
+
+| Risk                                            | Mitigation                                                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Screen-model divergence from real terminal      | Reuse a battle-tested VT crate; snapshot-and-replay, don't hand-roll                                |
+| Orphaned daemon / stale socket                  | Pidfile + liveness check on GUI launch; daemon auto-exits when idle                                 |
+| Scrollback memory growth in a long-lived daemon | Cap scrollback per session (same policy as §13)                                                     |
+| Scope creep (this is a whole subsystem)         | Strictly post-v1; v1 only pays the [A.6](#a6-what-to-do-in-v1-so-this-stays-cheap-later) trait cost |

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
 
 export function TabBar() {
@@ -7,7 +7,32 @@ export function TabBar() {
   const shells = useStore((s) => s.shells);
   const [shellId, setShellId] = useState<string | null>(null);
 
+  // Inline tab rename (window.prompt is unavailable in the Tauri webview).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingId]);
+
   const currentShell = shells.find((s) => s.id === shellId) ?? shells[0];
+
+  const startRename = (id: string, title: string) => {
+    setDraft(title);
+    setEditingId(id);
+  };
+
+  const commitRename = () => {
+    if (editingId) {
+      const name = draft.trim();
+      if (name) useStore.getState().renameTab(editingId, name);
+    }
+    setEditingId(null);
+  };
 
   return (
     <div className="tabbar">
@@ -17,12 +42,24 @@ export function TabBar() {
             key={tab.id}
             className={`tab${tab.id === activeTabId ? " active" : ""}`}
             onMouseDown={() => useStore.getState().setActiveTab(tab.id)}
-            onDoubleClick={() => {
-              const name = window.prompt("Rename tab", tab.title);
-              if (name) useStore.getState().renameTab(tab.id, name);
-            }}
+            onDoubleClick={() => startRename(tab.id, tab.title)}
           >
-            <span className="tab-title">{tab.title}</span>
+            {editingId === tab.id ? (
+              <input
+                ref={inputRef}
+                className="tab-rename"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitRename}
+                onMouseDown={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  else if (e.key === "Escape") setEditingId(null);
+                }}
+              />
+            ) : (
+              <span className="tab-title">{tab.title}</span>
+            )}
             <button
               className="tab-close"
               title="Close tab"

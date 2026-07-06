@@ -24,6 +24,9 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
     <div
       className="terminal-pane"
       onMouseDown={() => useStore.getState().setActivePane(tabId, sessionId)}
+      // Re-focus the terminal after any click/selection so keystrokes reach the
+      // PTY (WKWebView doesn't reliably keep xterm's textarea focused).
+      onMouseUp={() => TerminalManager.focus(sessionId)}
     >
       <button
         className="pane-close"

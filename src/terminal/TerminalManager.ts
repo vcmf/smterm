@@ -83,6 +83,11 @@ export const TerminalManager = {
     if (entry?.opened) syncSize(id, entry);
   },
 
+  /** Focus a session's terminal so keystrokes reach the PTY. */
+  focus(id: string) {
+    entries.get(id)?.term.focus();
+  },
+
   /** Permanently dispose a session's terminal + kill its PTY. */
   dispose(id: string) {
     const entry = entries.get(id);

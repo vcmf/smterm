@@ -66,6 +66,18 @@ body {
   white-space: nowrap;
 }
 
+.tab-rename {
+  width: 110px;
+  background: #1e1e1e;
+  color: #fff;
+  border: 1px solid #007acc;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
 .tab-close,
 .pane-close {
   border: none;
