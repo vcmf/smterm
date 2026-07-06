@@ -7,6 +7,7 @@
 Status: **DRAFT / pre-scaffold** — this doc is the plan we agree on before writing code.
 
 ### Decisions locked (2026-07-06)
+
 - **Purpose:** coding-agent runner (cmux-like) — running/watching multiple agent sessions. Notifications & per-session "attention" state are headline features.
 - **Frontend:** React + TypeScript.
 - **Layout:** tabs **+ split panes** from v1 (not deferred).
@@ -17,6 +18,7 @@ Status: **DRAFT / pre-scaffold** — this doc is the plan we agree on before wri
 ## 1. Goals & non-goals
 
 ### Goals
+
 - Run and **watch multiple coding-agent / shell sessions** in one window (tabs **+ split panes**).
 - Per-session **status & "attention" state** (running / idle / waiting-for-input / done) surfaced at a glance.
 - Real PTY-backed shells — full interactive programs work (vim, top, TUIs, coding agents).
@@ -26,6 +28,7 @@ Status: **DRAFT / pre-scaffold** — this doc is the plan we agree on before wri
 - Small footprint (this is why we pick Tauri over Electron).
 
 ### Non-goals (at least for v1)
+
 - Embedded browser / web panel (cmux has this; we deliberately don't).
 - Reconnecting to sessions after the app quits (needs a persistent daemon or tmux — see §12).
 - Remote/SSH session management as a first-class feature (you can still `ssh` inside a shell).
@@ -38,23 +41,25 @@ Status: **DRAFT / pre-scaffold** — this doc is the plan we agree on before wri
 Two decisions carry almost all of the cross-platform weight:
 
 ### 2a. One PTY abstraction for all OSes
+
 We use the **`portable-pty`** crate (from the WezTerm project). It presents a single API and
 picks the right OS backend underneath:
 
-| OS | PTY backend used by `portable-pty` |
-|----|-----------------------------------|
-| macOS / Linux | `openpty`/`forkpty` (Unix PTY) |
-| Windows | **ConPTY** (the modern Windows pseudo-console API) |
+| OS            | PTY backend used by `portable-pty`                 |
+| ------------- | -------------------------------------------------- |
+| macOS / Linux | `openpty`/`forkpty` (Unix PTY)                     |
+| Windows       | **ConPTY** (the modern Windows pseudo-console API) |
 
 This means we write the PTY bridge **once** and it works everywhere. This is the single most
 important portability choice in the project.
 
-### 2b. On Windows, the app is a native Windows app; WSL is just a *shell target*
+### 2b. On Windows, the app is a native Windows app; WSL is just a _shell target_
+
 This is the key insight that removes almost all WSL pain:
 
 - **Do:** run the app as a normal Windows desktop app, and spawn WSL shells by launching
   `wsl.exe [-d <distro>]` as the shell command through ConPTY.
-- **Don't:** run the app *inside* WSL as a Linux GUI (WSLg). That path has flaky notifications,
+- **Don't:** run the app _inside_ WSL as a Linux GUI (WSLg). That path has flaky notifications,
   awkward "open browser", and harder packaging.
 
 Result: from a single Windows install the user gets PowerShell, cmd, **and** full WSL terminals —
@@ -70,13 +75,13 @@ while notifications, link-opening, and packaging all use the native Windows APIs
 
 ### Cross-platform capability matrix
 
-| Concern | macOS | Linux | Windows | WSL |
-|--------|-------|-------|---------|-----|
-| PTY | Unix PTY | Unix PTY | ConPTY | via `wsl.exe` on Windows host (ConPTY) |
-| Default shell | `$SHELL` (zsh) | `$SHELL` (bash/zsh) | PowerShell / cmd | distro default (bash) |
-| Open link | `open` | `xdg-open` | `ShellExecute` | (handled by Windows host) |
-| Notifications | Notification Center | libnotify / D-Bus | WinRT toast | (handled by Windows host) |
-| Package | `.dmg` / `.app` | `.deb` / `.rpm` / AppImage | `.msi` / `.exe` | (uses Windows build) |
+| Concern       | macOS               | Linux                      | Windows          | WSL                                    |
+| ------------- | ------------------- | -------------------------- | ---------------- | -------------------------------------- |
+| PTY           | Unix PTY            | Unix PTY                   | ConPTY           | via `wsl.exe` on Windows host (ConPTY) |
+| Default shell | `$SHELL` (zsh)      | `$SHELL` (bash/zsh)        | PowerShell / cmd | distro default (bash)                  |
+| Open link     | `open`              | `xdg-open`                 | `ShellExecute`   | (handled by Windows host)              |
+| Notifications | Notification Center | libnotify / D-Bus          | WinRT toast      | (handled by Windows host)              |
+| Package       | `.dmg` / `.app`     | `.deb` / `.rpm` / AppImage | `.msi` / `.exe`  | (uses Windows build)                   |
 
 All of the above are provided by `portable-pty` + Tauri plugins + the Tauri bundler — no per-OS
 hand-rolling beyond a small shell-selection map.
@@ -85,16 +90,16 @@ hand-rolling beyond a small shell-selection map.
 
 ## 3. Tech stack
 
-| Layer | Choice | Why |
-|-------|--------|-----|
-| Shell / packaging | **Tauri 2** | Native webview (small binary, low RAM), cross-platform bundler, plugin ecosystem |
-| Terminal renderer | **xterm.js** + addons | The de-facto web terminal (VS Code, Hyper). WebGL renderer, links, search, fit |
-| PTY backend | **`portable-pty`** (hand-rolled bridge) | One API → ConPTY + Unix PTY. We hand-roll rather than use the immature `tauri-plugin-pty` |
-| Frontend framework | **React + TypeScript** (or Svelte — see Open Decisions) | Familiar, fast to build UI/tabs/state |
-| Open link | `tauri-plugin-opener` | OS-native default-browser open, zero Rust |
-| Notifications | `tauri-plugin-notification` | OS-native toasts, zero Rust |
-| Persistence | JSON in app config dir (via `tauri-plugin-store` or fs) | Save layout/tabs/cwd |
-| Auto-update (later) | `tauri-plugin-updater` | Optional |
+| Layer               | Choice                                                  | Why                                                                                       |
+| ------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Shell / packaging   | **Tauri 2**                                             | Native webview (small binary, low RAM), cross-platform bundler, plugin ecosystem          |
+| Terminal renderer   | **xterm.js** + addons                                   | The de-facto web terminal (VS Code, Hyper). WebGL renderer, links, search, fit            |
+| PTY backend         | **`portable-pty`** (hand-rolled bridge)                 | One API → ConPTY + Unix PTY. We hand-roll rather than use the immature `tauri-plugin-pty` |
+| Frontend framework  | **React + TypeScript** (or Svelte — see Open Decisions) | Familiar, fast to build UI/tabs/state                                                     |
+| Open link           | `tauri-plugin-opener`                                   | OS-native default-browser open, zero Rust                                                 |
+| Notifications       | `tauri-plugin-notification`                             | OS-native toasts, zero Rust                                                               |
+| Persistence         | JSON in app config dir (via `tauri-plugin-store` or fs) | Save layout/tabs/cwd                                                                      |
+| Auto-update (later) | `tauri-plugin-updater`                                  | Optional                                                                                  |
 
 **Rust footprint:** essentially just the PTY bridge (~150–250 lines, §7). Everything else is
 TypeScript. The Rust that exists sits inside the compiler's tight feedback loop, which is where
@@ -134,24 +139,24 @@ that strictness actually helps an AI agent write it correctly.
 
 ## 5. Features & how we achieve each
 
-| # | Feature | How | Effort |
-|---|---------|-----|--------|
-| F1 | Real interactive terminal | xterm.js ⇄ `portable-pty` bridge (§7) | Core |
-| F2 | Multiple sessions (tabs) | Session manager in TS; one PTY + one xterm instance per tab | Core |
-| F3 | Cross-platform shells | Shell-selection map (§6) + spawn via ConPTY/Unix PTY | Core |
-| F4 | WSL sessions | On Windows, spawn `wsl.exe [-d distro]` as the shell (§2b) | Core |
-| F5 | Clickable links → default browser | `@xterm/addon-web-links` detects URLs → on click call `tauri-plugin-opener` | Small |
-| F6 | Native notifications | `tauri-plugin-notification`, triggered by rules in §9 | Small |
-| F7 | Resize handling | `@xterm/addon-fit` on container resize → `pty_resize(cols,rows)` | Small |
-| F8 | Fast rendering | `@xterm/addon-webgl` (canvas fallback) | Small |
-| F9 | Scrollback + search | xterm built-in scrollback + `@xterm/addon-search` | Small |
-| F10 | Copy / paste | xterm selection + clipboard; right-click / keybind | Small |
-| F11 | Persist layout | Save tabs/cwd/titles to config JSON; restore on launch (new PTYs, §12) | Medium |
-| F12 | Session titles / rename | Track OSC 0/2 title escapes; allow manual rename | Small |
-| F13 | Themes / fonts | xterm theme object; font family/size in settings | Small |
-| F14 | **Split panes** | Split a tab into multiple terminals; resizable pane tree (§8) | Core |
-| F15 | **Per-session status/attention** | Track running/idle/waiting/done; badge on tab + pane; drives notifications (§9) | Core |
-| F16 | Session overview | Tab bar + optional grid glance showing every session's status/unread | Medium |
+| #   | Feature                           | How                                                                             | Effort |
+| --- | --------------------------------- | ------------------------------------------------------------------------------- | ------ |
+| F1  | Real interactive terminal         | xterm.js ⇄ `portable-pty` bridge (§7)                                           | Core   |
+| F2  | Multiple sessions (tabs)          | Session manager in TS; one PTY + one xterm instance per tab                     | Core   |
+| F3  | Cross-platform shells             | Shell-selection map (§6) + spawn via ConPTY/Unix PTY                            | Core   |
+| F4  | WSL sessions                      | On Windows, spawn `wsl.exe [-d distro]` as the shell (§2b)                      | Core   |
+| F5  | Clickable links → default browser | `@xterm/addon-web-links` detects URLs → on click call `tauri-plugin-opener`     | Small  |
+| F6  | Native notifications              | `tauri-plugin-notification`, triggered by rules in §9                           | Small  |
+| F7  | Resize handling                   | `@xterm/addon-fit` on container resize → `pty_resize(cols,rows)`                | Small  |
+| F8  | Fast rendering                    | `@xterm/addon-webgl` (canvas fallback)                                          | Small  |
+| F9  | Scrollback + search               | xterm built-in scrollback + `@xterm/addon-search`                               | Small  |
+| F10 | Copy / paste                      | xterm selection + clipboard; right-click / keybind                              | Small  |
+| F11 | Persist layout                    | Save tabs/cwd/titles to config JSON; restore on launch (new PTYs, §12)          | Medium |
+| F12 | Session titles / rename           | Track OSC 0/2 title escapes; allow manual rename                                | Small  |
+| F13 | Themes / fonts                    | xterm theme object; font family/size in settings                                | Small  |
+| F14 | **Split panes**                   | Split a tab into multiple terminals; resizable pane tree (§8)                   | Core   |
+| F15 | **Per-session status/attention**  | Track running/idle/waiting/done; badge on tab + pane; drives notifications (§9) | Core   |
+| F16 | Session overview                  | Tab bar + optional grid glance showing every session's status/unread            | Medium |
 
 ---
 
@@ -185,6 +190,7 @@ Design kept deliberately simple to stay easy for the compiler-feedback loop:
 - **Cleanup:** on window close / app exit, kill all children (avoid orphaned shells).
 
 Deliberate simplicity choices:
+
 - Threads + blocking reads over `async`/tokio → far simpler ownership, fewer borrow-checker fights.
 - One reader thread per session; back-pressure handled by the channel.
 - No shared mutable PTY state beyond the `Mutex<HashMap>`.
@@ -275,34 +281,32 @@ CI: GitHub Actions matrix (macos, ubuntu, windows) building all targets. Auto-up
 
 ## 13. Risks & mitigations
 
-| Risk | Mitigation |
-|------|-----------|
-| `portable-pty` PTY bridge has tricky ownership/threading | Keep it tiny + synchronous (threads, not async); lean on compiler feedback loop |
-| Immature `tauri-plugin-pty` | Not used — we hand-roll. Fallback: `node-pty` **sidecar** bundled by Tauri |
-| High-throughput output jank | Use `ipc::Channel` + WebGL renderer; batch writes; cap scrollback |
-| Notifications unreliable w/o app identity | Sign macOS build; set Windows AppUserModelID at install |
-| WSL complexity | Treat WSL as a shell target on a native Windows app (§2b), never host inside WSL |
-| Code-signing/notarization friction | Budget time; start CI signing early, not at release |
-| Orphaned shell processes | Kill all children on window close / app exit |
+| Risk                                                     | Mitigation                                                                       |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `portable-pty` PTY bridge has tricky ownership/threading | Keep it tiny + synchronous (threads, not async); lean on compiler feedback loop  |
+| Immature `tauri-plugin-pty`                              | Not used — we hand-roll. Fallback: `node-pty` **sidecar** bundled by Tauri       |
+| High-throughput output jank                              | Use `ipc::Channel` + WebGL renderer; batch writes; cap scrollback                |
+| Notifications unreliable w/o app identity                | Sign macOS build; set Windows AppUserModelID at install                          |
+| WSL complexity                                           | Treat WSL as a shell target on a native Windows app (§2b), never host inside WSL |
+| Code-signing/notarization friction                       | Budget time; start CI signing early, not at release                              |
+| Orphaned shell processes                                 | Kill all children on window close / app exit                                     |
 
 ---
 
 ## 14. Decisions
 
 Resolved (2026-07-06):
+
 1. **Primary purpose:** ✅ coding-agent runner — notifications & per-session attention state are headline.
 2. **Frontend framework:** ✅ React + TypeScript.
 3. **Layout model:** ✅ tabs **+ split panes** from v1.
 4. **Windows/WSL:** ✅ native Windows app spawning `wsl.exe`.
 
-Still open:
-5. **Notification triggers to ship first** — recommend **OSC 9** (agent-emitted) + **unfocused
-   activity/idle-transition**, since this is an agent runner. OSC 133 prompt marks (precise
-   command-done detection) can follow.
-6. **Agent status detection strategy** — how do we know a session is "waiting for input" vs "working"
-   vs "done"? Options: (a) shell-integration escape sequences (OSC 133), (b) agents emit OSC 9,
-   (c) output-idle heuristic. Likely a blend. Needs a short spike.
-7. **Project name.**
+Still open: 5. **Notification triggers to ship first** — recommend **OSC 9** (agent-emitted) + **unfocused
+activity/idle-transition**, since this is an agent runner. OSC 133 prompt marks (precise
+command-done detection) can follow. 6. **Agent status detection strategy** — how do we know a session is "waiting for input" vs "working"
+vs "done"? Options: (a) shell-integration escape sequences (OSC 133), (b) agents emit OSC 9,
+(c) output-idle heuristic. Likely a blend. Needs a short spike. 7. **Project name.**
 
 ---
 

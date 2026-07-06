@@ -1,0 +1,26 @@
+# Git hooks (https://lefthook.dev). Activate with: make hooks
+pre-commit:
+  parallel: true
+  commands:
+    rustfmt:
+      glob: "*.rs"
+      # git hooks run under /bin/sh, which doesn't source the shell profile,
+      # so put cargo on PATH explicitly.
+      run: cd src-tauri && PATH="$HOME/.cargo/bin:$PATH" cargo fmt
+      stage_fixed: true
+    clippy:
+      glob: "*.rs"
+      run: cd src-tauri && PATH="$HOME/.cargo/bin:$PATH" cargo clippy --all-targets -- -D warnings
+    eslint:
+      glob: "src/**/*.{ts,tsx}"
+      run: npx eslint --fix {staged_files}
+      stage_fixed: true
+    prettier:
+      glob: "*.{ts,tsx,css,json,md}"
+      run: npx prettier --write {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    tests:
+      run: make test

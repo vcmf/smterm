@@ -15,8 +15,7 @@ function App() {
     if (!el) return;
 
     const term = new Terminal({
-      fontFamily:
-        'Menlo, Monaco, "Cascadia Code", "Fira Code", Consolas, monospace',
+      fontFamily: 'Menlo, Monaco, "Cascadia Code", "Fira Code", Consolas, monospace',
       fontSize: 13,
       cursorBlink: true,
       theme: {
@@ -40,8 +39,8 @@ function App() {
     const onData = new Channel<number[]>();
     onData.onmessage = (bytes) => term.write(new Uint8Array(bytes));
 
-    invoke("pty_spawn", { id, cols: term.cols, rows: term.rows, onData }).catch(
-      (e) => term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`),
+    invoke("pty_spawn", { id, cols: term.cols, rows: term.rows, onData }).catch((e) =>
+      term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`),
     );
 
     // Frontend -> backend: keystrokes / pasted text.

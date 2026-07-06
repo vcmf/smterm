@@ -26,10 +26,22 @@ struct PtyManager(Mutex<HashMap<String, PtySession>>);
 
 /// The user's default shell for the current OS.
 fn default_shell() -> String {
-    if cfg!(target_os = "windows") {
-        std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string())
+    let is_windows = cfg!(target_os = "windows");
+    let env_shell = if is_windows {
+        std::env::var("COMSPEC").ok()
     } else {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
+        std::env::var("SHELL").ok()
+    };
+    resolve_shell(is_windows, env_shell)
+}
+
+/// Pure shell-resolution logic, split out so it can be unit-tested without
+/// touching the process environment.
+fn resolve_shell(is_windows: bool, env_shell: Option<String>) -> String {
+    match env_shell.filter(|s| !s.is_empty()) {
+        Some(shell) => shell,
+        None if is_windows => "powershell.exe".to_string(),
+        None => "/bin/bash".to_string(),
     }
 }
 
@@ -53,7 +65,9 @@ fn pty_spawn(
         })
         .map_err(|e| e.to_string())?;
 
-    let shell = shell.filter(|s| !s.is_empty()).unwrap_or_else(default_shell);
+    let shell = shell
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(default_shell);
     let cmd = CommandBuilder::new(shell);
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
 
@@ -139,4 +153,27 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_shell;
+
+    #[test]
+    fn uses_env_shell_when_set() {
+        assert_eq!(resolve_shell(false, Some("/bin/zsh".into())), "/bin/zsh");
+        assert_eq!(resolve_shell(true, Some("cmd.exe".into())), "cmd.exe");
+    }
+
+    #[test]
+    fn falls_back_when_missing() {
+        assert_eq!(resolve_shell(false, None), "/bin/bash");
+        assert_eq!(resolve_shell(true, None), "powershell.exe");
+    }
+
+    #[test]
+    fn treats_empty_as_missing() {
+        assert_eq!(resolve_shell(false, Some(String::new())), "/bin/bash");
+        assert_eq!(resolve_shell(true, Some(String::new())), "powershell.exe");
+    }
 }
