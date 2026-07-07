@@ -1,0 +1,18 @@
+/* Bundled Nerd Font — WebKit substitutes tofu for Private-Use-Area (Nerd/Powerline)
+   glyphs from *system-installed* fonts, but renders them correctly from a bundled
+   @font-face web font. So the terminal font must be bundled, not referenced by name.
+   FiraCode Nerd Font Mono carries text + ligatures + icons in one file (OFL). */
+@font-face {
+  font-family: "FiraCode Nerd Font Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/FiraCodeNerdFontMono-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "FiraCode Nerd Font Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/FiraCodeNerdFontMono-Bold.ttf") format("truetype");
+}

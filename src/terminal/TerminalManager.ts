@@ -23,11 +23,12 @@ interface Entry {
 // splitting a pane or switching tabs re-attaches instead of respawning the shell.
 const entries = new Map<string, Entry>();
 
-// Primary font handles text + ligatures; the Nerd Font fallbacks cover
-// Powerline/icon glyphs (e.g. p10k prompts) that JetBrains Mono lacks.
+// Bundled FiraCode Nerd Font Mono (web @font-face) is the default and carries
+// text + ligatures + Nerd/Powerline icons. Note: xterm's canvas renderer does
+// NOT fall back per-glyph, so for icons to show the *primary* font must have
+// them — a fallback chain can't rescue a non-Nerd primary.
 const fontStack = (family: string) =>
-  `"${family}", "Symbols Nerd Font Mono", "Symbols Nerd Font", "MesloLGS NF", ` +
-  `"JetBrainsMono Nerd Font", Menlo, "Cascadia Code", monospace`;
+  `"${family}", "FiraCode Nerd Font Mono", "JetBrains Mono", Menlo, monospace`;
 
 function build(): Entry {
   const s = useStore.getState().settings;
