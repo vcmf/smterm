@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { Terminal, X } from "@phosphor-icons/react"
+import { Terminal, X, Columns, Rows } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
 
@@ -13,6 +13,15 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
       s.activeTabId === tabId && s.tabs.find((t) => t.id === tabId)?.activeSessionId === sessionId,
   )
   const status = session?.status ?? "idle"
+
+  // Quick split (cmux-style): split THIS pane with the default shell.
+  const split = (direction: "row" | "column") => {
+    const store = useStore.getState()
+    const shell = store.shells[0]
+    if (!shell) return
+    store.setActivePane(tabId, sessionId)
+    store.splitActive(direction, shell)
+  }
 
   useEffect(() => {
     const el = mountRef.current
@@ -42,6 +51,28 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
         <span className="pane-title">{session?.title ?? "shell"}</span>
         <span className="pane-badge">shell</span>
         <div className="pane-header-spacer" />
+        <button
+          className="iconbtn"
+          style={{ width: 22, height: 22 }}
+          title="Split right"
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            split("row")
+          }}
+        >
+          <Columns size={13} />
+        </button>
+        <button
+          className="iconbtn"
+          style={{ width: 22, height: 22 }}
+          title="Split down"
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            split("column")
+          }}
+        >
+          <Rows size={13} />
+        </button>
         <button
           className="iconbtn"
           style={{ width: 22, height: 22 }}
