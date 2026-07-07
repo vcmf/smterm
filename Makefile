@@ -23,14 +23,14 @@ install: ## Install JS deps and activate git hooks
 
 .PHONY: run
 run: ## Run the app in dev mode (opens a window)
-	npm run tauri dev
+	npm run dev
 
 .PHONY: dev
 dev: run ## Alias for `run`
 
 .PHONY: build
-build: ## Build a production bundle for the current OS
-	npm run tauri build
+build: ## Build the app (electron-vite; packaging via electron-builder in P8)
+	npm run build
 
 .PHONY: build-web
 build-web: ## Build only the frontend (type-check + bundle)

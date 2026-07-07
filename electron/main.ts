@@ -3,8 +3,16 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
 import os from "node:os"
+import * as pty from "node-pty"
+import type { IPty } from "node-pty"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
+
+const ptys = new Map<string, IPty>()
+
+function defaultShell(): string {
+  return process.env.SHELL ?? (process.platform === "win32" ? "powershell.exe" : "/bin/zsh")
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -51,11 +59,34 @@ function writeSettings(contents: string): void {
 }
 
 function registerIpc() {
-  // PTY — stubbed in P1; real node-pty lands in P3.
-  ipcMain.handle("pty:spawn", async () => {})
-  ipcMain.on("pty:write", () => {})
-  ipcMain.on("pty:resize", () => {})
-  ipcMain.on("pty:kill", () => {})
+  // PTY — one node-pty per session; stream output back over pty:data:<id>.
+  ipcMain.handle(
+    "pty:spawn",
+    (event, opts: { id: string; cols: number; rows: number; shell: string; args: string[] }) => {
+      const proc = pty.spawn(opts.shell || defaultShell(), opts.args ?? [], {
+        name: "xterm-256color",
+        cols: opts.cols || 80,
+        rows: opts.rows || 24,
+        cwd: os.homedir(),
+        env: process.env as Record<string, string>,
+      })
+      proc.onData((data) => event.sender.send(`pty:data:${opts.id}`, data))
+      proc.onExit(() => ptys.delete(opts.id))
+      ptys.set(opts.id, proc)
+    },
+  )
+  ipcMain.on("pty:write", (_e, id: string, data: string) => ptys.get(id)?.write(data))
+  ipcMain.on("pty:resize", (_e, id: string, cols: number, rows: number) => {
+    try {
+      ptys.get(id)?.resize(cols, rows)
+    } catch {
+      // ignore transient 0-size during layout
+    }
+  })
+  ipcMain.on("pty:kill", (_e, id: string) => {
+    ptys.get(id)?.kill()
+    ptys.delete(id)
+  })
 
   // Shells — minimal default in P1; full resolution + WSL in P4.
   ipcMain.handle("shells:list", async () => {
@@ -94,4 +125,15 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
+})
+
+app.on("before-quit", () => {
+  for (const p of ptys.values()) {
+    try {
+      p.kill()
+    } catch {
+      // already gone
+    }
+  }
+  ptys.clear()
 })

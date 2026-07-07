@@ -13,7 +13,7 @@ export interface SpawnOpts {
 
 export interface Ipc {
   ptySpawn: (opts: SpawnOpts) => Promise<void>
-  onPtyData: (id: string, cb: (data: Uint8Array) => void) => () => void
+  onPtyData: (id: string, cb: (data: string) => void) => () => void
   ptyWrite: (id: string, data: string) => void
   ptyResize: (id: string, cols: number, rows: number) => void
   ptyKill: (id: string) => void

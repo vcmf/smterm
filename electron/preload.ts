@@ -4,9 +4,9 @@ const api = {
   ptySpawn: (opts: { id: string; cols: number; rows: number; shell: string; args: string[] }) =>
     ipcRenderer.invoke("pty:spawn", opts),
 
-  onPtyData: (id: string, cb: (data: Uint8Array) => void) => {
+  onPtyData: (id: string, cb: (data: string) => void) => {
     const channel = `pty:data:${id}`
-    const listener = (_e: unknown, data: Uint8Array) => cb(data)
+    const listener = (_e: unknown, data: string) => cb(data)
     ipcRenderer.on(channel, listener)
     return () => ipcRenderer.removeListener(channel, listener)
   },
