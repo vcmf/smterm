@@ -33,6 +33,9 @@ function build(): Entry {
   host.className = "terminal-host"
   const term = new Terminal({
     allowProposedApi: true, // for registerCharacterJoiner (ligatures)
+    // Use the font's box-drawing/arc glyphs; xterm's WebGL custom-glyph code
+    // mis-renders rounded arcs (╰─). Chromium renders the font glyphs correctly.
+    customGlyphs: false,
     fontFamily: fontStack(s.font.family),
     fontSize: s.font.size,
     lineHeight: s.font.lineHeight,
