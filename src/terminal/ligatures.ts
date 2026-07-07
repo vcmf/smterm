@@ -42,7 +42,7 @@ const LIGATURES = [
   "=~",
   "!~",
   "**",
-].sort((a, b) => b.length - a.length);
+].sort((a, b) => b.length - a.length)
 
 /**
  * xterm character joiner: returns [start, end) ranges covering ligature
@@ -50,16 +50,16 @@ const LIGATURES = [
  * so the font's ligature glyph is applied. Pure — unit-tested.
  */
 export function ligatureRanges(text: string): [number, number][] {
-  const ranges: [number, number][] = [];
-  let i = 0;
+  const ranges: [number, number][] = []
+  let i = 0
   while (i < text.length) {
-    const lig = LIGATURES.find((l) => text.startsWith(l, i));
+    const lig = LIGATURES.find((l) => text.startsWith(l, i))
     if (lig) {
-      ranges.push([i, i + lig.length]);
-      i += lig.length;
+      ranges.push([i, i + lig.length])
+      i += lig.length
     } else {
-      i += 1;
+      i += 1
     }
   }
-  return ranges;
+  return ranges
 }

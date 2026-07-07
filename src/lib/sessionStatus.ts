@@ -1,18 +1,18 @@
-export type SessionStatus = "idle" | "working" | "attention";
+export type SessionStatus = "idle" | "working" | "attention"
 
 export interface Signals {
-  status: SessionStatus;
-  unread: boolean;
+  status: SessionStatus
+  unread: boolean
 }
 
-export const initialSignals: Signals = { status: "idle", unread: false };
+export const initialSignals: Signals = { status: "idle", unread: false }
 
 export type SignalEvent =
   | { type: "command-start" } // OSC 133;C — a command began running
   | { type: "command-end" } // OSC 133;D — command finished
   | { type: "attention" } // OSC 9 — program/agent requests attention
   | { type: "output" } // any PTY output
-  | { type: "reveal" }; // the session became visible to the user
+  | { type: "reveal" } // the session became visible to the user
 
 /**
  * Pure transition for a session's status/unread given an event and whether the
@@ -21,28 +21,28 @@ export type SignalEvent =
 export function reduceSignals(cur: Signals, ev: SignalEvent, visible: boolean): Signals {
   switch (ev.type) {
     case "reveal":
-      return { status: cur.status === "attention" ? "idle" : cur.status, unread: false };
+      return { status: cur.status === "attention" ? "idle" : cur.status, unread: false }
     case "command-start":
-      return { status: "working", unread: cur.unread };
+      return { status: "working", unread: cur.unread }
     case "command-end":
-      return { status: "idle", unread: cur.unread || !visible };
+      return { status: "idle", unread: cur.unread || !visible }
     case "attention":
-      return visible ? cur : { status: "attention", unread: true };
+      return visible ? cur : { status: "attention", unread: true }
     case "output":
-      return visible ? cur : { status: cur.status, unread: true };
+      return visible ? cur : { status: cur.status, unread: true }
   }
 }
 
-export type TabBadge = "attention" | "working" | "unread" | null;
+export type TabBadge = "attention" | "working" | "unread" | null
 
 /** Aggregate a tab's badge from its sessions' signals (attention > working > unread). */
 export function aggregateBadge(signals: Signals[]): TabBadge {
-  let working = false;
-  let unread = false;
+  let working = false
+  let unread = false
   for (const s of signals) {
-    if (s.status === "attention") return "attention";
-    if (s.status === "working") working = true;
-    if (s.unread) unread = true;
+    if (s.status === "attention") return "attention"
+    if (s.status === "working") working = true
+    if (s.unread) unread = true
   }
-  return working ? "working" : unread ? "unread" : null;
+  return working ? "working" : unread ? "unread" : null
 }

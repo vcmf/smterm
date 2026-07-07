@@ -1,13 +1,14 @@
-import js from "@eslint/js";
-import tseslint from "typescript-eslint";
-import reactHooks from "eslint-plugin-react-hooks";
-import reactRefresh from "eslint-plugin-react-refresh";
-import globals from "globals";
+import js from "@eslint/js"
+import tseslint from "typescript-eslint"
+import reactHooks from "eslint-plugin-react-hooks"
+import reactRefresh from "eslint-plugin-react-refresh"
+import globals from "globals"
 
 export default tseslint.config(
   {
     ignores: [
       "dist/**",
+      "out/**", // electron-vite build output
       "coverage/**",
       "node_modules/**",
       "src-tauri/**", // Rust — linted by clippy, not eslint
@@ -34,8 +35,8 @@ export default tseslint.config(
     },
   },
   {
-    // Config files + test setup run in Node.
-    files: ["*.{ts,js,mjs,cjs}", "src/test/**"],
+    // Config files, Electron main/preload, and test setup run in Node.
+    files: ["*.{ts,js,mjs,cjs}", "electron/**", "src/test/**"],
     languageOptions: { globals: { ...globals.node } },
   },
-);
+)

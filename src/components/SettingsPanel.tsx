@@ -1,29 +1,29 @@
-import { X } from "lucide-react";
-import { useStore } from "../store";
-import { openSettingsFile, saveSettings, settingsPath } from "../settings/io";
-import { mergeSettings } from "../settings/schema";
-import type { Settings } from "../settings/schema";
-import { THEMES } from "../settings/themes";
-import { useEffect, useState } from "react";
+import { X } from "lucide-react"
+import { useStore } from "../store"
+import { openSettingsFile, saveSettings, settingsPath } from "../settings/io"
+import { mergeSettings } from "../settings/schema"
+import type { Settings } from "../settings/schema"
+import { THEMES } from "../settings/themes"
+import { useEffect, useState } from "react"
 
 export function SettingsPanel() {
-  const settings = useStore((s) => s.settings);
-  const [path, setPath] = useState("");
+  const settings = useStore((s) => s.settings)
+  const [path, setPath] = useState("")
 
   useEffect(() => {
-    void settingsPath().then(setPath);
-  }, []);
+    void settingsPath().then(setPath)
+  }, [])
 
   // Validate/clamp edits through the same merge used for the file, then persist.
   const update = (next: Settings) => {
-    const validated = mergeSettings(next);
-    useStore.getState().setSettings(validated);
-    void saveSettings(validated);
-  };
+    const validated = mergeSettings(next)
+    useStore.getState().setSettings(validated)
+    void saveSettings(validated)
+  }
   const font = (patch: Partial<Settings["font"]>) =>
-    update({ ...settings, font: { ...settings.font, ...patch } });
+    update({ ...settings, font: { ...settings.font, ...patch } })
 
-  const close = () => useStore.getState().setSettingsOpen(false);
+  const close = () => useStore.getState().setSettingsOpen(false)
 
   return (
     <div className="settings-overlay" onMouseDown={close}>
@@ -114,5 +114,5 @@ export function SettingsPanel() {
         </div>
       </div>
     </div>
-  );
+  )
 }

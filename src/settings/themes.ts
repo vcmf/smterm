@@ -1,21 +1,21 @@
-import type { ITheme } from "@xterm/xterm";
+import type { ITheme } from "@xterm/xterm"
 
 /** UI tokens become CSS custom properties; `terminal` is xterm's theme object. */
 export interface Theme {
-  name: string;
+  name: string
   ui: {
-    bg: string;
-    bgElevated: string;
-    fg: string;
-    fgMuted: string;
-    border: string;
-    accent: string;
-    hover: string;
-    controlBg: string;
-    controlFg: string;
-    controlHover: string;
-  };
-  terminal: ITheme;
+    bg: string
+    bgElevated: string
+    fg: string
+    fgMuted: string
+    border: string
+    accent: string
+    hover: string
+    controlBg: string
+    controlFg: string
+    controlHover: string
+  }
+  terminal: ITheme
 }
 
 const dark: Theme = {
@@ -54,7 +54,7 @@ const dark: Theme = {
     brightCyan: "#29b8db",
     brightWhite: "#e5e5e5",
   },
-};
+}
 
 const light: Theme = {
   name: "light",
@@ -92,24 +92,24 @@ const light: Theme = {
     brightCyan: "#0598bc",
     brightWhite: "#a5a5a5",
   },
-};
+}
 
-export const THEMES: Record<string, Theme> = { dark, light };
+export const THEMES: Record<string, Theme> = { dark, light }
 
-export const getTheme = (name: string): Theme => THEMES[name] ?? dark;
+export const getTheme = (name: string): Theme => THEMES[name] ?? dark
 
 /** Push a theme's UI tokens onto :root as CSS custom properties. */
 export function applyThemeVars(theme: Theme) {
-  const root = document.documentElement;
-  const u = theme.ui;
-  root.style.setProperty("--bg", u.bg);
-  root.style.setProperty("--bg-elevated", u.bgElevated);
-  root.style.setProperty("--fg", u.fg);
-  root.style.setProperty("--fg-muted", u.fgMuted);
-  root.style.setProperty("--border", u.border);
-  root.style.setProperty("--accent", u.accent);
-  root.style.setProperty("--hover", u.hover);
-  root.style.setProperty("--control-bg", u.controlBg);
-  root.style.setProperty("--control-fg", u.controlFg);
-  root.style.setProperty("--control-hover", u.controlHover);
+  const root = document.documentElement
+  const u = theme.ui
+  root.style.setProperty("--bg", u.bg)
+  root.style.setProperty("--bg-elevated", u.bgElevated)
+  root.style.setProperty("--fg", u.fg)
+  root.style.setProperty("--fg-muted", u.fgMuted)
+  root.style.setProperty("--border", u.border)
+  root.style.setProperty("--accent", u.accent)
+  root.style.setProperty("--hover", u.hover)
+  root.style.setProperty("--control-bg", u.controlBg)
+  root.style.setProperty("--control-fg", u.controlFg)
+  root.style.setProperty("--control-hover", u.controlHover)
 }

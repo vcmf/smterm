@@ -1,10 +1,10 @@
-import type { PaneNode } from "../types";
+import type { PaneNode } from "../types"
 
 /** A single-terminal pane. */
 export const makeLeaf = (sessionId: string): PaneNode => ({
   type: "leaf",
   sessionId,
-});
+})
 
 /**
  * Split the leaf holding `targetSessionId` into a `direction` split whose two
@@ -19,13 +19,13 @@ export function splitNode(
   newSplitId: string,
 ): PaneNode {
   if (node.type === "leaf") {
-    if (node.sessionId !== targetSessionId) return node;
+    if (node.sessionId !== targetSessionId) return node
     return {
       type: "split",
       id: newSplitId,
       direction,
       children: [node, makeLeaf(newSessionId)],
-    };
+    }
   }
   return {
     ...node,
@@ -33,7 +33,7 @@ export function splitNode(
       splitNode(node.children[0], targetSessionId, direction, newSessionId, newSplitId),
       splitNode(node.children[1], targetSessionId, direction, newSessionId, newSplitId),
     ],
-  };
+  }
 }
 
 /**
@@ -42,27 +42,26 @@ export function splitNode(
  */
 export function removeNode(node: PaneNode, targetSessionId: string): PaneNode | null {
   if (node.type === "leaf") {
-    return node.sessionId === targetSessionId ? null : node;
+    return node.sessionId === targetSessionId ? null : node
   }
-  const left = removeNode(node.children[0], targetSessionId);
-  const right = removeNode(node.children[1], targetSessionId);
-  if (left && right) return { ...node, children: [left, right] };
-  return left ?? right;
+  const left = removeNode(node.children[0], targetSessionId)
+  const right = removeNode(node.children[1], targetSessionId)
+  if (left && right) return { ...node, children: [left, right] }
+  return left ?? right
 }
 
 /** All session ids under a node (left-to-right). */
 export function allSessionIds(node: PaneNode): string[] {
-  if (node.type === "leaf") return [node.sessionId];
-  return [...allSessionIds(node.children[0]), ...allSessionIds(node.children[1])];
+  if (node.type === "leaf") return [node.sessionId]
+  return [...allSessionIds(node.children[0]), ...allSessionIds(node.children[1])]
 }
 
 /** The leftmost session id — used to pick a new active pane after a close. */
 export function firstSessionId(node: PaneNode): string {
-  let cur: PaneNode = node;
-  while (cur.type === "split") cur = cur.children[0];
-  return cur.sessionId;
+  let cur: PaneNode = node
+  while (cur.type === "split") cur = cur.children[0]
+  return cur.sessionId
 }
 
 /** Stable React/panel key for a node. */
-export const nodeKey = (node: PaneNode): string =>
-  node.type === "leaf" ? node.sessionId : node.id;
+export const nodeKey = (node: PaneNode): string => (node.type === "leaf" ? node.sessionId : node.id)

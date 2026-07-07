@@ -6,6 +6,11 @@
 Status: **living doc** — the space moves fast (tools rename, companies fold). Snapshot as of
 **2026-07-06**; re-verify names/status before citing (see §6 for known traps).
 
+> **Verification:** the facts in §3 (stacks, licenses, isolation models, status) were checked via a
+> multi-source, adversarially-verified deep-research pass on **2026-07-07** — 21 primary/secondary
+> sources, 25 claims put through 3-vote verification (23 confirmed, 2 refuted). Refuted claims and
+> known gaps are called out in §6. Findings rest on project READMEs / official vendor docs.
+
 ---
 
 ## 1. The convergence thesis
@@ -54,42 +59,61 @@ Crowded corners: **macOS-native terminal** (cmux, Conductor, Paneflow) and **web
 
 ## 3. The field, by form factor
 
+> **⚠️ Name collision — two different "cmux":**
+>
+> - **cmux (Manaflow)** — the famous native macOS Ghostty terminal (3a below). GPL/AGPL, YC S24.
+> - **cmux (`craigsc/cmux`)** — an unrelated ~560-line **pure-bash** CLI, "tmux for Claude Code":
+>   fans a fleet of Claude agents across git worktrees on one repo. Different project, different scale.
+>
+> When anyone says "cmux," disambiguate which. This doc's "cmux" = Manaflow's unless noted.
+
 ### 3a. Terminal-native / TUI managers (smterm's direct neighbors)
 
-| Tool             | Shape                                                             | Platforms             | Notes                                                                                                                                                                 |
-| ---------------- | ----------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **cmux**         | Native app, Ghostty (`libghostty`) engine                         | macOS only            | The famous one. GPU render, vertical tabs, notifications, in-app browser. By **Manaflow** (YC S24). ~17k GitHub stars in ~2 weeks. AGPL                               |
-| **ccmanager**    | TUI session manager                                               | Cross-platform        | **Broadest agent support**: Claude Code, Codex, Gemini CLI, Cursor Agent, Copilot CLI, Cline, OpenCode…; git worktree support. smterm's closest competitor on breadth |
-| **Claude Squad** | tmux-based harness                                                | Cross-platform (tmux) | Run/manage multiple Claude Code sessions side-by-side                                                                                                                 |
-| **dmux**         | Node CLI over tmux                                                | Cross-platform (tmux) | Each tmux pane = its own worktree + branch                                                                                                                            |
-| **amux**         | Single Python file → local HTTPS server + web dashboard over tmux | Cross-platform (tmux) | Self-healing watchdog auto-restarts crashed agents; auto-compacts context overflow                                                                                    |
-| **Superset**     | Terminal built for agents                                         | —                     | Orchestrates parallel sessions                                                                                                                                        |
-| **Paneflow**     | Native, Rust on Zed's **GPUI**                                    | Linux / Windows       | The native-not-webview take for non-mac                                                                                                                               |
-| **wmux**         | Electron + xterm.js                                               | Windows               | Windows port of cmux                                                                                                                                                  |
+Facts marked ✓ were confirmed 3-0 in the 2026-07-07 deep-research verification.
 
-### 3b. Desktop GUI apps (worktree isolation + diff/PR review)
+| Tool                | Stack                                                       | Platforms                 | Isolation                                | Agents                                                                                            | License / status                                           |
+| ------------------- | ----------------------------------------------------------- | ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **cmux** (Manaflow) | Native, Ghostty (`libghostty`) GPU engine                   | macOS only                | worktrees                                | Claude Code (breadth uncertain — "Claude-only" claim refuted, see §6)                             | GPL/AGPL. YC S24. ~17k★ in ~2 weeks                        |
+| **ccmanager** ✓     | TUI/CLI (no tmux)                                           | Cross-platform            | **worktrees + optional devcontainers** ✓ | **8** ✓: Claude Code, Gemini CLI, Codex CLI, Cursor Agent, Copilot CLI, Cline, OpenCode, Kimi CLI | MIT. smterm's closest on breadth + cross-platform          |
+| **Claude Squad** ✓  | Go TUI, tmux                                                | Cross-platform (tmux)     | worktrees ✓                              | Claude Code, Codex, Gemini, Aider, OpenCode, Amp ✓                                                | **AGPL-3.0** ✓ (smtg-ai)                                   |
+| **dmux** ✓          | Node CLI, tmux 3.0+                                         | Cross-platform (tmux)     | worktrees (pane = worktree) ✓            | **12** ✓: Claude, Codex, Gemini, Cline, OpenCode, Qwen, Cursor, Copilot, Amp, pi, Crush, Grok     | **MIT** ✓ (standardagents)                                 |
+| **craigsc/cmux**    | ~560-line pure bash                                         | Cross-platform (bash+git) | worktrees ✓                              | Claude Code (fleet on one repo)                                                                   | OSS. The _other_ cmux (see collision note)                 |
+| **amux**            | Single Python file → HTTPS server + web dashboard over tmux | Cross-platform (tmux)     | tmux sessions                            | multiple                                                                                          | ⚠️ _unverified in this pass_ — self-healing watchdog claim |
+| **Superset**        | Terminal built for agents                                   | —                         | —                                        | multiple                                                                                          | ⚠️ _unverified in this pass_                               |
+| **Paneflow**        | Native, Rust on Zed's **GPUI**                              | Linux / Windows           | —                                        | —                                                                                                 | ⚠️ _unverified in this pass_ — native non-mac take         |
+| **wmux**            | Electron + xterm.js                                         | Windows                   | —                                        | —                                                                                                 | ⚠️ _unverified in this pass_ — Windows port of cmux        |
 
-| Tool          | Platforms | Notes                                                                                                              |
-| ------------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Conductor** | macOS     | Worktree per workspace, strong diff viewer + PR flow, fully local. Claude Code + Codex                             |
-| **Nimbalyst** | Desktop   | Visual workspace + kanban; **renamed from Crystal**; broad (mockups, diagrams, multi-editor, heterogeneous agents) |
-| **Sculptor**  | Desktop   | The outlier — isolates with **containers, not worktrees** (stronger isolation, heavier)                            |
+### 3b. Desktop GUI apps
 
-### 3c. Board / Kanban orchestration (cross-platform, web UI)
+| Tool                      | Stack       | Platforms                            | Isolation                                                    | Agents                           | License / status                                                                      |
+| ------------------------- | ----------- | ------------------------------------ | ------------------------------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------- |
+| **Conductor** ✓           | Desktop app | **Mac-only** ✓ (Windows waitlist)    | worktrees ✓                                                  | Claude Code, Codex, Cursor ✓     | Closed-source. **Melty Labs**, YC S24                                                 |
+| **Crystal → Nimbalyst** ✓ | Electron    | Desktop (+ iOS companion, Nimbalyst) | worktrees ✓                                                  | Codex, Claude Code (+ harnesses) | **Crystal deprecated 2026-02-26** ✓ (frozen ~3,080★) → **Nimbalyst** (MIT), same team |
+| **Sculptor** ✓            | Desktop app | Desktop                              | **containers, NOT worktrees** ✓ (worktree claim refuted 0-3) | multiple                         | **MIT** ✓ (Imbue). Experimental research preview; limited external contributions      |
 
-| Tool            | Notes                                                                                                                                                                         |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Vibe Kanban** | CLI + web kanban board; worktree-isolated tasks; visual code review. ⚠️ Company (**Bloop**) shut down **2026-04-10**; now Apache-2.0, community-maintained; paid cloud sunset |
-| **Nimbalyst**   | Also board-shaped (see 3b)                                                                                                                                                    |
+### 3c. Board / Kanban orchestration
+
+| Tool              | Stack                | Isolation   | Agents                                                                             | License / status                                                                                                       |
+| ----------------- | -------------------- | ----------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Vibe Kanban** ✓ | **Rust**, web kanban | worktrees ✓ | **10+** ✓: Claude, Codex, Gemini, Copilot, Amp, Cursor, OpenCode, Droid, CCR, Qwen | **Apache-2.0** ✓. ⚠️ **BloopAI sunsetting ~2026-04-10** ✓ ("couldn't find a business model"); OSS community-maintained |
+| **Nimbalyst**     | Electron             | worktrees   | Claude Code, Codex, + harnesses                                                    | MIT; also board-shaped (see 3b)                                                                                        |
 
 ### 3d. Built into editors
 
-| Tool                       | Notes                                                                                                                                                                                                                                      |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Cursor 2/3**             | "Agent-first" default view; up to ~8 parallel agents in isolated envs; Classic Editor is a toggle. Backlash over agent UI crowding out the code + non-remappable shortcuts (§4)                                                            |
-| **VS Code Agent Sessions** | Built-in sidebar over local/background/cloud sessions; model-agnostic (Claude, Codex, Copilot as of 1.109). **Only tracks agents launched through / registered with VS Code** — a bare `claude` in a plain terminal is _not_ auto-detected |
+| Tool                               | Isolation                      | Agents                                                    | Status                                                                                                                                                                                                    |
+| ---------------------------------- | ------------------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cursor 3.0**                     | worktrees                      | up to **8** parallel                                      | Agents Window (sidebar over all sessions/repos). Released **2026-04-02** ✓. Backlash over agent UI crowding code + non-remappable shortcuts (§4)                                                          |
+| **VS Code Agents Window** ✓        | worktrees ✓                    | exactly **3** ✓: Copilot CLI, Copilot Cloud, Claude agent | Preview, shipped **VS Code 1.120, May 2026** ✓. Third-party/local agents managed from the main window                                                                                                     |
+| **VS Code Copilot CLI Sessions** ✓ | **Worktree or Folder** modes ✓ | Copilot CLI (background)                                  | Runs multiple CLI sessions in parallel locally via Agent Sessions sidebar. **Only tracks agents launched through / registered with VS Code** — a bare `claude` in a plain terminal is _not_ auto-detected |
 
-### 3e. Directories worth tracking (the field moves weekly)
+### 3e. Not yet mapped (surfaced but unverified — candidates for the next pass)
+
+From `awesome-agent-orchestrators` (claims **46+** "parallel agent runners") and other sources, these
+came up but weren't verified here: **SplitMind, Claude Code Crew, Async Code Agent, constellagent,
+paperclip, scion, shire, skillfold, swarm-protocol** — plus category-adjacent tools not covered:
+**Terragon, Sourcegraph Amp's orchestrator, Warp's agent mode, Zed's agent panel.**
+
+Directories to track (the field moves weekly):
 
 - [awesome-agent-orchestrators](https://github.com/andyrewlee/awesome-agent-orchestrators)
 - [awesome-cli-coding-agents](https://github.com/bradAGI/awesome-cli-coding-agents)
@@ -155,27 +179,52 @@ signals**, not the fleet concept itself.
 
 ---
 
-## 6. Naming & status traps (verify before citing)
+## 6. Naming & status traps, and refuted claims (verify before citing)
 
-- **Crystal → Nimbalyst** — renamed; the old repo now says "Crystal is now Nimbalyst."
-- **Vibe Kanban** — company **Bloop shut down 2026-04-10**; project continues as Apache-2.0
-  community-maintained; paid cloud/remote sunset. Alive as OSS, dead as a company.
-- **Sculptor / Mux** — often listed as "orchestrators" but are better read as _adjacent multi-agent
-  environments_, not direct Claude-Code+Codex session managers.
-- The category is churny — assume any tool here may have renamed, changed license, or folded since
-  this snapshot. The two directories in §3e are the freshest trackers.
+**Traps:**
+
+- **"cmux" is two projects** — Manaflow's native macOS terminal vs `craigsc/cmux`'s bash script.
+  Always disambiguate (see the collision note above §3a).
+- **Crystal → Nimbalyst** — renamed; old repo says "Crystal is now Nimbalyst" (deprecated 2026-02-26).
+- **Vibe Kanban** — company **BloopAI sunsetting ~2026-04-10** ("couldn't find a business model");
+  project continues as Apache-2.0 community-maintained. Alive as OSS, dead as a company.
+- **Sculptor** — isolates with **containers**, not worktrees (see refuted claim below). Often listed
+  loosely as an "orchestrator" but is a container-based parallel-agent desktop app.
+
+**Refuted in the 2026-07-07 verification (do NOT rely on these):**
+
+- ✗ "cmux (Manaflow) supports only Claude Code" — refuted 1-2. Its multi-agent breadth is genuinely
+  uncertain; don't state it either way without checking the current repo.
+- ✗ "Sculptor uses git worktrees as primary isolation" — refuted 0-3. It uses **containers**.
+
+**Gaps (named in the question but not verifiable this pass):** amux, Superset, Paneflow, wmux
+returned no surviving claims — treat their rows in §3a as provisional until re-verified.
+
+The category is churny — assume any tool here may have renamed, changed license, or folded since this
+snapshot. The two directories in §3e are the freshest trackers.
 
 ---
 
 ## Sources
 
+**Primary (verified 2026-07-07):**
+
+- [Claude Squad — GitHub (smtg-ai/claude-squad)](https://github.com/smtg-ai/claude-squad)
+- [ccmanager — GitHub (kbwo/ccmanager)](https://github.com/kbwo/ccmanager)
+- [dmux — GitHub (standardagents/dmux)](https://github.com/standardagents/dmux)
+- [craigsc/cmux — GitHub (the bash "tmux for Claude Code")](https://github.com/craigsc/cmux)
+- [Conductor — conductor.build](https://www.conductor.build/)
+- [Crystal → Nimbalyst — GitHub (stravu/crystal)](https://github.com/stravu/crystal)
+- [Sculptor — GitHub (imbue-ai/sculptor)](https://github.com/imbue-ai/sculptor) · [Imbue announce](https://imbue.com/blog/sculptor-announce)
+- [Vibe Kanban — GitHub (BloopAI/vibe-kanban)](https://github.com/BloopAI/vibe-kanban) · [shutdown post](https://vibekanban.com/blog/shutdown)
+- [VS Code Agents Window — docs](https://code.visualstudio.com/docs/agents/agents-window)
+- [VS Code Copilot CLI background sessions — docs](https://code.visualstudio.com/docs/copilot/agents/background-agents)
+
+**Secondary / context:**
+
 - [Best AI Agent Multiplexers Compared (2026): 12 Tools Ranked — amux.io](https://amux.io/guides/best-ai-agent-multiplexers-2026/)
-- [Best Tools for Managing Parallel AI Coding Agents in 2026 — Nimbalyst](https://nimbalyst.com/blog/best-agent-management-tools-2026/)
 - [9 Open-Source Agent Orchestrators for AI Coding (2026) — Augment Code](https://www.augmentcode.com/tools/open-source-agent-orchestrators)
-- [cmux Alternatives (2026) — vibecoding.app](https://vibecoding.app/alternative/cmux-alternative)
 - [cmux — GitHub (manaflow-ai/cmux)](https://github.com/manaflow-ai/cmux)
-- [cmux vs tmux — Soloterm](https://soloterm.com/cmux-vs-tmux)
-- [New Coding Model and Agent Interface — Cursor 2.0 changelog](https://cursor.com/changelog/2-0)
+- [New Coding Model and Agent Interface — Cursor 2.0 changelog](https://cursor.com/changelog/2-0) · [Cursor 3 agent-first — InfoQ](https://www.infoq.com/news/2026/04/cursor-3-agent-first-interface/)
 - [Your Home for Multi-Agent Development — VS Code blog](https://code.visualstudio.com/blogs/2026/02/05/multi-agent-development)
-- [awesome-agent-orchestrators — GitHub](https://github.com/andyrewlee/awesome-agent-orchestrators)
-- [awesome-cli-coding-agents — GitHub](https://github.com/bradAGI/awesome-cli-coding-agents)
+- [awesome-agent-orchestrators — GitHub](https://github.com/andyrewlee/awesome-agent-orchestrators) · [awesome-cli-coding-agents — GitHub](https://github.com/bradAGI/awesome-cli-coding-agents)

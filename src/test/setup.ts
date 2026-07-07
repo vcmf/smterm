@@ -1,2 +1,2 @@
 // Extends Vitest's `expect` with jest-dom matchers (toBeInTheDocument, etc.).
-import "@testing-library/jest-dom/vitest";
+import "@testing-library/jest-dom/vitest"

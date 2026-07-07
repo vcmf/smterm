@@ -1,42 +1,42 @@
-import { useEffect, useRef, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
-import { useStore } from "../store";
-import { allSessionIds } from "../lib/paneTree";
-import { aggregateBadge } from "../lib/sessionStatus";
+import { useEffect, useRef, useState } from "react"
+import { Settings as SettingsIcon } from "lucide-react"
+import { useStore } from "../store"
+import { allSessionIds } from "../lib/paneTree"
+import { aggregateBadge } from "../lib/sessionStatus"
 
 export function TabBar() {
-  const tabs = useStore((s) => s.tabs);
-  const activeTabId = useStore((s) => s.activeTabId);
-  const shells = useStore((s) => s.shells);
-  const sessions = useStore((s) => s.sessions);
-  const [shellId, setShellId] = useState<string | null>(null);
+  const tabs = useStore((s) => s.tabs)
+  const activeTabId = useStore((s) => s.activeTabId)
+  const shells = useStore((s) => s.shells)
+  const sessions = useStore((s) => s.sessions)
+  const [shellId, setShellId] = useState<string | null>(null)
 
   // Inline tab rename (window.prompt is unavailable in the Tauri webview).
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (editingId && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+      inputRef.current.focus()
+      inputRef.current.select()
     }
-  }, [editingId]);
+  }, [editingId])
 
-  const currentShell = shells.find((s) => s.id === shellId) ?? shells[0];
+  const currentShell = shells.find((s) => s.id === shellId) ?? shells[0]
 
   const startRename = (id: string, title: string) => {
-    setDraft(title);
-    setEditingId(id);
-  };
+    setDraft(title)
+    setEditingId(id)
+  }
 
   const commitRename = () => {
     if (editingId) {
-      const name = draft.trim();
-      if (name) useStore.getState().renameTab(editingId, name);
+      const name = draft.trim()
+      if (name) useStore.getState().renameTab(editingId, name)
     }
-    setEditingId(null);
-  };
+    setEditingId(null)
+  }
 
   return (
     <div className="tabbar">
@@ -44,10 +44,10 @@ export function TabBar() {
         {tabs.map((tab) => {
           const badge = aggregateBadge(
             allSessionIds(tab.root).flatMap((id) => {
-              const s = sessions[id];
-              return s ? [{ status: s.status, unread: s.unread }] : [];
+              const s = sessions[id]
+              return s ? [{ status: s.status, unread: s.unread }] : []
             }),
-          );
+          )
           return (
             <div
               key={tab.id}
@@ -65,8 +65,8 @@ export function TabBar() {
                   onBlur={commitRename}
                   onMouseDown={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename();
-                    else if (e.key === "Escape") setEditingId(null);
+                    if (e.key === "Enter") commitRename()
+                    else if (e.key === "Escape") setEditingId(null)
                   }}
                 />
               ) : (
@@ -76,14 +76,14 @@ export function TabBar() {
                 className="tab-close"
                 title="Close tab"
                 onMouseDown={(e) => {
-                  e.stopPropagation();
-                  useStore.getState().closeTab(tab.id);
+                  e.stopPropagation()
+                  useStore.getState().closeTab(tab.id)
                 }}
               >
                 ×
               </button>
             </div>
-          );
+          )
         })}
       </div>
 
@@ -132,5 +132,5 @@ export function TabBar() {
         </button>
       </div>
     </div>
-  );
+  )
 }
