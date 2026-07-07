@@ -6,9 +6,15 @@
 > child processes, malformed escape sequences. These fail quietly and only on some platforms.
 > Rigor up front is cheaper than debugging a flaky PTY on someone else's Windows box.
 
-The **"Now" tier is wired up** (Makefile, lint gates, Rust unit + PTY integration tests, Vitest
-harness, lefthook, CI). Later tiers (component/E2E tests, coverage thresholds, audits) are
-introduced per the **Adoption plan** (§8) as features land.
+The **"Now" tier is wired up** (Makefile, lint gates, Vitest, lefthook, CI). Post-Electron the
+backend moved to `node-pty` in the Electron main process, so the Rust tests are gone; their role
+is filled by pure-logic unit tests + a real-`git` integration test + **component/integration tests**
+(Testing Library + jsdom over a mocked `window.smterm` ipc seam). As of M3.5, ~106 tests cover the
+store, parsers (pane-tree/session-status/shell-integration/git/ligatures/schema), themes, every
+chrome component, and an App smoke test — **~71% line coverage**. The main untested surface is
+`terminal-manager.ts` (xterm + PTY glue): Vitest can't load `node-pty` (Electron ABI) and WebGL
+isn't available in jsdom, so that layer is verified manually / via the real app (see §5). Remaining
+tiers (E2E, coverage thresholds) land per the **Adoption plan** (§8).
 
 ---
 

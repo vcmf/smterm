@@ -31,3 +31,6 @@ dist-ssr
 
 # electron-vite build output
 out
+
+# test coverage output
+coverage/
