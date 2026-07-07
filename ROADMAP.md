@@ -24,7 +24,8 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 > **Direction (2026-07-07):** adopting the hi-fi `mux` design (see `mux_product_spec.md` +
 > `design_handoff_mux_terminal/`). Scoped: reskin now; agent status via an output-idle heuristic;
 > files-in-flight via **git watching only** (no per-agent attribution). Deferred: command approvals,
-> sub-agent orchestration, persistence daemon. Product-name decision (`smterm` → `mux`?) still open.
+> sub-agent orchestration, persistence daemon. **Name stays `smterm`** — the design's "mux" brand
+> label/title/identifier map to `smterm` in the reskin.
 
 ---
 
