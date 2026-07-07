@@ -36,6 +36,9 @@ function build(): Entry {
   host.className = "terminal-host";
   const term = new Terminal({
     allowProposedApi: true, // required for registerCharacterJoiner (ligatures)
+    // Use the font's own box-drawing glyphs. xterm's built-in custom glyphs
+    // mis-render the rounded arc corners (U+256D–2570, e.g. p10k's ╰─) as tofu.
+    customGlyphs: false,
     fontFamily: fontStack(s.font.family),
     fontSize: s.font.size,
     lineHeight: s.font.lineHeight,
