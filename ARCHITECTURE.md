@@ -65,9 +65,8 @@ mutexes needed (simpler than the previous Rust `portable-pty` bridge).
   through ConPTY.
 - **Don't:** run the app _inside_ WSL (WSLg) — flaky notifications, awkward browser-open, harder packaging.
 
-From one Windows install the user gets PowerShell, cmd, **and** full WSL terminals, with notifications
-
-- link-open + packaging all using native APIs.
+From one Windows install the user gets PowerShell, cmd, **and** full WSL terminals — with
+notifications, link-open, and packaging all using native APIs.
 
 ### Cross-platform capability matrix
 
