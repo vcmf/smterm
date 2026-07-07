@@ -11,25 +11,60 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 
 ## Milestone status at a glance
 
-| Milestone | Theme                                                             | Status  |
-| --------- | ----------------------------------------------------------------- | ------- |
-| **M0**    | Spike: core stack works end-to-end                                | ✅ done |
-| **M1**    | Multi-session + layout (tabs + split panes)                       | ✅ done |
-| **M2**    | Agent-runner headline (notifications + status)                    | ✅ done |
-| **M3**    | Polish — settings/fonts/themes (M3a ✅), reskin, search/clipboard | 🚧      |
-| **M3.5**  | Adopt `mux` design + agent awareness (reskin, status, git-diff)   | ⬜ next |
-| **M4**    | Packaging & signed cross-platform builds                          | ⬜      |
-| **M5**    | Later (approvals, orchestration, persistence daemon, auto-update) | 🧊      |
+| Milestone  | Theme                                                              | Status        |
+| ---------- | ------------------------------------------------------------------ | ------------- |
+| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes      | ✅ (on Tauri) |
+| **MΩ**     | **Electron port** (node-pty + IPC + WebGL; conventions; ligatures) | 🚧 **now**    |
+| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)    | ⬜            |
+| **M4**     | Packaging & signed cross-platform builds                           | ⬜            |
+| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)  | 🧊            |
 
-> **Direction (2026-07-07):** adopting the hi-fi `mux` design (see `mux_product_spec.md` +
-> `design_handoff_mux_terminal/`). Scoped: reskin now; agent status via an output-idle heuristic;
-> files-in-flight via **git watching only** (no per-agent attribution). Deferred: command approvals,
-> sub-agent orchestration, persistence daemon. **Name stays `smterm`** — the design's "mux" brand
-> label/title/identifier map to `smterm` in the reskin.
+> **Direction (2026-07-07):**
+>
+> 1. **Stack pivot Tauri → Electron** (see ARCHITECTURE §3.5). Tauri's WKWebView caused recurring
+>    glyph-rendering bugs; Electron/Chromium gives one consistent engine on all OSes + the fast WebGL
+>    renderer (icons + box-drawing + **ligatures** + speed — VS Code's stack). Cost accepted: ~150 MB
+>    bundle, higher RAM. **Clean port**, not a rewrite: reuse the React app + stores + settings +
+>    themes + docs + shell scripts; rewrite only the backend (Rust → `node-pty` + Electron IPC).
+> 2. **Conventions:** kebab-case filenames + no semicolons (applied during the port).
+> 3. **Design:** adopt the hi-fi `mux` design (`mux_product_spec.md` + `design_handoff_mux_terminal/`)
+>    at M3.5; agent status via output-idle heuristic; files-in-flight via **git watching only**.
+>    Deferred: approvals, orchestration, persistence daemon. **Name stays `smterm`.**
 
 ---
 
-## M0 — Spike ✅
+## MΩ — Electron port 🚧 _(current)_
+
+**Goal:** re-establish everything M0–M3a did, on **Electron + xterm WebGL**, applying our conventions
+and re-enabling ligatures. A **clean port** — reuse the React app + docs; rewrite only the backend.
+
+**Carries over ~unchanged:** stores (sessions/pane-tree/status), `settings/*` (schema/themes/io),
+`lib/sessionStatus`, `lib/paneTree`, `terminal/ligatures`, all components, CSS, bundled fonts, all
+docs, frontend tests, shell-integration `.zsh`/`.bash` scripts.
+**Rewritten (backend):** the ~5 commands, now Node/Electron main.
+
+| #   | Phase                      | Description                                                                                                                  | Status |
+| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Scaffold                   | `electron-vite` (main/preload/renderer) + `electron-builder`; Prettier `semi:false`; eslint `unicorn/filename-case` (kebab)  | ⬜     |
+| 2   | IPC seam                   | preload `contextBridge` → `window.smterm`; one `src/lib/ipc.ts` adapter; components call only that                           | ⬜     |
+| 3   | PTY                        | `node-pty` in main (spawn/write/resize/kill, `onData` stream); rewire `terminal-manager`                                     | ⬜     |
+| 4   | Shell integration + shells | reuse `.zsh`/`.bash` scripts; port `list_shells` + env/args to main JS                                                       | ⬜     |
+| 5   | Settings                   | main `fs` read/write + `chokidar` watcher → `settings-changed`; rewire `settings/io`                                         | ⬜     |
+| 6   | Notifications + links      | Electron `Notification` + `shell.openExternal`                                                                               | ⬜     |
+| 7   | Renderer win               | switch to **WebGL** renderer + **re-enable ligatures**; verify icons + arcs + ligatures                                      | ⬜     |
+| 8   | Tooling                    | Makefile → electron-vite; drop clippy/rustfmt (lint + lefthook); port PTY tests to Node; CI (drop cargo, add electron build) | ⬜     |
+| 9   | Cutover                    | delete `src-tauri/`; final doc pass                                                                                          | ⬜     |
+
+**Exit criteria:** parity with M0–M3a on Electron — tabs + splits, shells incl. WSL, notifications +
+status + shell-integration, file-first settings/themes — **plus** correctly-rendered Nerd icons, box
+arcs, **and ligatures** via WebGL; lint + tests green; conventions applied (kebab-case, no semicolons).
+
+**Notes:** keep the `lib/ipc.ts` seam stable (also the insulation for the future persistence daemon —
+ARCHITECTURE Appendix A). `node-pty` is a native module → rebuild per-OS in CI.
+
+---
+
+## M0 — Spike ✅ _(Tauri; logic ported to Electron in MΩ)_
 
 **Goal:** prove the whole stack works — one xterm.js terminal talking to a real shell via
 `portable-pty`, cross-platform foundation in place. **Done & committed (`d6419bd`).**
