@@ -27,6 +27,17 @@ const entries = new Map<string, Entry>()
 const fontStack = (family: string) =>
   `"${family}", "FiraCode Nerd Font Mono", "JetBrains Mono", Menlo, monospace`
 
+// Explicitly load the terminal font (regular + bold) so canvas — and thus the
+// WebGL glyph atlas — can rasterize its Nerd/box glyphs. `document.fonts.ready`
+// is not enough: it won't load an unused `font-display:block` @font-face.
+function ensureFontLoaded(family: string, size: number): Promise<unknown> {
+  return Promise.all(
+    [`${size}px ${family}`, `bold ${size}px ${family}`].map((spec) =>
+      document.fonts.load(spec).catch(() => undefined),
+    ),
+  )
+}
+
 function build(): Entry {
   const s = useStore.getState().settings
   const host = document.createElement("div")
@@ -122,6 +133,23 @@ export const TerminalManager = {
         const webgl = new WebglAddon()
         webgl.onContextLoss(() => webgl.dispose())
         entry.term.loadAddon(webgl)
+        // The WebGL atlas rasterizes glyphs via canvas, which only uses an
+        // @font-face AFTER it's been explicitly loaded — `document.fonts.ready`
+        // does NOT load an unused `font-display:block` face. So glyphs a shell
+        // paints before the font loads (e.g. p10k's instant-prompt connectors)
+        // cache as tofu, and cells the shell never rewrites stay stale. Wait for
+        // an explicit load(), THEN clear the atlas + repaint to re-rasterize.
+        const e = entry
+        const rerender = () => {
+          try {
+            webgl.clearTextureAtlas()
+            e.term.refresh(0, e.term.rows - 1)
+          } catch {
+            // addon disposed
+          }
+        }
+        const s = useStore.getState().settings
+        void ensureFontLoaded(fontStack(s.font.family), s.font.size).then(rerender)
       } catch {
         // DOM renderer fallback.
       }
