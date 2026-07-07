@@ -15,6 +15,9 @@ dist-ssr
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
 
+# Design source archives (the extracted handoff dir is tracked instead)
+*.zip
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

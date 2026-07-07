@@ -11,14 +11,20 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 
 ## Milestone status at a glance
 
-| Milestone | Theme                                           | Status  |
-| --------- | ----------------------------------------------- | ------- |
-| **M0**    | Spike: core stack works end-to-end              | ✅ done |
-| **M1**    | Multi-session + layout (tabs + split panes)     | ✅ done |
-| **M2**    | Agent-runner headline (notifications + status)  | ✅ done |
-| **M3**    | Polish (search, clipboard, themes, persistence) | ⬜ next |
-| **M4**    | Packaging & signed cross-platform builds        | ⬜      |
-| **M5**    | Later (auto-update, session reattach)           | 🧊      |
+| Milestone | Theme                                                             | Status  |
+| --------- | ----------------------------------------------------------------- | ------- |
+| **M0**    | Spike: core stack works end-to-end                                | ✅ done |
+| **M1**    | Multi-session + layout (tabs + split panes)                       | ✅ done |
+| **M2**    | Agent-runner headline (notifications + status)                    | ✅ done |
+| **M3**    | Polish — settings/fonts/themes (M3a ✅), reskin, search/clipboard | 🚧      |
+| **M3.5**  | Adopt `mux` design + agent awareness (reskin, status, git-diff)   | ⬜ next |
+| **M4**    | Packaging & signed cross-platform builds                          | ⬜      |
+| **M5**    | Later (approvals, orchestration, persistence daemon, auto-update) | 🧊      |
+
+> **Direction (2026-07-07):** adopting the hi-fi `mux` design (see `mux_product_spec.md` +
+> `design_handoff_mux_terminal/`). Scoped: reskin now; agent status via an output-idle heuristic;
+> files-in-flight via **git watching only** (no per-agent attribution). Deferred: command approvals,
+> sub-agent orchestration, persistence daemon. Product-name decision (`smterm` → `mux`?) still open.
 
 ---
 
@@ -153,6 +159,37 @@ JetBrains Mono ligatures render; theme switches UI + terminal; relaunch restores
 copy/paste work.
 
 **Note:** WebGL renderer dropped in favor of ligatures (canvas). Revisit only if perf demands it.
+
+---
+
+## M3.5 — Adopt the `mux` design + agent awareness ⬜ _(next major push)_
+
+**Source of truth:** [`mux_product_spec.md`](./mux_product_spec.md) (product) +
+`design_handoff_mux_terminal/` (hi-fi visual spec, tokens, states). We adopt the **visual design now**
+and a **scoped slice** of the agent features; the heavy orchestration/approval machinery is deferred.
+
+### Track A — Reskin to the design (polish; low risk)
+
+| Feature             | Description                                                                                                                                        | Status |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Design tokens       | Swap our theme tokens for the mux set (`--bg/--panel/--elev/--accent/--amber/--red/--blue`); add Minimal Dark + Tokyo Night + Catppuccin + Gruvbox | ⬜     |
+| Chrome shell        | Top bar (brand · tabs · search pill · window controls), left **sidebar tree**, **status bar** (runtime · git · counts · bell · clock)              | ⬜     |
+| Icons + chrome font | `@phosphor-icons/react` (replace lucide); bundle **Geist Mono** for chrome (JetBrains/FiraCode stays terminal)                                     | ⬜     |
+| Command palette     | ⌘K overlay: spawn/switch/split/theme/jump-to-waiting                                                                                               | ⬜     |
+
+### Track B — Agent awareness (scoped; small)
+
+| Feature                | Description                                                                                                                                                                      | Status |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Agent status heuristic | **Output-idle**: streaming → working; quiet ~1–1.5s → waiting/needs-input. Generic (works for Claude Code etc.); builds on the M2 activity hook. Feeds the sidebar tree dots     | ⬜     |
+| Files-in-flight (git)  | Per-session **diff panel** via fs-watch + `git diff`/`status` vs a baseline; +/- counts, inline hunks, branch/ahead-behind in status bar. **Git only — no per-agent authorship** | ⬜     |
+
+**Deferred (M5 / Future):** command approvals + interception (trust dial), sub-agent orchestration
+tree, session-persistence daemon, cross-platform runtime targeting, per-agent file authorship.
+
+**Why it fits "polish":** Track A is pure reskin on our existing architecture; Track B's status is a
+refinement of M2, and the git-diff panel is self-contained and deterministic. The risky parts (agent
+event fidelity beyond idle-detection, write attribution, approval interception) are exactly what's deferred.
 
 ---
 
