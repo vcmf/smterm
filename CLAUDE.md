@@ -44,6 +44,9 @@ src-tauri/tests/pty.rs     integration tests vs a real shell
 ## Gotchas
 
 - No `window.prompt/alert/confirm` in the Tauri webview — use inline UI.
+- **Terminal fonts must be bundled `@font-face`.** WebKit substitutes tofu for Private-Use-Area
+  (Nerd/Powerline) glyphs from _system-installed_ fonts, but renders them from a bundled web font.
+  Also, xterm's canvas renderer has no per-glyph fallback — the _primary_ font must carry the icons.
 - Terminals live in `TerminalManager` (not the React tree) so splits/tab-switches re-attach
   instead of respawning shells. Dispose only when a session leaves the store.
 - `make` puts cargo on PATH; a bare `npm run tauri dev` needs `source ~/.cargo/env` first.
