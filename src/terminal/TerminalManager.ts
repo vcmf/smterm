@@ -1,7 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { CanvasAddon } from "@xterm/addon-canvas";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Session } from "../types";
@@ -122,11 +122,16 @@ export const TerminalManager = {
     if (!entry.opened) {
       entry.term.open(entry.host);
       entry.opened = true;
-      // Canvas renderer supports character joiners (needed for ligatures).
+      // WebGL renderer: rasterizes glyphs through the same engine that renders
+      // them correctly offscreen (unlike the old canvas addon, which tofu'd box
+      // arcs), and supports character joiners for ligatures. Falls back to the
+      // DOM renderer if WebGL is unavailable / the context is lost.
       try {
-        entry.term.loadAddon(new CanvasAddon());
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => webgl.dispose());
+        entry.term.loadAddon(webgl);
       } catch {
-        // Falls back to the DOM renderer; ligatures won't render but term works.
+        // DOM renderer fallback; ligatures won't render but the terminal works.
       }
       applyLigatures(entry, useStore.getState().settings.font.ligatures);
       syncSize(session.id, entry);
