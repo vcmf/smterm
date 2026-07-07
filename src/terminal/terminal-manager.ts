@@ -17,7 +17,14 @@ interface Entry {
   opened: boolean
   offData?: () => void
   joinerId?: number
+  idleTimer?: ReturnType<typeof setTimeout>
+  lastOutputSignal?: number
 }
+
+// Output quiet for this long (while a command runs) ⇒ the task is waiting.
+const IDLE_MS = 1200
+// Don't spam the store with an "output" signal on every PTY chunk.
+const OUTPUT_SIGNAL_THROTTLE_MS = 150
 
 // xterm.js lives here, keyed by session id — OUTSIDE the React tree, so splitting
 // a pane or switching tabs re-attaches instead of respawning the shell.
@@ -74,10 +81,18 @@ function spawn(session: Session, entry: Entry) {
 
   entry.offData = ipc.onPtyData(session.id, (bytes) => {
     term.write(bytes)
-    const s = useStore.getState().sessions[session.id]
-    if (s && !s.unread && !isSessionVisible(session.id)) {
+    // Generic agent-status heuristic: throttled "output" signal + an idle timer.
+    // While a command runs, streaming keeps it "working"; when output goes quiet
+    // for IDLE_MS the timer flips it to "attention" (agent waiting for input).
+    const now = performance.now()
+    if (now - (entry.lastOutputSignal ?? 0) > OUTPUT_SIGNAL_THROTTLE_MS) {
+      entry.lastOutputSignal = now
       store.signalSession(session.id, { type: "output" })
     }
+    clearTimeout(entry.idleTimer)
+    entry.idleTimer = setTimeout(() => {
+      useStore.getState().signalSession(session.id, { type: "output-idle" })
+    }, IDLE_MS)
   })
 
   void ipc
@@ -101,7 +116,12 @@ function spawn(session: Session, entry: Entry) {
   term.parser.registerOscHandler(133, (data) => {
     const kind = data.charAt(0)
     if (kind === "C") store.signalSession(session.id, { type: "command-start" })
-    else if (kind === "D") store.signalSession(session.id, { type: "command-end" })
+    else if (kind === "D") {
+      // Command finished at the prompt — precise idle; cancel the heuristic timer
+      // so it can't later mis-flip this settled session to "attention".
+      clearTimeout(entry.idleTimer)
+      store.signalSession(session.id, { type: "command-end" })
+    }
     return true
   })
 }
@@ -190,6 +210,7 @@ export const TerminalManager = {
   dispose(id: string) {
     const entry = entries.get(id)
     if (!entry) return
+    clearTimeout(entry.idleTimer)
     entry.offData?.()
     ipc.ptyKill(id)
     entry.term.dispose()

@@ -24,6 +24,22 @@ describe("reduceSignals", () => {
     expect(reduceSignals(initialSignals, { type: "attention" }, true)).toEqual(initialSignals)
   })
 
+  it("output-idle flips a working session to attention (agent went quiet)", () => {
+    const busy: Signals = { status: "working", unread: false }
+    expect(reduceSignals(busy, { type: "output-idle" }, true).status).toBe("attention")
+    // idle/attention sessions are untouched by the idle timer
+    expect(reduceSignals(initialSignals, { type: "output-idle" }, true)).toEqual(initialSignals)
+    const attn: Signals = { status: "attention", unread: true }
+    expect(reduceSignals(attn, { type: "output-idle" }, false)).toEqual(attn)
+  })
+
+  it("output resumes a quiet task (attention → working) but never wakes a fresh prompt", () => {
+    const attn: Signals = { status: "attention", unread: false }
+    expect(reduceSignals(attn, { type: "output" }, true).status).toBe("working")
+    // idle prompt output is not a running command — stays idle
+    expect(reduceSignals(initialSignals, { type: "output" }, true).status).toBe("idle")
+  })
+
   it("reveal clears unread and downgrades attention to idle, but keeps working", () => {
     const attn: Signals = { status: "attention", unread: true }
     expect(reduceSignals(attn, { type: "reveal" }, true)).toEqual({
