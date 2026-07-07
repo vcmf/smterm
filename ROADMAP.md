@@ -198,20 +198,24 @@ copy/paste work.
 
 ---
 
-## M3.5 — Adopt the `mux` design + agent awareness ⬜ _(next major push)_
+## M3.5 — Adopt the `mux` design + agent awareness 🚧 _(Track A ✅ · Track B next)_
 
 **Source of truth:** [`mux_product_spec.md`](./mux_product_spec.md) (product) +
 `design_handoff_mux_terminal/` (hi-fi visual spec, tokens, states). We adopt the **visual design now**
 and a **scoped slice** of the agent features; the heavy orchestration/approval machinery is deferred.
 
-### Track A — Reskin to the design (polish; low risk)
+**Scope decisions (2026-07-08):** _functional-only_ reskin — every surface shown is wired to real
+state. Window is **frameless with custom controls** (per-OS). The design's git-diff panel is deferred
+to Track B (needs git data) and the approval toasts to M5 (needs interception). No demo/placeholder UI.
 
-| Feature             | Description                                                                                                                                        | Status |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Design tokens       | Swap our theme tokens for the mux set (`--bg/--panel/--elev/--accent/--amber/--red/--blue`); add Minimal Dark + Tokyo Night + Catppuccin + Gruvbox | ⬜     |
-| Chrome shell        | Top bar (brand · tabs · search pill · window controls), left **sidebar tree**, **status bar** (runtime · git · counts · bell · clock)              | ⬜     |
-| Icons + chrome font | `@phosphor-icons/react` (replace lucide); bundle **Geist Mono** for chrome (JetBrains/FiraCode stays terminal)                                     | ⬜     |
-| Command palette     | ⌘K overlay: spawn/switch/split/theme/jump-to-waiting                                                                                               | ⬜     |
+### Track A — Reskin to the design (polish; low risk) ✅
+
+| Feature             | Description                                                                                                                                                                                   | Status |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Design tokens       | mux token set (`--bg/--panel/--elev/--border(2)/--text/--dim/--faint/--accent/--amber/--red/--blue`); Minimal Dark (default) + Tokyo Night + Catppuccin + Gruvbox                             | ✅     |
+| Chrome shell        | Frameless top bar (brand · tabs w/ status dots · search pill · gear · min/max/close), left **sidebar tree** (real sessions→panes + legend), **status bar** (platform · counts · bell · clock) | ✅     |
+| Icons + chrome font | `@phosphor-icons/react` (replaced lucide); bundled **Geist Mono** for chrome (JetBrains/FiraCode stays terminal)                                                                              | ✅     |
+| Command palette     | ⌘K overlay: new session (per shell) · split right/down · switch session · theme · settings; keyboard nav + filter                                                                             | ✅     |
 
 ### Track B — Agent awareness (scoped; small)
 

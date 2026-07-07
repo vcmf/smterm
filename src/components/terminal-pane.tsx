@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react"
+import { Terminal, X } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
 
@@ -6,14 +7,19 @@ import { useStore } from "../store"
  *  TerminalManager, so this component can mount/unmount freely. */
 export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: string }) {
   const mountRef = useRef<HTMLDivElement>(null)
-  const status = useStore((s) => s.sessions[sessionId]?.status ?? "idle")
+  const session = useStore((s) => s.sessions[sessionId])
+  const focused = useStore(
+    (s) =>
+      s.activeTabId === tabId && s.tabs.find((t) => t.id === tabId)?.activeSessionId === sessionId,
+  )
+  const status = session?.status ?? "idle"
 
   useEffect(() => {
     const el = mountRef.current
     if (!el) return
-    const session = useStore.getState().sessions[sessionId]
-    if (!session) return
-    TerminalManager.attach(session, el)
+    const s = useStore.getState().sessions[sessionId]
+    if (!s) return
+    TerminalManager.attach(s, el)
     const ro = new ResizeObserver(() => TerminalManager.fit(sessionId))
     ro.observe(el)
     // Do NOT dispose on unmount — the terminal is reused on re-attach.
@@ -21,25 +27,33 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
     return () => ro.disconnect()
   }, [sessionId])
 
+  const railClass = focused ? " focused" : status === "attention" ? " waiting" : ""
+
   return (
     <div
-      className="terminal-pane"
+      className={`terminal-pane${railClass}`}
       onMouseDown={() => useStore.getState().setActivePane(tabId, sessionId)}
       // Re-focus the terminal after any click/selection so keystrokes reach the
-      // PTY (WKWebView doesn't reliably keep xterm's textarea focused).
+      // PTY (the textarea doesn't always keep focus after a selection).
       onMouseUp={() => TerminalManager.focus(sessionId)}
     >
-      {status !== "idle" && <span className={`badge ${status}`} title={status} />}
-      <button
-        className="pane-close"
-        title="Close pane"
-        onMouseDown={(e) => {
-          e.stopPropagation()
-          useStore.getState().closePane(tabId, sessionId)
-        }}
-      >
-        ×
-      </button>
+      <div className="pane-header">
+        <Terminal size={14} weight="fill" color={focused ? "var(--accent)" : "var(--dim)"} />
+        <span className="pane-title">{session?.title ?? "shell"}</span>
+        <span className="pane-badge">shell</span>
+        <div className="pane-header-spacer" />
+        <button
+          className="iconbtn"
+          style={{ width: 22, height: 22 }}
+          title="Close pane"
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            useStore.getState().closePane(tabId, sessionId)
+          }}
+        >
+          <X size={13} />
+        </button>
+      </div>
       <div className="terminal-mount" ref={mountRef} />
     </div>
   )

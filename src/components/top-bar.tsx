@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from "react"
-import { Settings as SettingsIcon } from "lucide-react"
+import {
+  TerminalWindow,
+  Plus,
+  MagnifyingGlass,
+  GearSix,
+  Minus,
+  Square,
+  X,
+  Copy,
+} from "@phosphor-icons/react"
 import { useStore } from "../store"
+import { ipc } from "../lib/ipc"
 import { allSessionIds } from "../lib/pane-tree"
 import { aggregateBadge } from "../lib/session-status"
 
-export function TabBar() {
+/** The mux top bar: brand · session tabs · search pill · window controls. */
+export function TopBar() {
   const tabs = useStore((s) => s.tabs)
   const activeTabId = useStore((s) => s.activeTabId)
   const shells = useStore((s) => s.shells)
   const sessions = useStore((s) => s.sessions)
-  const [shellId, setShellId] = useState<string | null>(null)
+  const [maximized, setMaximized] = useState(false)
 
-  // Inline tab rename (window.prompt is unavailable in the Tauri webview).
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
@@ -23,13 +33,17 @@ export function TabBar() {
     }
   }, [editingId])
 
-  const currentShell = shells.find((s) => s.id === shellId) ?? shells[0]
+  useEffect(() => {
+    void ipc.isMaximized().then(setMaximized)
+    return ipc.onMaximizeChange(setMaximized)
+  }, [])
+
+  const defaultShell = shells[0]
 
   const startRename = (id: string, title: string) => {
     setDraft(title)
     setEditingId(id)
   }
-
   const commitRename = () => {
     if (editingId) {
       const name = draft.trim()
@@ -39,15 +53,25 @@ export function TabBar() {
   }
 
   return (
-    <div className="tabbar">
+    <div className="topbar">
+      <div className="brand">
+        <TerminalWindow size={16} weight="fill" />
+        <span className="brand-name">smterm</span>
+      </div>
+      <div className="vdivider" />
+
       <div className="tabs">
         {tabs.map((tab) => {
+          const ids = allSessionIds(tab.root)
           const badge = aggregateBadge(
-            allSessionIds(tab.root).flatMap((id) => {
+            ids.flatMap((id) => {
               const s = sessions[id]
               return s ? [{ status: s.status, unread: s.unread }] : []
             }),
           )
+          const pulse = badge === "working"
+          const dotClass =
+            badge === "attention" ? "amber" : badge === "working" ? "accent" : "faint"
           return (
             <div
               key={tab.id}
@@ -55,7 +79,7 @@ export function TabBar() {
               onMouseDown={() => useStore.getState().setActiveTab(tab.id)}
               onDoubleClick={() => startRename(tab.id, tab.title)}
             >
-              {badge && <span className={`badge ${badge}`} title={badge} />}
+              {badge && <span className={`dot ${dotClass}${pulse ? " pulse" : ""}`} />}
               {editingId === tab.id ? (
                 <input
                   ref={inputRef}
@@ -72,6 +96,7 @@ export function TabBar() {
               ) : (
                 <span className="tab-title">{tab.title}</span>
               )}
+              {ids.length > 1 && <span className="tab-count">{ids.length}</span>}
               <button
                 className="tab-close"
                 title="Close tab"
@@ -80,56 +105,50 @@ export function TabBar() {
                   useStore.getState().closeTab(tab.id)
                 }}
               >
-                ×
+                <X size={11} />
               </button>
             </div>
           )
         })}
+        <button
+          className="iconbtn"
+          title="New tab"
+          disabled={!defaultShell}
+          onClick={() => defaultShell && useStore.getState().newTab(defaultShell)}
+        >
+          <Plus size={14} />
+        </button>
       </div>
 
-      <div className="toolbar">
-        <select
-          className="shell-select"
-          value={currentShell?.id ?? ""}
-          onChange={(e) => setShellId(e.target.value)}
-        >
-          {shells.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <button
-          className="tb-btn"
-          title="New tab"
-          disabled={!currentShell}
-          onClick={() => currentShell && useStore.getState().newTab(currentShell)}
-        >
-          + Tab
+      <div className="topbar-right">
+        <button className="searchpill" onClick={() => useStore.getState().setPaletteOpen(true)}>
+          <MagnifyingGlass size={12} />
+          <span>Search or run</span>
+          <span className="kbd">⌘K</span>
         </button>
         <button
-          className="tb-btn"
-          title="Split right"
-          disabled={!currentShell}
-          onClick={() => currentShell && useStore.getState().splitActive("row", currentShell)}
-        >
-          ⬌
-        </button>
-        <button
-          className="tb-btn"
-          title="Split down"
-          disabled={!currentShell}
-          onClick={() => currentShell && useStore.getState().splitActive("column", currentShell)}
-        >
-          ⬍
-        </button>
-        <button
-          className="tb-btn icon-btn"
+          className="iconbtn"
           title="Settings"
           onClick={() => useStore.getState().setSettingsOpen(true)}
         >
-          <SettingsIcon size={14} />
+          <GearSix size={15} />
         </button>
+        <div className="vdivider" />
+        <div className="wincontrols">
+          <button className="winbtn" title="Minimize" onClick={() => ipc.minimizeWindow()}>
+            <Minus size={11} />
+          </button>
+          <button
+            className="winbtn"
+            title={maximized ? "Restore" : "Maximize"}
+            onClick={() => ipc.maximizeWindow()}
+          >
+            {maximized ? <Copy size={11} /> : <Square size={11} />}
+          </button>
+          <button className="winbtn close" title="Close" onClick={() => ipc.closeWindow()}>
+            <X size={12} />
+          </button>
+        </div>
       </div>
     </div>
   )

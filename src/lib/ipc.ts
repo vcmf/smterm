@@ -25,6 +25,19 @@ export interface Ipc {
   openExternal: (url: string) => void
   openPath: (p: string) => void
   notify: (title: string, body: string) => void
+
+  minimizeWindow: () => void
+  maximizeWindow: () => void
+  closeWindow: () => void
+  isMaximized: () => Promise<boolean>
+  onMaximizeChange: (cb: (max: boolean) => void) => () => void
+  platformInfo: () => Promise<PlatformInfo>
+}
+
+export interface PlatformInfo {
+  platform: string
+  label: string
+  release: string
 }
 
 declare global {

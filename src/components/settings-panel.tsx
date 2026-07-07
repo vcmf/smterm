@@ -1,4 +1,4 @@
-import { X } from "lucide-react"
+import { X } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { openSettingsFile, saveSettings, settingsPath } from "../settings/io"
 import { mergeSettings } from "../settings/schema"
@@ -30,7 +30,7 @@ export function SettingsPanel() {
       <div className="settings-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>Settings</h2>
-          <button className="icon-btn" title="Close" onClick={close}>
+          <button className="iconbtn" title="Close" onClick={close}>
             <X size={16} />
           </button>
         </div>
@@ -78,9 +78,9 @@ export function SettingsPanel() {
             value={settings.theme}
             onChange={(e) => update({ ...settings, theme: e.target.value })}
           >
-            {Object.keys(THEMES).map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {Object.entries(THEMES).map(([key, theme]) => (
+              <option key={key} value={key}>
+                {theme.label}
               </option>
             ))}
           </select>
@@ -107,7 +107,7 @@ export function SettingsPanel() {
         </label>
 
         <div className="settings-footer">
-          <button className="tb-btn" onClick={() => void openSettingsFile(settings)}>
+          <button className="btn" onClick={() => void openSettingsFile(settings)}>
             Open settings.json
           </button>
           {path && <code className="settings-path">{path}</code>}

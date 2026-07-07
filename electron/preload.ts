@@ -30,6 +30,23 @@ const api = {
   openExternal: (url: string) => ipcRenderer.send("open-external", url),
   openPath: (p: string) => ipcRenderer.send("open-path", p),
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),
+
+  minimizeWindow: () => ipcRenderer.send("window:minimize"),
+  maximizeWindow: () => ipcRenderer.send("window:maximize"),
+  closeWindow: () => ipcRenderer.send("window:close"),
+  isMaximized: () => ipcRenderer.invoke("window:is-maximized") as Promise<boolean>,
+  onMaximizeChange: (cb: (max: boolean) => void) => {
+    const listener = (_e: unknown, max: boolean) => cb(max)
+    ipcRenderer.on("window:maximize-change", listener)
+    return () => ipcRenderer.removeListener("window:maximize-change", listener)
+  },
+
+  platformInfo: () =>
+    ipcRenderer.invoke("platform:info") as Promise<{
+      platform: string
+      label: string
+      release: string
+    }>,
 }
 
 contextBridge.exposeInMainWorld("smterm", api)

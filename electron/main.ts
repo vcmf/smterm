@@ -19,10 +19,13 @@ function defaultShell(): string {
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 960,
-    height: 640,
+    width: 1100,
+    height: 720,
+    minWidth: 640,
+    minHeight: 420,
     title: "smterm",
-    backgroundColor: "#1e1e1e",
+    backgroundColor: "#0b0b0d",
+    frame: false, // frameless — the app draws its own top bar + window controls
     webPreferences: {
       preload: path.join(dir, "../preload/preload.mjs"),
       contextIsolation: true,
@@ -35,6 +38,11 @@ function createWindow() {
   win.on("closed", () => {
     mainWindow = null
   })
+
+  // Tell the renderer when maximize state changes (custom controls swap icon).
+  const sendMax = () => win.webContents.send("window:maximize-change", win.isMaximized())
+  win.on("maximize", sendMax)
+  win.on("unmaximize", sendMax)
 
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -109,6 +117,23 @@ function registerIpc() {
 
   // Shells — per-OS defaults + WSL distro enumeration.
   ipcMain.handle("shells:list", async () => listShells())
+
+  // Frameless window controls.
+  ipcMain.on("window:minimize", () => mainWindow?.minimize())
+  ipcMain.on("window:maximize", () => {
+    if (!mainWindow) return
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+  })
+  ipcMain.on("window:close", () => mainWindow?.close())
+  ipcMain.handle("window:is-maximized", async () => mainWindow?.isMaximized() ?? false)
+
+  // Platform label for the status bar (macOS / Windows / Linux).
+  ipcMain.handle("platform:info", async () => {
+    const label =
+      process.platform === "darwin" ? "macOS" : process.platform === "win32" ? "Windows" : "Linux"
+    return { platform: process.platform, label, release: os.release() }
+  })
 
   // Settings.
   ipcMain.handle("settings:read", async () => readSettings())

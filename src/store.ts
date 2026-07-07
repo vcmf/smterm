@@ -27,7 +27,9 @@ interface AppState {
   windowFocused: boolean
   settings: Settings
   settingsOpen: boolean
+  paletteOpen: boolean
 
+  setPaletteOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
   setSettings: (settings: Settings) => void
   setShells: (shells: ShellOption[]) => void
@@ -61,7 +63,9 @@ export const useStore = create<AppState>((set, get) => ({
   windowFocused: true,
   settings: defaultSettings,
   settingsOpen: false,
+  paletteOpen: false,
 
+  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setSettings: (settings) => set({ settings }),
   setShells: (shells) => set({ shells }),

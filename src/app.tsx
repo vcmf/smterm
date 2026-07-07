@@ -1,6 +1,9 @@
 import { useEffect } from "react"
 import { ipc } from "./lib/ipc"
-import { TabBar } from "./components/tab-bar"
+import { TopBar } from "./components/top-bar"
+import { Sidebar } from "./components/sidebar"
+import { StatusBar } from "./components/status-bar"
+import { CommandPalette } from "./components/command-palette"
 import { PaneLayout } from "./components/pane-layout"
 import { SettingsPanel } from "./components/settings-panel"
 import { TerminalManager } from "./terminal/terminal-manager"
@@ -17,6 +20,7 @@ function App() {
   const activeTabId = useStore((s) => s.activeTabId)
   const settings = useStore((s) => s.settings)
   const settingsOpen = useStore((s) => s.settingsOpen)
+  const paletteOpen = useStore((s) => s.paletteOpen)
 
   // Load available shells once, then open the first tab.
   useEffect(() => {
@@ -81,18 +85,36 @@ function App() {
     })
   }, [])
 
+  // Global ⌘K / Ctrl-K toggles the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        const s = useStore.getState()
+        s.setPaletteOpen(!s.paletteOpen)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
 
   return (
     <div className="app">
-      <TabBar />
-      <div className="content">
-        {activeTab ? (
-          <PaneLayout key={activeTab.id} node={activeTab.root} tabId={activeTab.id} />
-        ) : (
-          <div className="empty">No sessions — open a tab.</div>
-        )}
+      <TopBar />
+      <div className="body">
+        <Sidebar />
+        <div className="content">
+          {activeTab ? (
+            <PaneLayout key={activeTab.id} node={activeTab.root} tabId={activeTab.id} />
+          ) : (
+            <div className="empty">No sessions — open a tab.</div>
+          )}
+        </div>
       </div>
+      <StatusBar />
+      {paletteOpen && <CommandPalette />}
       {settingsOpen && <SettingsPanel />}
     </div>
   )

@@ -15,7 +15,7 @@ export const defaultSettings: Settings = {
   // font (xterm's canvas renderer doesn't fall back per-glyph, so the primary
   // font must carry the icons). Falls back to bundled JetBrains Mono if absent.
   font: { family: "FiraCode Nerd Font Mono", size: 13, ligatures: true, lineHeight: 1.2 },
-  theme: "dark",
+  theme: "minimal-dark",
   cursorBlink: true,
   scrollback: 5000,
 }

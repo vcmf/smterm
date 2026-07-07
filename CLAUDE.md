@@ -6,14 +6,16 @@ links open the OS browser; native notifications; per-session status. See `ARCHIT
 
 ## Stack
 
-Electron (Chromium) · electron-vite · React + TypeScript · Zustand · xterm.js (WebGL renderer) ·
-node-pty · react-resizable-panels · Vitest. (Migrated from Tauri/Rust — see ARCHITECTURE §3.5.)
+Electron (Chromium, **frameless**) · electron-vite · React + TypeScript · Zustand · xterm.js (WebGL
+renderer) · node-pty · react-resizable-panels · Vitest. UI: `@phosphor-icons/react`, bundled **Geist
+Mono** (chrome) + FiraCode/JetBrains Mono (terminal). Visual design = `mux` (see design_handoff +
+ROADMAP M3.5). (Migrated from Tauri/Rust — see ARCHITECTURE §3.5.)
 
 ## Structure
 
 ```
 electron/
-  main.ts               main process: BrowserWindow, ipcMain (pty/settings/shells/notify/links)
+  main.ts               main process: frameless BrowserWindow, ipcMain (pty/settings/shells/notify/links/window-controls/platform)
   preload.ts            contextBridge → window.smterm
   shell-integration.ts  inlined zsh/bash OSC-133 scripts + listShells (WSL) + buildInjection
 src/
@@ -24,9 +26,10 @@ src/
   lib/ipc.ts            typed renderer→main seam (the only backend touchpoint)
   lib/pane-tree.ts      pure split/remove/collapse/query (unit-tested)
   lib/session-status.ts pure status reducer + tab-badge aggregation (unit-tested)
+  lib/status-ui.ts      status → dot colour/word/pulse (shared by sidebar/status/pane)
   terminal/terminal-manager.ts  xterm+PTY kept OUTSIDE React, keyed by session id
   settings/            schema (merge/validate) · themes (tokens→CSS+xterm) · io
-  components/          tab-bar, pane-layout, terminal-pane, settings-panel
+  components/          top-bar, sidebar, status-bar, command-palette, pane-layout, terminal-pane, settings-panel
 ```
 
 ## Commands
