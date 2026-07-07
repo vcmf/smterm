@@ -11,7 +11,10 @@ export interface Settings {
 }
 
 export const defaultSettings: Settings = {
-  font: { family: "JetBrains Mono", size: 13, ligatures: true, lineHeight: 1.2 },
+  // FiraCode Nerd Font Mono has BOTH ligatures and Nerd/Powerline icons in one
+  // font (xterm's canvas renderer doesn't fall back per-glyph, so the primary
+  // font must carry the icons). Falls back to bundled JetBrains Mono if absent.
+  font: { family: "FiraCode Nerd Font Mono", size: 13, ligatures: true, lineHeight: 1.2 },
   theme: "dark",
   cursorBlink: true,
   scrollback: 5000,
