@@ -11,13 +11,13 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 
 ## Milestone status at a glance
 
-| Milestone  | Theme                                                               | Status              |
-| ---------- | ------------------------------------------------------------------- | ------------------- |
-| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri) |
-| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done             |
-| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | ⬜ **next**         |
-| **M4**     | Packaging & signed cross-platform builds                            | ⬜                  |
-| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                  |
+| Milestone  | Theme                                                               | Status                 |
+| ---------- | ------------------------------------------------------------------- | ---------------------- |
+| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri)    |
+| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done                |
+| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | 🚧 Track A ✅ · B next |
+| **M4**     | Packaging & signed cross-platform builds                            | ⬜                     |
+| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                     |
 
 > **Direction (2026-07-07):**
 >
