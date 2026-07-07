@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { Settings as SettingsIcon } from "lucide-react"
 import { useStore } from "../store"
-import { allSessionIds } from "../lib/paneTree"
-import { aggregateBadge } from "../lib/sessionStatus"
+import { allSessionIds } from "../lib/pane-tree"
+import { aggregateBadge } from "../lib/session-status"
 
 export function TabBar() {
   const tabs = useStore((s) => s.tabs)

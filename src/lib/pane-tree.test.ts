@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "./paneTree"
+import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "./pane-tree"
 import type { PaneNode } from "../types"
 
 describe("paneTree", () => {

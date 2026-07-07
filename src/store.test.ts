@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { useStore } from "./store"
-import { allSessionIds } from "./lib/paneTree"
+import { allSessionIds } from "./lib/pane-tree"
 import type { ShellOption } from "./types"
 
 const shell: ShellOption = { id: "sh", label: "sh", command: "/bin/sh", args: [] }

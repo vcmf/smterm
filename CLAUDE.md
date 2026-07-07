@@ -1,53 +1,58 @@
 # smterm
 
-Cross-platform terminal app (agent-runner focus). Multiple shell sessions in tabs + split
-panes; links open the OS browser; native notifications planned. See `ARCHITECTURE.md` (design),
+Cross-platform terminal app (agent-runner focus). Multiple shell sessions in tabs + split panes;
+links open the OS browser; native notifications; per-session status. See `ARCHITECTURE.md` (design),
 `ROADMAP.md` (progress), `TESTING.md` (quality bar).
 
 ## Stack
 
-Tauri 2 · Rust (`portable-pty` bridge) · React + TypeScript · xterm.js · Zustand ·
-react-resizable-panels · Vitest.
+Electron (Chromium) · electron-vite · React + TypeScript · Zustand · xterm.js (WebGL renderer) ·
+node-pty · react-resizable-panels · Vitest. (Migrated from Tauri/Rust — see ARCHITECTURE §3.5.)
 
 ## Structure
 
 ```
+electron/
+  main.ts               main process: BrowserWindow, ipcMain (pty/settings/shells/notify/links)
+  preload.ts            contextBridge → window.smterm
+  shell-integration.ts  inlined zsh/bash OSC-133 scripts + listShells (WSL) + buildInjection
 src/
-  App.tsx                  compose: tab bar + active tab's pane layout
-  store.ts                 Zustand: sessions + per-tab pane tree + actions
-  types.ts                 Session, PaneNode, Tab, ShellOption
-  lib/paneTree.ts          pure split/remove/collapse/query (unit-tested)
-  terminal/TerminalManager.ts  xterm+PTY kept OUTSIDE React, keyed by session id
-  components/              TabBar, PaneLayout, TerminalPane
-src-tauri/src/lib.rs       PTY bridge: pty_spawn/write/resize/kill, list_shells
-src-tauri/tests/pty.rs     integration tests vs a real shell
+  main.tsx              renderer entry (bundles fonts)
+  app.tsx               compose: tab bar + active tab's pane layout
+  store.ts              Zustand: sessions + per-tab pane tree + settings + actions
+  types.ts              Session, PaneNode, Tab, ShellOption
+  lib/ipc.ts            typed renderer→main seam (the only backend touchpoint)
+  lib/pane-tree.ts      pure split/remove/collapse/query (unit-tested)
+  lib/session-status.ts pure status reducer + tab-badge aggregation (unit-tested)
+  terminal/terminal-manager.ts  xterm+PTY kept OUTSIDE React, keyed by session id
+  settings/            schema (merge/validate) · themes (tokens→CSS+xterm) · io
+  components/          tab-bar, pane-layout, terminal-pane, settings-panel
 ```
 
 ## Commands
 
-`make run` (dev) · `make check` (lint+test, pre-merge) · `make test` · `make lint` ·
-`make fmt` · `make build` (bundle). `make help` lists all.
+`make run` (dev) · `make check` (lint+test) · `make test` · `make lint` · `make fmt` ·
+`make build` · `make install` (deps + electron-rebuild + hooks). `make help` lists all.
 
 ## Conventions
 
+- **Filenames: kebab-case** (`terminal-manager.ts`); component _exports_ stay PascalCase.
+- **No semicolons** (Prettier `semi: false`).
 - **Docstrings**: one short line on non-obvious functions/types — scannable, not verbose.
-- **Commits**: semantic (`feat:`, `fix:`, `chore:`, `docs:`), imperative, scope like `fix(M1):`.
-- **Tests (with the feature, not after)**: extract logic into pure functions and test those
-  exhaustively — edge cases, not just the happy path. **Rust especially**: the compiler proves it
-  builds, not that it's correct, so every new command/behavior gets a test; prefer real integration
-  tests (spawn an actual shell/PTY) over mocks; work through the PTY edge-case catalog in
-  TESTING.md §3b (resize, UTF-8 boundaries, isolation, no orphans). Rust changed with no test = incomplete.
-- **Lint is a gate**: clippy `-D warnings`, strict `tsc`, eslint, prettier — all green before
-  commit (pre-commit hook enforces it). Run `make fmt` first.
-- Keep the Rust surface small; put app logic in TypeScript.
+- **Commits**: semantic (`feat:`, `fix:`, `chore:`, `docs:`), imperative.
+- **Tests with the feature**: push logic into pure functions (pane-tree, session-status,
+  shell-integration parsers) and test those; the risky code earns real tests.
+- **Lint is a gate** (pre-commit hook): `tsc` (renderer + electron), eslint, prettier. Run `make fmt` first.
 
 ## Gotchas
 
-- No `window.prompt/alert/confirm` in the Tauri webview — use inline UI.
-- **Terminal fonts must be bundled `@font-face`.** WebKit substitutes tofu for Private-Use-Area
-  (Nerd/Powerline) glyphs from _system-installed_ fonts, but renders them from a bundled web font.
-  Also, xterm's canvas renderer has no per-glyph fallback — the _primary_ font must carry the icons.
-- Terminals live in `TerminalManager` (not the React tree) so splits/tab-switches re-attach
+- **Renderer ↔ main only via `src/lib/ipc.ts`** (preload `window.smterm`). Don't import Electron in
+  React. This seam is also the insulation point for a future out-of-process session daemon (ARCHITECTURE Appendix A).
+- **Terminal fonts must be bundled `@font-face`** (`public/fonts/`); the WebGL renderer needs the
+  primary font to carry Nerd/Powerline icons (no per-glyph fallback).
+- Terminals live in `terminal-manager.ts` (not the React tree) so splits/tab-switches re-attach
   instead of respawning shells. Dispose only when a session leaves the store.
-- `make` puts cargo on PATH; a bare `npm run tauri dev` needs `source ~/.cargo/env` first.
-- On Windows, the app spawns `wsl.exe` as a shell — it never runs _inside_ WSL.
+- **`node-pty` is a native module** — after install / Electron upgrades run `npx electron-rebuild -o node-pty`
+  (in `make install`). Vitest can't load it (Electron ABI), so PTY spawning isn't unit-tested there.
+- Ligatures need `allowProposedApi` + the character joiner (works on WebGL, not the DOM renderer).
+- On Windows the app spawns `wsl.exe` as a shell — it never runs _inside_ WSL.

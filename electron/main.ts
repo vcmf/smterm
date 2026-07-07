@@ -5,10 +5,13 @@ import fs from "node:fs"
 import os from "node:os"
 import * as pty from "node-pty"
 import type { IPty } from "node-pty"
+import { watch } from "chokidar"
+import { listShells, buildInjection } from "./shell-integration"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
 const ptys = new Map<string, IPty>()
+let mainWindow: BrowserWindow | null = null
 
 function defaultShell(): string {
   return process.env.SHELL ?? (process.platform === "win32" ? "powershell.exe" : "/bin/zsh")
@@ -28,11 +31,25 @@ function createWindow() {
     },
   })
 
+  mainWindow = win
+  win.on("closed", () => {
+    mainWindow = null
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     void win.loadFile(path.join(dir, "../renderer/index.html"))
   }
+}
+
+// Live-reload settings.json when it changes (GUI write or hand-edit).
+function startSettingsWatcher() {
+  const p = settingsPath()
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  watch(p, { ignoreInitial: true }).on("all", () => {
+    mainWindow?.webContents.send("settings-changed")
+  })
 }
 
 // ── settings.json (source of truth) ────────────────────────────────
@@ -63,12 +80,14 @@ function registerIpc() {
   ipcMain.handle(
     "pty:spawn",
     (event, opts: { id: string; cols: number; rows: number; shell: string; args: string[] }) => {
-      const proc = pty.spawn(opts.shell || defaultShell(), opts.args ?? [], {
+      const shellCmd = opts.shell || defaultShell()
+      const inj = buildInjection(shellCmd)
+      const proc = pty.spawn(shellCmd, [...(opts.args ?? []), ...(inj?.args ?? [])], {
         name: "xterm-256color",
         cols: opts.cols || 80,
         rows: opts.rows || 24,
         cwd: os.homedir(),
-        env: process.env as Record<string, string>,
+        env: { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>,
       })
       proc.onData((data) => event.sender.send(`pty:data:${opts.id}`, data))
       proc.onExit(() => ptys.delete(opts.id))
@@ -88,19 +107,8 @@ function registerIpc() {
     ptys.delete(id)
   })
 
-  // Shells — minimal default in P1; full resolution + WSL in P4.
-  ipcMain.handle("shells:list", async () => {
-    const isWin = process.platform === "win32"
-    const shellCmd = process.env.SHELL ?? (isWin ? "powershell.exe" : "/bin/zsh")
-    return [
-      {
-        id: "default",
-        label: shellCmd.split(/[\\/]/).pop() ?? "shell",
-        command: shellCmd,
-        args: [],
-      },
-    ]
-  })
+  // Shells — per-OS defaults + WSL distro enumeration.
+  ipcMain.handle("shells:list", async () => listShells())
 
   // Settings.
   ipcMain.handle("settings:read", async () => readSettings())
@@ -118,6 +126,7 @@ function registerIpc() {
 app.whenReady().then(() => {
   registerIpc()
   createWindow()
+  startSettingsWatcher()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

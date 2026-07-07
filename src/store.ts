@@ -1,8 +1,8 @@
 import { create } from "zustand"
 import type { PaneNode, Session, ShellOption, Tab } from "./types"
-import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "./lib/paneTree"
-import { reduceSignals } from "./lib/sessionStatus"
-import type { SignalEvent } from "./lib/sessionStatus"
+import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "./lib/pane-tree"
+import { reduceSignals } from "./lib/session-status"
+import type { SignalEvent } from "./lib/session-status"
 import { defaultSettings } from "./settings/schema"
 import type { Settings } from "./settings/schema"
 

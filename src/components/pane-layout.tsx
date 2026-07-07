@@ -1,7 +1,7 @@
 import { Group, Panel, Separator } from "react-resizable-panels"
 import type { PaneNode } from "../types"
-import { nodeKey } from "../lib/paneTree"
-import { TerminalPane } from "./TerminalPane"
+import { nodeKey } from "../lib/pane-tree"
+import { TerminalPane } from "./terminal-pane"
 
 /** Recursively render a pane tree into resizable split panels. */
 export function PaneLayout({ node, tabId }: { node: PaneNode; tabId: string }) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
-import { aggregateBadge, initialSignals, reduceSignals } from "./sessionStatus"
-import type { Signals } from "./sessionStatus"
+import { aggregateBadge, initialSignals, reduceSignals } from "./session-status"
+import type { Signals } from "./session-status"
 
 describe("reduceSignals", () => {
   it("command-start → working; command-end → idle", () => {

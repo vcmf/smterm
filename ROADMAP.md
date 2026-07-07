@@ -11,13 +11,13 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 
 ## Milestone status at a glance
 
-| Milestone  | Theme                                                              | Status        |
-| ---------- | ------------------------------------------------------------------ | ------------- |
-| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes      | ✅ (on Tauri) |
-| **MΩ**     | **Electron port** (node-pty + IPC + WebGL; conventions; ligatures) | 🚧 **now**    |
-| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)    | ⬜            |
-| **M4**     | Packaging & signed cross-platform builds                           | ⬜            |
-| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)  | 🧊            |
+| Milestone  | Theme                                                               | Status              |
+| ---------- | ------------------------------------------------------------------- | ------------------- |
+| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri) |
+| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done             |
+| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | ⬜ **next**         |
+| **M4**     | Packaging & signed cross-platform builds                            | ⬜                  |
+| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                  |
 
 > **Direction (2026-07-07):**
 >
@@ -33,7 +33,7 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 
 ---
 
-## MΩ — Electron port 🚧 _(current)_
+## MΩ — Electron port ✅ _(done; interactive/WSL checks pending)_
 
 **Goal:** re-establish everything M0–M3a did, on **Electron + xterm WebGL**, applying our conventions
 and re-enabling ligatures. A **clean port** — reuse the React app + docs; rewrite only the backend.
@@ -43,17 +43,17 @@ and re-enabling ligatures. A **clean port** — reuse the React app + docs; rewr
 docs, frontend tests, shell-integration `.zsh`/`.bash` scripts.
 **Rewritten (backend):** the ~5 commands, now Node/Electron main.
 
-| #   | Phase                      | Description                                                                                                                  | Status |
-| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Scaffold                   | `electron-vite` (main/preload/renderer) + `electron-builder`; Prettier `semi:false`; eslint `unicorn/filename-case` (kebab)  | ⬜     |
-| 2   | IPC seam                   | preload `contextBridge` → `window.smterm`; one `src/lib/ipc.ts` adapter; components call only that                           | ⬜     |
-| 3   | PTY                        | `node-pty` in main (spawn/write/resize/kill, `onData` stream); rewire `terminal-manager`                                     | ⬜     |
-| 4   | Shell integration + shells | reuse `.zsh`/`.bash` scripts; port `list_shells` + env/args to main JS                                                       | ⬜     |
-| 5   | Settings                   | main `fs` read/write + `chokidar` watcher → `settings-changed`; rewire `settings/io`                                         | ⬜     |
-| 6   | Notifications + links      | Electron `Notification` + `shell.openExternal`                                                                               | ⬜     |
-| 7   | Renderer win               | switch to **WebGL** renderer + **re-enable ligatures**; verify icons + arcs + ligatures                                      | ⬜     |
-| 8   | Tooling                    | Makefile → electron-vite; drop clippy/rustfmt (lint + lefthook); port PTY tests to Node; CI (drop cargo, add electron build) | ⬜     |
-| 9   | Cutover                    | delete `src-tauri/`; final doc pass                                                                                          | ⬜     |
+| #   | Phase                      | Description                                                                                        | Status |
+| --- | -------------------------- | -------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Scaffold                   | `electron-vite` (main/preload/renderer); Prettier `semi:false`                                     | ✅     |
+| 2   | IPC seam                   | preload `contextBridge` → `window.smterm`; one `src/lib/ipc.ts` adapter; components call only that | ✅     |
+| 3   | PTY                        | `node-pty` in main (spawn/write/resize/kill, `onData` stream); rewired `terminal-manager`          | ✅     |
+| 4   | Shell integration + shells | inlined `.zsh`/`.bash` scripts + `listShells` (WSL) + env/args in main                             | ✅     |
+| 5   | Settings                   | main `fs` read/write + `chokidar` watcher → `settings-changed`                                     | ✅     |
+| 6   | Notifications + links      | Electron `Notification` + `shell.openExternal`/`openPath`                                          | ✅     |
+| 7   | Renderer win               | **WebGL** renderer + **ligatures re-enabled** (works in Chromium)                                  | ✅     |
+| 8   | Tooling                    | Makefile/lefthook/CI dropped cargo; ported shell-integration tests to Vitest                       | ✅     |
+| 9   | Cutover + rename           | deleted `src-tauri/` + `@tauri-apps` deps; kebab-case filenames                                    | ✅     |
 
 **Exit criteria:** parity with M0–M3a on Electron — tabs + splits, shells incl. WSL, notifications +
 status + shell-integration, file-first settings/themes — **plus** correctly-rendered Nerd icons, box

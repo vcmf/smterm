@@ -5,7 +5,7 @@ export interface ShellOption {
   args: string[]
 }
 
-import type { SessionStatus } from "./lib/sessionStatus"
+import type { SessionStatus } from "./lib/session-status"
 
 export interface Session {
   id: string

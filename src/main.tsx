@@ -1,5 +1,5 @@
 import ReactDOM from "react-dom/client"
-import App from "./App"
+import App from "./app"
 import "./fonts.css" // bundled FiraCode Nerd Font Mono (text + ligatures + icons)
 import "@fontsource/jetbrains-mono/400.css"
 import "@fontsource/jetbrains-mono/700.css"

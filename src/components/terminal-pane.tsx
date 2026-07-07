@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { TerminalManager } from "../terminal/TerminalManager"
+import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
 
 /** A mount point for one session's terminal. The terminal itself lives in

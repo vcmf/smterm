@@ -1,7 +1,0 @@
-# smterm shell integration — zsh .zshenv (loaded for every zsh invocation).
-# Load the user's real zshenv, then keep ZDOTDIR pointing at smterm's dir so the
-# remaining smterm startup files load next.
-if [[ -f "${SMTERM_USER_ZDOTDIR:-$HOME}/.zshenv" ]]; then
-  source "${SMTERM_USER_ZDOTDIR:-$HOME}/.zshenv"
-fi
-[[ -n "$SMTERM_ZDOTDIR" ]] && ZDOTDIR="$SMTERM_ZDOTDIR"
