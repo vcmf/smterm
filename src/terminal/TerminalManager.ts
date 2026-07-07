@@ -1,7 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Session } from "../types";
@@ -9,24 +8,23 @@ import { useStore, isSessionVisible } from "../store";
 import { notify } from "../lib/notify";
 import { getTheme } from "../settings/themes";
 import type { Settings } from "../settings/schema";
-import { ligatureRanges } from "./ligatures";
 
 interface Entry {
   term: Terminal;
   fit: FitAddon;
   host: HTMLDivElement;
   opened: boolean;
-  joinerId: number | undefined;
 }
 
 // xterm.js + PTY live here, keyed by session id — OUTSIDE the React tree, so
 // splitting a pane or switching tabs re-attaches instead of respawning the shell.
 const entries = new Map<string, Entry>();
 
-// Bundled FiraCode Nerd Font Mono (web @font-face) is the default and carries
-// text + ligatures + Nerd/Powerline icons. Note: xterm's canvas renderer does
-// NOT fall back per-glyph, so for icons to show the *primary* font must have
-// them — a fallback chain can't rescue a non-Nerd primary.
+// We use xterm's DOM renderer (no canvas/WebGL addon): its fast renderers
+// rasterize glyphs themselves and mis-render Nerd/box-arc glyphs in this webview,
+// whereas the DOM renderer uses WebKit's text engine and renders everything the
+// bundled font contains. Trade-off: ligatures (character joiners) need a
+// canvas/WebGL renderer, so they're off for now.
 const fontStack = (family: string) =>
   `"${family}", "FiraCode Nerd Font Mono", "JetBrains Mono", Menlo, monospace`;
 
@@ -35,10 +33,6 @@ function build(): Entry {
   const host = document.createElement("div");
   host.className = "terminal-host";
   const term = new Terminal({
-    allowProposedApi: true, // required for registerCharacterJoiner (ligatures)
-    // Use the font's own box-drawing glyphs. xterm's built-in custom glyphs
-    // mis-render the rounded arc corners (U+256D–2570, e.g. p10k's ╰─) as tofu.
-    customGlyphs: false,
     fontFamily: fontStack(s.font.family),
     fontSize: s.font.size,
     lineHeight: s.font.lineHeight,
@@ -50,17 +44,7 @@ function build(): Entry {
   term.loadAddon(fit);
   // Clicking a URL opens it in the OS default browser (no embedded browser).
   term.loadAddon(new WebLinksAddon((_event, uri) => void openUrl(uri)));
-  return { term, fit, host, opened: false, joinerId: undefined };
-}
-
-/** Register/deregister the ligature character joiner to match the setting. */
-function applyLigatures(entry: Entry, on: boolean) {
-  if (on && entry.joinerId === undefined) {
-    entry.joinerId = entry.term.registerCharacterJoiner(ligatureRanges);
-  } else if (!on && entry.joinerId !== undefined) {
-    entry.term.deregisterCharacterJoiner(entry.joinerId);
-    entry.joinerId = undefined;
-  }
+  return { term, fit, host, opened: false };
 }
 
 function spawn(session: Session, entry: Entry) {
@@ -122,18 +106,6 @@ export const TerminalManager = {
     if (!entry.opened) {
       entry.term.open(entry.host);
       entry.opened = true;
-      // WebGL renderer: rasterizes glyphs through the same engine that renders
-      // them correctly offscreen (unlike the old canvas addon, which tofu'd box
-      // arcs), and supports character joiners for ligatures. Falls back to the
-      // DOM renderer if WebGL is unavailable / the context is lost.
-      try {
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => webgl.dispose());
-        entry.term.loadAddon(webgl);
-      } catch {
-        // DOM renderer fallback; ligatures won't render but the terminal works.
-      }
-      applyLigatures(entry, useStore.getState().settings.font.ligatures);
       syncSize(session.id, entry);
       spawn(session, entry);
     } else {
@@ -151,7 +123,7 @@ export const TerminalManager = {
     entries.get(id)?.term.focus();
   },
 
-  /** Apply settings (font/theme/ligatures/etc.) to every live terminal. */
+  /** Apply settings (font/theme/etc.) to every live terminal. */
   applySettings(settings: Settings) {
     const theme = getTheme(settings.theme).terminal;
     for (const [id, entry] of entries) {
@@ -162,7 +134,6 @@ export const TerminalManager = {
       o.cursorBlink = settings.cursorBlink;
       o.scrollback = settings.scrollback;
       o.theme = theme;
-      applyLigatures(entry, settings.font.ligatures);
       if (entry.opened) syncSize(id, entry);
     }
   },
