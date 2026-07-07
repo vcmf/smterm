@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { HardDrives, Bell } from "@phosphor-icons/react"
+import { HardDrives, Bell, GitBranch } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
 
@@ -9,6 +9,7 @@ const clockNow = () =>
 /** Bottom status bar: platform · session counts · clock. Git branch is Track B. */
 export function StatusBar() {
   const sessions = useStore((s) => s.sessions)
+  const git = useStore((s) => s.git)
   const [platform, setPlatform] = useState("")
   const [clock, setClock] = useState(clockNow)
 
@@ -31,6 +32,17 @@ export function StatusBar() {
         <HardDrives size={13} />
         {platform}
       </span>
+      {git?.isRepo && git.branch && (
+        <span className="status-item">
+          <GitBranch size={13} color="var(--dim)" />
+          {git.branch}
+          {(git.ahead > 0 || git.behind > 0) && (
+            <span className="status-faint">
+              ↑{git.ahead} ↓{git.behind}
+            </span>
+          )}
+        </span>
+      )}
       <div className="status-spacer" />
       <span className="status-item">
         <span className={`dot accent${running ? " pulse" : ""}`} /> {running} running

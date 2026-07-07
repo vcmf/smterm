@@ -107,6 +107,17 @@ function spawn(session: Session, entry: Entry) {
 
   term.onData((data) => ipc.ptyWrite(session.id, data))
 
+  // OSC 7 — the shell reports its working directory (file://host/path).
+  term.parser.registerOscHandler(7, (data) => {
+    try {
+      const path = decodeURIComponent(new URL(data).pathname)
+      if (path) store.setSessionCwd(session.id, path)
+    } catch {
+      // malformed URL — ignore
+    }
+    return true
+  })
+
   // OSC 9 — attention; OSC 133;C/D — command start/finish.
   term.parser.registerOscHandler(9, (data) => {
     store.signalSession(session.id, { type: "attention" })

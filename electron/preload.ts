@@ -47,6 +47,9 @@ const api = {
       label: string
       release: string
     }>,
+
+  gitStatus: (cwd: string) => ipcRenderer.invoke("git:status", cwd),
+  gitDiff: (cwd: string, file: string) => ipcRenderer.invoke("git:diff", cwd, file),
 }
 
 contextBridge.exposeInMainWorld("smterm", api)

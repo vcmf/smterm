@@ -14,6 +14,7 @@ export interface Session {
   args: string[]
   status: SessionStatus
   unread: boolean
+  cwd?: string // reported by the shell via OSC 7; drives the git diff panel
 }
 
 /** A tab's layout: a binary tree of leaves (terminals) and splits. */

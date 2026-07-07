@@ -1,0 +1,61 @@
+import { describe, it, expect } from "vitest"
+import { parseBranchLine, statusOf, parseNumstat, parseDiff } from "./git"
+
+describe("parseBranchLine", () => {
+  it("reads branch + ahead/behind", () => {
+    expect(parseBranchLine("## main...origin/main [ahead 2, behind 1]")).toEqual({
+      branch: "main",
+      ahead: 2,
+      behind: 1,
+    })
+    expect(parseBranchLine("## feat/x...origin/feat/x [ahead 3]")).toEqual({
+      branch: "feat/x",
+      ahead: 3,
+      behind: 0,
+    })
+    expect(parseBranchLine("## main")).toEqual({ branch: "main", ahead: 0, behind: 0 })
+  })
+})
+
+describe("statusOf", () => {
+  it("reduces XY pairs to one display status", () => {
+    expect(statusOf("??")).toBe("?")
+    expect(statusOf(" M")).toBe("M")
+    expect(statusOf("M ")).toBe("M")
+    expect(statusOf("A ")).toBe("A")
+    expect(statusOf(" D")).toBe("D")
+    expect(statusOf("R ")).toBe("R")
+  })
+})
+
+describe("parseNumstat", () => {
+  it("maps path → add/del, handling binary and renames", () => {
+    const m = parseNumstat("6\t2\tsrc/a.ts\n-\t-\timg.png\n1\t0\tsrc/{x => y}/f.ts\n")
+    expect(m.get("src/a.ts")).toEqual({ add: 6, del: 2 })
+    expect(m.get("img.png")).toEqual({ add: 0, del: 0 })
+    expect(m.get("src/y/f.ts")).toEqual({ add: 1, del: 0 })
+  })
+})
+
+describe("parseDiff", () => {
+  it("classifies lines and tracks gutter numbers", () => {
+    const out = [
+      "diff --git a/f.ts b/f.ts",
+      "index 111..222 100644",
+      "--- a/f.ts",
+      "+++ b/f.ts",
+      "@@ -1,3 +1,4 @@",
+      " ctx",
+      "-old",
+      "+new1",
+      "+new2",
+    ].join("\n")
+    const lines = parseDiff(out)
+    expect(lines.map((l) => l.type)).toEqual(["hunk", "context", "del", "add", "add"])
+    const ctx = lines[1]
+    expect(ctx).toMatchObject({ type: "context", text: "ctx", oldNo: 1, newNo: 1 })
+    expect(lines[2]).toMatchObject({ type: "del", text: "old", oldNo: 2 })
+    expect(lines[3]).toMatchObject({ type: "add", text: "new1", newNo: 2 })
+    expect(lines[4]).toMatchObject({ type: "add", text: "new2", newNo: 3 })
+  })
+})

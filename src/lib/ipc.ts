@@ -32,12 +32,42 @@ export interface Ipc {
   isMaximized: () => Promise<boolean>
   onMaximizeChange: (cb: (max: boolean) => void) => () => void
   platformInfo: () => Promise<PlatformInfo>
+  gitStatus: (cwd: string) => Promise<GitStatus>
+  gitDiff: (cwd: string, file: string) => Promise<DiffLine[]>
 }
 
 export interface PlatformInfo {
   platform: string
   label: string
   release: string
+}
+
+export type ChangeStatus = "M" | "A" | "D" | "R" | "?"
+
+export interface GitFile {
+  path: string
+  name: string
+  dir: string
+  status: ChangeStatus
+  add: number
+  del: number
+}
+
+export interface GitStatus {
+  isRepo: boolean
+  branch: string
+  ahead: number
+  behind: number
+  files: GitFile[]
+  add: number
+  del: number
+}
+
+export interface DiffLine {
+  type: "add" | "del" | "context" | "hunk"
+  text: string
+  oldNo?: number
+  newNo?: number
 }
 
 declare global {

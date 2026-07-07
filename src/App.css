@@ -220,6 +220,10 @@ body {
   opacity: 0.4;
   cursor: default;
 }
+.iconbtn.on {
+  color: var(--accent);
+  background: var(--elev);
+}
 
 .topbar-right {
   display: flex;
@@ -519,6 +523,121 @@ body {
 .resize-handle.column {
   height: 1px;
   cursor: row-resize;
+}
+
+/* ── Diff panel (388px) ──────────────────────────────── */
+.diffpanel {
+  width: 388px;
+  flex: 0 0 auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.diffpanel-header {
+  height: 36px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.diff-summary {
+  flex: 1 1 auto;
+  font-size: 11px;
+  color: var(--dim);
+}
+.diffpanel .add {
+  color: var(--accent);
+}
+.diffpanel .del {
+  color: var(--red);
+}
+.diff-files {
+  flex: 0 0 auto;
+  max-height: 186px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+}
+.diff-file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 12px;
+  cursor: default;
+  border-left: 2px solid transparent;
+  font-size: 12px;
+}
+.diff-file:hover {
+  background: var(--elev);
+}
+.diff-file.selected {
+  background: var(--elev);
+  border-left-color: var(--accent);
+}
+.diff-file .add,
+.diff-file .del {
+  font-size: 11px;
+}
+.diff-empty {
+  padding: 12px;
+  font-size: 11.5px;
+}
+.diff-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 6px 0;
+  font-family: var(--code-font);
+  font-size: 12px;
+  line-height: 1.85;
+}
+.diff-line {
+  display: flex;
+  white-space: pre;
+}
+.diff-gutter {
+  width: 30px;
+  flex: 0 0 auto;
+  text-align: right;
+  padding-right: 6px;
+  color: var(--faint);
+  font-size: 10.5px;
+  user-select: none;
+}
+.diff-sign {
+  width: 16px;
+  flex: 0 0 auto;
+  text-align: center;
+  user-select: none;
+}
+.diff-code {
+  flex: 1 1 auto;
+  padding-right: 10px;
+}
+.diff-line.context {
+  color: var(--dim);
+}
+.diff-line.add {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.diff-line.add .diff-sign {
+  color: var(--accent);
+}
+.diff-line.del {
+  background: color-mix(in srgb, var(--red) 13%, transparent);
+}
+.diff-line.del .diff-sign {
+  color: var(--red);
+}
+.diff-line.hunk {
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--blue);
+}
+.diff-line.hunk .diff-code {
+  padding-left: 6px;
 }
 
 /* ── Status bar (28px) ───────────────────────────────── */

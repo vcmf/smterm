@@ -11,13 +11,13 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 
 ## Milestone status at a glance
 
-| Milestone  | Theme                                                               | Status                 |
-| ---------- | ------------------------------------------------------------------- | ---------------------- |
-| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri)    |
-| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done                |
-| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | 🚧 Track A ✅ · B next |
-| **M4**     | Packaging & signed cross-platform builds                            | ⬜                     |
-| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                     |
+| Milestone  | Theme                                                               | Status              |
+| ---------- | ------------------------------------------------------------------- | ------------------- |
+| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri) |
+| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done             |
+| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | ✅ done             |
+| **M4**     | Packaging & signed cross-platform builds                            | ⬜                  |
+| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                  |
 
 > **Direction (2026-07-07):**
 >
@@ -198,7 +198,7 @@ copy/paste work.
 
 ---
 
-## M3.5 — Adopt the `mux` design + agent awareness 🚧 _(Track A ✅ · Track B next)_
+## M3.5 — Adopt the `mux` design + agent awareness ✅ _(Track A + B done)_
 
 **Source of truth:** [`mux_product_spec.md`](./mux_product_spec.md) (product) +
 `design_handoff_mux_terminal/` (hi-fi visual spec, tokens, states). We adopt the **visual design now**
@@ -217,12 +217,12 @@ to Track B (needs git data) and the approval toasts to M5 (needs interception). 
 | Icons + chrome font | `@phosphor-icons/react` (replaced lucide); bundled **Geist Mono** for chrome (JetBrains/FiraCode stays terminal)                                                                              | ✅     |
 | Command palette     | ⌘K overlay: new session (per shell) · split right/down · switch session · theme · settings; keyboard nav + filter                                                                             | ✅     |
 
-### Track B — Agent awareness (scoped; small)
+### Track B — Agent awareness (scoped; small) ✅
 
-| Feature                | Description                                                                                                                                                                      | Status |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Agent status heuristic | **Output-idle**: streaming → working; quiet ~1–1.5s → waiting/needs-input. Generic (works for Claude Code etc.); builds on the M2 activity hook. Feeds the sidebar tree dots     | ⬜     |
-| Files-in-flight (git)  | Per-session **diff panel** via fs-watch + `git diff`/`status` vs a baseline; +/- counts, inline hunks, branch/ahead-behind in status bar. **Git only — no per-agent authorship** | ⬜     |
+| Feature                | Description                                                                                                                                                                                                                                                                                         | Status |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Agent status heuristic | **Output-idle** (`session-status` `output`/`output-idle` events): while working, streaming re-arms a ~1.2s timer; quiet → attention (agent waiting). OSC-133 `D` wins when shell integration is present. Generic (Claude Code etc.); feeds sidebar/pane/status dots                                 | ✅     |
+| Files-in-flight (git)  | Per-session **diff panel** (388px, toggle in top bar): `git status`/`diff` in main (`electron/git.ts`) over the session's cwd (tracked via **OSC 7**), polled 2.5s; +/- counts, changed-file list, inline unified diff; branch + ahead/behind in status bar. **Git only — no per-agent authorship** | ✅     |
 
 **Deferred (M5 / Future):** command approvals + interception (trust dial), sub-agent orchestration
 tree, session-persistence daemon, cross-platform runtime targeting, per-agent file authorship.

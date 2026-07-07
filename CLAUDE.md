@@ -15,9 +15,10 @@ ROADMAP M3.5). (Migrated from Tauri/Rust — see ARCHITECTURE §3.5.)
 
 ```
 electron/
-  main.ts               main process: frameless BrowserWindow, ipcMain (pty/settings/shells/notify/links/window-controls/platform)
+  main.ts               main process: frameless BrowserWindow, ipcMain (pty/settings/shells/notify/links/window-controls/platform/git)
   preload.ts            contextBridge → window.smterm
-  shell-integration.ts  inlined zsh/bash OSC-133 scripts + listShells (WSL) + buildInjection
+  shell-integration.ts  inlined zsh/bash OSC-133 + OSC-7 (cwd) scripts + listShells (WSL) + buildInjection
+  git.ts                main-process git status/diff (pure parsers, unit-tested) for the changes panel
 src/
   main.tsx              renderer entry (bundles fonts)
   app.tsx               compose: tab bar + active tab's pane layout
@@ -27,9 +28,10 @@ src/
   lib/pane-tree.ts      pure split/remove/collapse/query (unit-tested)
   lib/session-status.ts pure status reducer + tab-badge aggregation (unit-tested)
   lib/status-ui.ts      status → dot colour/word/pulse (shared by sidebar/status/pane)
+  lib/use-active-cwd.ts hook: focused session's cwd (OSC-7 tracked) → git panel/status bar
   terminal/terminal-manager.ts  xterm+PTY kept OUTSIDE React, keyed by session id
   settings/            schema (merge/validate) · themes (tokens→CSS+xterm) · io
-  components/          top-bar, sidebar, status-bar, command-palette, pane-layout, terminal-pane, settings-panel
+  components/          top-bar, sidebar, status-bar, command-palette, diff-panel, pane-layout, terminal-pane, settings-panel
 ```
 
 ## Commands

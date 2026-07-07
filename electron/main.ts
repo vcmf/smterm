@@ -7,6 +7,7 @@ import * as pty from "node-pty"
 import type { IPty } from "node-pty"
 import { watch } from "chokidar"
 import { listShells, buildInjection } from "./shell-integration"
+import { gitStatus, gitDiff } from "./git"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -127,6 +128,10 @@ function registerIpc() {
   })
   ipcMain.on("window:close", () => mainWindow?.close())
   ipcMain.handle("window:is-maximized", async () => mainWindow?.isMaximized() ?? false)
+
+  // Git — working-tree status + per-file diff for the changes panel.
+  ipcMain.handle("git:status", async (_e, cwd: string) => gitStatus(cwd))
+  ipcMain.handle("git:diff", async (_e, cwd: string, file: string) => gitDiff(cwd, file))
 
   // Platform label for the status bar (macOS / Windows / Linux).
   ipcMain.handle("platform:info", async () => {

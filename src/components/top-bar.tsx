@@ -4,6 +4,7 @@ import {
   Plus,
   MagnifyingGlass,
   GearSix,
+  GitDiff,
   Minus,
   Square,
   X,
@@ -20,6 +21,7 @@ export function TopBar() {
   const activeTabId = useStore((s) => s.activeTabId)
   const shells = useStore((s) => s.shells)
   const sessions = useStore((s) => s.sessions)
+  const diffPanelOpen = useStore((s) => s.diffPanelOpen)
   const [maximized, setMaximized] = useState(false)
 
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -125,6 +127,13 @@ export function TopBar() {
           <MagnifyingGlass size={12} />
           <span>Search or run</span>
           <span className="kbd">⌘K</span>
+        </button>
+        <button
+          className={`iconbtn${diffPanelOpen ? " on" : ""}`}
+          title="Toggle changes panel"
+          onClick={() => useStore.getState().setDiffPanelOpen(!diffPanelOpen)}
+        >
+          <GitDiff size={15} />
         </button>
         <button
           className="iconbtn"

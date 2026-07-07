@@ -4,8 +4,10 @@ import { TopBar } from "./components/top-bar"
 import { Sidebar } from "./components/sidebar"
 import { StatusBar } from "./components/status-bar"
 import { CommandPalette } from "./components/command-palette"
+import { DiffPanel } from "./components/diff-panel"
 import { PaneLayout } from "./components/pane-layout"
 import { SettingsPanel } from "./components/settings-panel"
+import { useActiveCwd } from "./lib/use-active-cwd"
 import { TerminalManager } from "./terminal/terminal-manager"
 import { useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
@@ -21,6 +23,8 @@ function App() {
   const settings = useStore((s) => s.settings)
   const settingsOpen = useStore((s) => s.settingsOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
+  const diffPanelOpen = useStore((s) => s.diffPanelOpen)
+  const activeCwd = useActiveCwd()
 
   // Load available shells once, then open the first tab.
   useEffect(() => {
@@ -85,6 +89,25 @@ function App() {
     })
   }, [])
 
+  // Poll git status for the focused session's cwd (feeds status bar + diff panel).
+  useEffect(() => {
+    if (!activeCwd) {
+      useStore.getState().setGit(null)
+      return
+    }
+    let cancelled = false
+    const poll = () =>
+      void ipc.gitStatus(activeCwd).then((g) => {
+        if (!cancelled) useStore.getState().setGit(g)
+      })
+    poll()
+    const t = setInterval(poll, 2500)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [activeCwd])
+
   // Global ⌘K / Ctrl-K toggles the command palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -112,6 +135,7 @@ function App() {
             <div className="empty">No sessions — open a tab.</div>
           )}
         </div>
+        {diffPanelOpen && <DiffPanel />}
       </div>
       <StatusBar />
       {paletteOpen && <CommandPalette />}

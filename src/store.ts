@@ -5,6 +5,7 @@ import { reduceSignals } from "./lib/session-status"
 import type { SignalEvent } from "./lib/session-status"
 import { defaultSettings } from "./settings/schema"
 import type { Settings } from "./settings/schema"
+import type { GitStatus } from "./lib/ipc"
 
 const newId = () => crypto.randomUUID()
 
@@ -28,7 +29,12 @@ interface AppState {
   settings: Settings
   settingsOpen: boolean
   paletteOpen: boolean
+  diffPanelOpen: boolean
+  git: GitStatus | null
 
+  setGit: (git: GitStatus | null) => void
+  setDiffPanelOpen: (open: boolean) => void
+  setSessionCwd: (sessionId: string, cwd: string) => void
   setPaletteOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
   setSettings: (settings: Settings) => void
@@ -64,7 +70,17 @@ export const useStore = create<AppState>((set, get) => ({
   settings: defaultSettings,
   settingsOpen: false,
   paletteOpen: false,
+  diffPanelOpen: false,
+  git: null,
 
+  setGit: (git) => set({ git }),
+  setDiffPanelOpen: (diffPanelOpen) => set({ diffPanelOpen }),
+  setSessionCwd: (sessionId, cwd) =>
+    set((state) => {
+      const s = state.sessions[sessionId]
+      if (!s || s.cwd === cwd) return {}
+      return { sessions: { ...state.sessions, [sessionId]: { ...s, cwd } } }
+    }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setSettings: (settings) => set({ settings }),
