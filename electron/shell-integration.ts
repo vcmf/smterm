@@ -5,6 +5,15 @@ import { execFileSync } from "node:child_process"
 
 // Shell scripts inlined as line arrays (not template literals: they contain
 // ${...} and octal \033 which JS template literals would choke on).
+
+// Disable every mouse-tracking mode (X10/normal/button/any-event + SGR encoding).
+// A full-screen TUI (e.g. an agent) that was killed abnormally — the classic case
+// is Claude Code dying on lid-close/sleep — never restores these, so afterwards
+// each mouse move floods the prompt with raw SGR reports (`35;70;25M…`). Emitting
+// this from precmd self-heals the instant control returns to the shell; it's safe
+// at a prompt because no full-screen program is running to want the mouse.
+const MOUSE_RESET = "\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l"
+
 const ZSH_ZSHENV = [
   "# smterm shell integration — zsh .zshenv (loaded for every zsh invocation).",
   'if [[ -f "${SMTERM_USER_ZDOTDIR:-$HOME}/.zshenv" ]]; then',
@@ -14,7 +23,7 @@ const ZSH_ZSHENV = [
   "",
 ].join("\n")
 
-const ZSH_ZSHRC = [
+export const ZSH_ZSHRC = [
   "# smterm shell integration — zsh .zshrc",
   "# Restore the user's ZDOTDIR and load their real interactive config first.",
   'ZDOTDIR="${SMTERM_USER_ZDOTDIR:-$HOME}"',
@@ -31,6 +40,7 @@ const ZSH_ZSHRC = [
   "    local ret=$?",
   "    printf '\\033]133;D;%s\\007' \"$ret\"",
   '    printf \'\\033]7;file://%s%s\\007\' "${HOST:-localhost}" "$PWD"',
+  "    printf '" + MOUSE_RESET + "' # heal a crashed TUI's leftover mouse mode",
   "  }",
   "  add-zsh-hook preexec __smterm_preexec 2>/dev/null",
   "  add-zsh-hook precmd __smterm_precmd 2>/dev/null",
@@ -54,7 +64,7 @@ const ZSH_ZLOGIN = [
   "",
 ].join("\n")
 
-const BASH_RC = [
+export const BASH_RC = [
   "# smterm shell integration — bash (loaded via bash --rcfile).",
   "if [[ -f /etc/bash.bashrc ]]; then source /etc/bash.bashrc; fi",
   'if [[ -f "$HOME/.bashrc" ]]; then source "$HOME/.bashrc"; fi',
@@ -77,6 +87,7 @@ const BASH_RC = [
   "  local ret=$?",
   "  printf '\\033]133;D;%s\\007' \"$ret\"",
   '  printf \'\\033]7;file://%s%s\\007\' "${HOSTNAME:-localhost}" "$PWD"',
+  "  printf '" + MOUSE_RESET + "' # heal a crashed TUI's leftover mouse mode",
   "  __smterm_armed=0",
   "}",
   "",
