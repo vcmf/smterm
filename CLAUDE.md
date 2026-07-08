@@ -66,5 +66,10 @@ src/
   (splits + new tabs open in the focused terminal's dir). Shells that don't emit OSC 7 (plain
   PowerShell/cmd, or before the first prompt) have no cwd → the diff panel is empty and new panes
   fall back to `$HOME`. Not a bug — graceful degradation.
-- **No session persistence (yet).** State is in-memory Zustand; `before-quit` kills every PTY. Closing
-  the app loses all tabs/panes; reopening starts fresh. Restore/reattach is ROADMAP M5.
+- **Layout is persisted, processes are not.** The tab/pane tree + each pane's `{command,args,cwd}` are
+  saved (debounced) to `~/.config/smterm/workspace.json` and **restored on launch** (VS Code-style:
+  fresh shells respawn in the saved cwds — scrollback/running programs are gone). True reattach (live
+  processes surviving a quit, via a detached daemon) is still ROADMAP M5.
+- **Quit is guarded.** `before-quit` shows a native confirm dialog when PTYs are live (unless
+  `settings.confirmQuit` is false); the frameless close button routes through `app.quit()` too. The
+  dialog's "don't warn again" writes `confirmQuit:false` to settings.json.

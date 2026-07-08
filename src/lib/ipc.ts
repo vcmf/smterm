@@ -35,6 +35,8 @@ export interface Ipc {
   platformInfo: () => Promise<PlatformInfo>
   gitStatus: (cwd: string) => Promise<GitStatus>
   gitDiff: (cwd: string, file: string) => Promise<DiffLine[]>
+  readWorkspace: () => Promise<string>
+  writeWorkspace: (contents: string) => void
 }
 
 export interface PlatformInfo {

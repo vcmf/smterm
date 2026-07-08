@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Notification } from "electron"
+import { app, BrowserWindow, ipcMain, shell, Notification, dialog } from "electron"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
@@ -13,6 +13,7 @@ const dir = path.dirname(fileURLToPath(import.meta.url))
 
 const ptys = new Map<string, IPty>()
 let mainWindow: BrowserWindow | null = null
+let quitConfirmed = false
 
 function defaultShell(): string {
   return process.env.SHELL ?? (process.platform === "win32" ? "powershell.exe" : "/bin/zsh")
@@ -68,6 +69,16 @@ function settingsPath(): string {
       ? path.join(process.env.APPDATA ?? os.homedir(), "smterm")
       : path.join(os.homedir(), ".config", "smterm")
   return path.join(base, "settings.json")
+}
+
+function configDir(): string {
+  return process.platform === "win32"
+    ? path.join(process.env.APPDATA ?? os.homedir(), "smterm")
+    : path.join(os.homedir(), ".config", "smterm")
+}
+
+function workspacePath(): string {
+  return path.join(configDir(), "workspace.json")
 }
 
 function readSettings(): string {
@@ -137,7 +148,7 @@ function registerIpc() {
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
     else mainWindow.maximize()
   })
-  ipcMain.on("window:close", () => mainWindow?.close())
+  ipcMain.on("window:close", () => app.quit()) // single-window app: close ⇒ quit (guarded)
   ipcMain.handle("window:is-maximized", async () => mainWindow?.isMaximized() ?? false)
 
   // Git — working-tree status + per-file diff for the changes panel.
@@ -155,6 +166,23 @@ function registerIpc() {
   ipcMain.handle("settings:read", async () => readSettings())
   ipcMain.handle("settings:write", async (_e, contents: string) => writeSettings(contents))
   ipcMain.handle("settings:path", async () => settingsPath())
+
+  // Workspace (persisted layout for VS Code-style restore).
+  ipcMain.handle("workspace:read", async () => {
+    try {
+      return fs.readFileSync(workspacePath(), "utf8")
+    } catch {
+      return ""
+    }
+  })
+  ipcMain.handle("workspace:write", async (_e, contents: string) => {
+    try {
+      fs.mkdirSync(configDir(), { recursive: true })
+      fs.writeFileSync(workspacePath(), contents)
+    } catch {
+      // best-effort
+    }
+  })
 
   // Links + notifications.
   ipcMain.on("open-external", (_e, url: string) => void shell.openExternal(url))
@@ -177,7 +205,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
 
-app.on("before-quit", () => {
+function killAllPtys() {
   for (const p of ptys.values()) {
     try {
       p.kill()
@@ -186,4 +214,52 @@ app.on("before-quit", () => {
     }
   }
   ptys.clear()
+}
+
+// Is the quit-confirmation prompt enabled? (reads settings.json live)
+function confirmQuitEnabled(): boolean {
+  try {
+    return (JSON.parse(readSettings() || "{}") as { confirmQuit?: boolean }).confirmQuit !== false
+  } catch {
+    return true
+  }
+}
+
+// Persist "don't warn again" back into settings.json (merge, best-effort).
+function disableConfirmQuit() {
+  try {
+    const s = JSON.parse(readSettings() || "{}") as Record<string, unknown>
+    s.confirmQuit = false
+    writeSettings(`${JSON.stringify(s, null, 2)}\n`)
+  } catch {
+    // best-effort
+  }
+}
+
+// Guard quit (⌘Q or the close button) when live sessions would be killed.
+app.on("before-quit", (e) => {
+  if (quitConfirmed || ptys.size === 0 || !confirmQuitEnabled() || !mainWindow) {
+    killAllPtys()
+    return
+  }
+  e.preventDefault()
+  const n = ptys.size
+  void dialog
+    .showMessageBox(mainWindow, {
+      type: "warning",
+      buttons: ["Cancel", "Quit"],
+      defaultId: 1,
+      cancelId: 0,
+      message: "Quit smterm?",
+      detail: `This closes ${n} running session${n === 1 ? "" : "s"} and their processes.`,
+      checkboxLabel: "Don't warn again",
+      checkboxChecked: false,
+      noLink: true,
+    })
+    .then(({ response, checkboxChecked }) => {
+      if (response !== 1) return // Cancel
+      if (checkboxChecked) disableConfirmQuit()
+      quitConfirmed = true
+      app.quit()
+    })
 })

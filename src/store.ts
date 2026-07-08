@@ -6,6 +6,7 @@ import type { SignalEvent } from "./lib/session-status"
 import { defaultSettings } from "./settings/schema"
 import type { Settings } from "./settings/schema"
 import type { GitStatus } from "./lib/ipc"
+import type { WorkspaceState } from "./lib/workspace"
 
 const newId = () => crypto.randomUUID()
 
@@ -47,6 +48,7 @@ interface AppState {
   setSettingsOpen: (open: boolean) => void
   setSettings: (settings: Settings) => void
   setShells: (shells: ShellOption[]) => void
+  restoreWorkspace: (ws: WorkspaceState) => void
   newTab: (shell: ShellOption) => void
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
@@ -93,6 +95,9 @@ export const useStore = create<AppState>((set, get) => ({
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setSettings: (settings) => set({ settings }),
   setShells: (shells) => set({ shells }),
+
+  restoreWorkspace: (ws) =>
+    set({ sessions: ws.sessions, tabs: ws.tabs, activeTabId: ws.activeTabId }),
 
   newTab: (shell) =>
     set((state) => {

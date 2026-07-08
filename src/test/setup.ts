@@ -39,6 +39,8 @@ const smtermStub = {
     del: 0,
   })),
   gitDiff: vi.fn(async () => []),
+  readWorkspace: vi.fn(async () => ""),
+  writeWorkspace: vi.fn(),
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

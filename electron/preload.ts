@@ -50,6 +50,9 @@ const api = {
 
   gitStatus: (cwd: string) => ipcRenderer.invoke("git:status", cwd),
   gitDiff: (cwd: string, file: string) => ipcRenderer.invoke("git:diff", cwd, file),
+
+  readWorkspace: () => ipcRenderer.invoke("workspace:read") as Promise<string>,
+  writeWorkspace: (contents: string) => ipcRenderer.invoke("workspace:write", contents),
 }
 
 contextBridge.exposeInMainWorld("smterm", api)

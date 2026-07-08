@@ -183,4 +183,19 @@ describe("store — cwd & UI toggles", () => {
     const newSession = allSessionIds(st().tabs[1]!.root)[0]!
     expect(st().sessions[newSession]!.cwd).toBe("/proj/b")
   })
+
+  it("restoreWorkspace replaces sessions/tabs/activeTabId", () => {
+    st().restoreWorkspace({
+      sessions: {
+        x: { id: "x", title: "t", command: "/bin/zsh", args: [], status: "idle", unread: false },
+      },
+      tabs: [
+        { id: "tb", title: "t", root: { type: "leaf", sessionId: "x" }, activeSessionId: "x" },
+      ],
+      activeTabId: "tb",
+    })
+    expect(st().tabs).toHaveLength(1)
+    expect(st().activeTabId).toBe("tb")
+    expect(st().sessions.x).toBeDefined()
+  })
 })

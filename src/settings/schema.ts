@@ -8,6 +8,7 @@ export interface Settings {
   theme: string
   cursorBlink: boolean
   scrollback: number
+  confirmQuit: boolean
 }
 
 export const defaultSettings: Settings = {
@@ -18,6 +19,7 @@ export const defaultSettings: Settings = {
   theme: "minimal-dark",
   cursorBlink: true,
   scrollback: 5000,
+  confirmQuit: true,
 }
 
 const num = (v: unknown, fallback: number, min: number, max: number): number =>
@@ -46,6 +48,7 @@ export function mergeSettings(input: unknown): Settings {
     theme: str(o.theme, d.theme),
     cursorBlink: bool(o.cursorBlink, d.cursorBlink),
     scrollback: num(o.scrollback, d.scrollback, 0, 1_000_000),
+    confirmQuit: bool(o.confirmQuit, d.confirmQuit),
   }
 }
 

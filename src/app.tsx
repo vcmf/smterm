@@ -13,6 +13,7 @@ import { useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
 import { loadSettings } from "./settings/io"
 import { applyThemeVars, getTheme } from "./settings/themes"
+import { parseWorkspace, serializeToJson } from "./lib/workspace"
 import type { ShellOption } from "./types"
 import "@xterm/xterm/css/xterm.css"
 import "./App.css"
@@ -26,7 +27,7 @@ function App() {
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
   const activeCwd = useActiveCwd()
 
-  // Load available shells once, then open the first tab.
+  // Load shells, then restore the saved workspace (VS Code-style) or open a tab.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -42,10 +43,52 @@ function App() {
       }
       const store = useStore.getState()
       store.setShells(shells)
-      if (store.tabs.length === 0 && shells[0]) store.newTab(shells[0])
+      if (store.tabs.length === 0) {
+        let restored = null
+        try {
+          restored = parseWorkspace(await ipc.readWorkspace())
+        } catch {
+          // no/invalid workspace — start fresh
+        }
+        if (cancelled) return
+        if (restored) store.restoreWorkspace(restored)
+        else if (shells[0]) store.newTab(shells[0])
+      }
     })()
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // Persist the layout (debounced) so the next launch restores it. Skips writes
+  // when only runtime status changed (serialized JSON is identical).
+  useEffect(() => {
+    let last = ""
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const save = () => {
+      const s = useStore.getState()
+      const json = serializeToJson({
+        sessions: s.sessions,
+        tabs: s.tabs,
+        activeTabId: s.activeTabId,
+      })
+      if (json === last) return
+      last = json
+      ipc.writeWorkspace(json)
+    }
+    const unsub = useStore.subscribe((state, prev) => {
+      if (
+        state.tabs !== prev.tabs ||
+        state.sessions !== prev.sessions ||
+        state.activeTabId !== prev.activeTabId
+      ) {
+        clearTimeout(timer)
+        timer = setTimeout(save, 600)
+      }
+    })
+    return () => {
+      unsub()
+      clearTimeout(timer)
     }
   }, [])
 

@@ -253,12 +253,12 @@ delivers a notification (proving app identity is set up correctly).
 
 ## M5 — Later 🧊
 
-| Feature                   | Description                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| Auto-update               | `tauri-plugin-updater` with signing keys                                          |
-| Session reattach          | Survive app restart via a detached backend (daemon or tmux/zellij under the hood) |
-| Advanced status detection | Deeper shell integration for precise agent-state tracking                         |
-| Splits polish             | Drag-to-rearrange panes, saved layouts/presets                                    |
+| Feature                   | Description                                                                                                                                                                                                                                                           |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auto-update               | `tauri-plugin-updater` with signing keys                                                                                                                                                                                                                              |
+| Session reattach          | **Layout restore shipped** (VS Code-style: `workspace.json` → tab/pane tree + cwds respawn fresh on launch; confirm-on-quit guards live sessions). _Remaining:_ true reattach — live processes surviving a quit via a detached daemon (or tmux/zellij under the hood) |
+| Advanced status detection | Deeper shell integration for precise agent-state tracking                                                                                                                                                                                                             |
+| Splits polish             | Drag-to-rearrange panes, saved layouts/presets                                                                                                                                                                                                                        |
 
 ---
 

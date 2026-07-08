@@ -96,6 +96,15 @@ export function SettingsPanel() {
         </label>
 
         <label className="settings-row">
+          <span>Confirm before quit</span>
+          <input
+            type="checkbox"
+            checked={settings.confirmQuit}
+            onChange={(e) => update({ ...settings, confirmQuit: e.target.checked })}
+          />
+        </label>
+
+        <label className="settings-row">
           <span>Scrollback</span>
           <input
             type="number"
