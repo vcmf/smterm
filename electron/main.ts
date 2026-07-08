@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Notification, dialog } from "electron"
+import { app, BrowserWindow, ipcMain, shell, Notification, dialog, powerMonitor } from "electron"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
@@ -9,8 +9,15 @@ import { watch } from "chokidar"
 import { listShells, buildInjection } from "./shell-integration"
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
+import { appendDiag } from "./diagnostics"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
+
+// Session-survival diagnostics: log rare lifecycle/power/PTY events to a file that
+// survives an app kill (see electron/diagnostics.ts). Temporary — remove once the
+// lid-close trigger is confirmed. Reads configDir() lazily so it lands next to settings.
+const diag = (event: string, fields?: Record<string, string | number | boolean>) =>
+  appendDiag(configDir(), event, fields)
 
 const ptys = new Map<string, IPty>()
 const coalescers = new Map<string, OutputCoalescer>()
@@ -136,22 +143,29 @@ function registerIpc() {
       const send = (data: string) => {
         if (!event.sender.isDestroyed()) event.sender.send(`pty:data:${opts.id}`, data)
       }
+      const onExit = (e: { exitCode: number; signal?: number }) =>
+        diag("pty-exit", { id: opts.id, code: e.exitCode, signal: e.signal ?? 0 })
       if (process.env.SMTERM_NO_COALESCE === "1") {
         // A/B baseline: one IPC message per node-pty chunk (the old path).
         proc.onData(send)
-        proc.onExit(() => ptys.delete(opts.id))
+        proc.onExit((e) => {
+          onExit(e)
+          ptys.delete(opts.id)
+        })
       } else {
         // Coalesce output into fewer IPC messages.
         const coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, send)
         coalescers.set(opts.id, coalescer)
         proc.onData((data) => coalescer.push(data))
-        proc.onExit(() => {
+        proc.onExit((e) => {
+          onExit(e)
           coalescer.flush() // don't lose the final output
           coalescers.delete(opts.id)
           ptys.delete(opts.id)
         })
       }
       ptys.set(opts.id, proc)
+      diag("pty-spawn", { id: opts.id, pid: proc.pid, shell: path.basename(shellCmd) })
     },
   )
   ipcMain.on("pty:write", (_e, id: string, data: string) => ptys.get(id)?.write(data))
@@ -238,14 +252,27 @@ app.whenReady().then(() => {
   registerIpc()
   createWindow()
   startSettingsWatcher()
+  diag("boot", { pid: process.pid, version: app.getVersion() })
+  // Power events tell us whether a lid-close SUSPENDS the app (suspend→resume with
+  // PTYs intact) or the OS TERMINATES it (suspend, then a fresh boot with no quit).
+  // `.on` is overloaded per event-name literal; cast to a plain-string signature so
+  // we can register them in a loop.
+  const onPower = powerMonitor.on.bind(powerMonitor) as (e: string, cb: () => void) => void
+  for (const ev of ["suspend", "resume", "lock-screen", "unlock-screen", "shutdown"]) {
+    onPower(ev, () => diag(`power-${ev}`, { ptys: ptys.size }))
+  }
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
 app.on("window-all-closed", () => {
+  diag("window-all-closed", { platform: process.platform })
   if (process.platform !== "darwin") app.quit()
 })
+
+app.on("will-quit", () => diag("will-quit", { ptys: ptys.size }))
+app.on("quit", () => diag("quit"))
 
 function killAllPtys() {
   for (const c of coalescers.values()) c.dispose()
@@ -282,6 +309,7 @@ function disableConfirmQuit() {
 
 // Guard quit (⌘Q or the close button) when live sessions would be killed.
 app.on("before-quit", (e) => {
+  diag("before-quit", { ptys: ptys.size, confirmed: quitConfirmed })
   if (quitConfirmed || ptys.size === 0 || !confirmQuitEnabled() || !mainWindow) {
     killAllPtys()
     return
