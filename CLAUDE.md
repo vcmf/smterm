@@ -75,6 +75,12 @@ src/
 - **Quit is guarded.** `before-quit` shows a native confirm dialog when PTYs are live (unless
   `settings.confirmQuit` is false); the frameless close button routes through `app.quit()` too. The
   dialog's "don't warn again" writes `confirmQuit:false` to settings.json.
+- **Don't animate compositing properties on a pane that holds the WebGL canvas.**
+  A `box-shadow`/`transform`/opacity animation on `.terminal-pane` (e.g. the removed "attention flash")
+  can leave the child xterm **WebGL canvas showing stale/garbled glyphs** — only the animated pane
+  corrupts. Any per-pane attention cue must avoid animating the terminal's container (use the sidebar
+  dot/bell, or a non-compositing indicator). Renderer stays **WebGL** (VS Code's choice; xterm's
+  canvas addon is deprecated).
 - **Agent-status reducer has a known flaw** (`lib/session-status.ts`): `running` = OSC-133 C..D
   (process alive) ≠ actively working, so interactive agents read "running" while waiting, and
   revisiting a pane can re-notify. Don't quick-patch it — the planned activity-based + latched rewrite
