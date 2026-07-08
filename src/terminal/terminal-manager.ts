@@ -10,6 +10,8 @@ import { getTheme } from "../settings/themes"
 import type { Settings } from "../settings/schema"
 import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
+import { allSessionIds } from "../lib/pane-tree"
+import { shouldUseWebgl } from "../lib/renderer-policy"
 
 interface Entry {
   term: Terminal
@@ -20,6 +22,8 @@ interface Entry {
   joinerId?: number
   idleTimer?: ReturnType<typeof setTimeout>
   lastOutputSignal?: number
+  webgl?: WebglAddon // present only while this terminal is rendering via WebGL
+  webglFailed?: boolean // context was lost — stay on DOM, don't re-acquire
 }
 
 // Output quiet for this long (while a command runs) ⇒ the task is waiting.
@@ -44,6 +48,62 @@ function ensureFontLoaded(family: string, size: number): Promise<unknown> {
       document.fonts.load(spec).catch(() => undefined),
     ),
   )
+}
+
+/** Start rendering this terminal via WebGL (GPU-fast, ligature-capable). */
+function acquireWebgl(entry: Entry) {
+  if (entry.webgl || entry.webglFailed || !entry.opened) return
+  try {
+    const webgl = new WebglAddon()
+    webgl.onContextLoss(() => {
+      // Context lost (GPU pressure / suspend) — drop to DOM and don't retry it.
+      webgl.dispose()
+      entry.webgl = undefined
+      entry.webglFailed = true
+    })
+    entry.term.loadAddon(webgl)
+    entry.webgl = webgl
+    // The WebGL atlas rasterizes glyphs via canvas, which only uses an @font-face
+    // AFTER it's explicitly loaded — `document.fonts.ready` isn't enough. Load it,
+    // then clear the atlas + repaint so early/stale glyphs re-rasterize cleanly.
+    const s = useStore.getState().settings
+    void ensureFontLoaded(fontStack(s.font.family), s.font.size).then(() => {
+      try {
+        webgl.clearTextureAtlas()
+        entry.term.refresh(0, entry.term.rows - 1)
+      } catch {
+        // addon disposed meanwhile
+      }
+    })
+  } catch {
+    entry.webglFailed = true // no WebGL2 — stay on the DOM renderer
+  }
+}
+
+/** Stop rendering via WebGL; xterm reverts to the DOM renderer (keeps the PTY). */
+function releaseWebgl(entry: Entry) {
+  if (!entry.webgl) return
+  try {
+    entry.webgl.dispose()
+  } catch {
+    // already gone
+  }
+  entry.webgl = undefined
+}
+
+/** WebGL only for the panes currently on-screen (active tab), and only when few
+ *  enough share the screen (else DOM). Keeps live GPU contexts to a safe minimum
+ *  — many simultaneous WebGL contexts corrupt the glyph atlas. */
+function reconcileRenderers() {
+  const state = useStore.getState()
+  const tab = state.tabs.find((t) => t.id === state.activeTabId)
+  const visible = new Set(tab ? allSessionIds(tab.root) : [])
+  const useWebgl = shouldUseWebgl(visible.size)
+  for (const [id, entry] of entries) {
+    if (!entry.opened) continue
+    if (useWebgl && visible.has(id)) acquireWebgl(entry)
+    else releaseWebgl(entry)
+  }
 }
 
 function build(): Entry {
@@ -180,42 +240,19 @@ export const TerminalManager = {
     }
     container.appendChild(entry.host)
     if (!entry.opened) {
-      entry.term.open(entry.host)
+      entry.term.open(entry.host) // DOM renderer by default; WebGL added by reconcile
       entry.opened = true
-      // WebGL renderer (Chromium): GPU-fast + correct glyphs + supports the
-      // ligature joiner. Falls back to the DOM renderer on context loss.
-      try {
-        const webgl = new WebglAddon()
-        webgl.onContextLoss(() => webgl.dispose())
-        entry.term.loadAddon(webgl)
-        // The WebGL atlas rasterizes glyphs via canvas, which only uses an
-        // @font-face AFTER it's been explicitly loaded — `document.fonts.ready`
-        // does NOT load an unused `font-display:block` face. So glyphs a shell
-        // paints before the font loads (e.g. p10k's instant-prompt connectors)
-        // cache as tofu, and cells the shell never rewrites stay stale. Wait for
-        // an explicit load(), THEN clear the atlas + repaint to re-rasterize.
-        const e = entry
-        const rerender = () => {
-          try {
-            webgl.clearTextureAtlas()
-            e.term.refresh(0, e.term.rows - 1)
-          } catch {
-            // addon disposed
-          }
-        }
-        const s = useStore.getState().settings
-        void ensureFontLoaded(fontStack(s.font.family), s.font.size).then(rerender)
-      } catch {
-        // DOM renderer fallback.
-      }
       applyLigatures(entry, useStore.getState().settings.font.ligatures)
       syncSize(session.id, entry)
       spawn(session, entry)
     } else {
       syncSize(session.id, entry)
     }
+    reconcileRenderers() // this pane is now on-screen — (re)acquire WebGL if apt
     entry.term.focus()
   },
+
+  reconcileRenderers,
 
   fit(id: string) {
     const entry = entries.get(id)
@@ -246,6 +283,7 @@ export const TerminalManager = {
     const entry = entries.get(id)
     if (!entry) return
     clearTimeout(entry.idleTimer)
+    releaseWebgl(entry)
     entry.offData?.()
     ipc.ptyKill(id)
     entry.term.dispose()

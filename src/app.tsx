@@ -132,6 +132,16 @@ function App() {
     })
   }, [])
 
+  // Keep WebGL on only the on-screen panes: reconcile on tab switch / split /
+  // close so background tabs release their GPU context and heavy splits use DOM.
+  useEffect(() => {
+    return useStore.subscribe((state, prev) => {
+      if (state.activeTabId !== prev.activeTabId || state.tabs !== prev.tabs) {
+        TerminalManager.reconcileRenderers()
+      }
+    })
+  }, [])
+
   // Poll git status for the focused session's cwd (feeds status bar + diff panel).
   useEffect(() => {
     if (!activeCwd) {

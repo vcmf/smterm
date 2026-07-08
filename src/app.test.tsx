@@ -12,6 +12,7 @@ vi.mock("./terminal/terminal-manager", () => ({
     focus: vi.fn(),
     dispose: vi.fn(),
     applySettings: vi.fn(),
+    reconcileRenderers: vi.fn(),
   },
 }))
 
