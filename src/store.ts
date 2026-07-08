@@ -73,12 +73,13 @@ export function isVisibleIn(state: AppState, sessionId: string): boolean {
   return tab?.activeSessionId === sessionId
 }
 
-/** Mark a session as seen: drop its attention/unread/reason. */
+/** Mark a session as seen: drop attention/unread/reason. A still-running agent
+ *  falls back to "working" (not idle) so it keeps reading as active. */
 function seen(s: Session): Session {
   if (s.status !== "attention" && !s.unread && !s.detail) return s
   return {
     ...s,
-    status: s.status === "attention" ? "idle" : s.status,
+    status: s.status === "attention" ? (s.running ? "working" : "idle") : s.status,
     unread: false,
     detail: undefined,
   }
@@ -226,7 +227,7 @@ export const useStore = create<AppState>((set, get) => ({
       const session = state.sessions[sessionId]
       if (!session) return {}
       const next = reduceSignals(
-        { status: session.status, unread: session.unread },
+        { status: session.status, unread: session.unread, running: session.running },
         ev,
         isVisibleIn(state, sessionId),
       )
@@ -240,6 +241,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (
         next.status === session.status &&
         next.unread === session.unread &&
+        next.running === session.running &&
         detail === session.detail
       ) {
         return {}
@@ -256,7 +258,7 @@ export const useStore = create<AppState>((set, get) => ({
       for (const id of allSessionIds(tab.root)) {
         const s = sessions[id]
         if (!s) continue
-        const status = s.status === "attention" ? "idle" : s.status
+        const status = s.status === "attention" ? (s.running ? "working" : "idle") : s.status
         if (s.unread || status !== s.status || s.detail) {
           sessions[id] = { ...s, status, unread: false, detail: undefined }
           changed = true

@@ -3,10 +3,13 @@ import { aggregateBadge, initialSignals, reduceSignals } from "./session-status"
 import type { Signals } from "./session-status"
 
 describe("reduceSignals", () => {
-  it("command-start → working; command-end → idle", () => {
+  it("command-start → working (running); command-end → idle (not running)", () => {
     const working = reduceSignals(initialSignals, { type: "command-start" }, true)
-    expect(working.status).toBe("working")
-    expect(reduceSignals(working, { type: "command-end" }, true).status).toBe("idle")
+    expect(working).toMatchObject({ status: "working", running: true })
+    expect(reduceSignals(working, { type: "command-end" }, true)).toMatchObject({
+      status: "idle",
+      running: false,
+    })
   })
 
   it("marks unread only when not visible", () => {
@@ -16,7 +19,7 @@ describe("reduceSignals", () => {
   })
 
   it("attention raises status+unread only when not visible", () => {
-    expect(reduceSignals(initialSignals, { type: "attention" }, false)).toEqual({
+    expect(reduceSignals(initialSignals, { type: "attention" }, false)).toMatchObject({
       status: "attention",
       unread: true,
     })
@@ -24,34 +27,36 @@ describe("reduceSignals", () => {
     expect(reduceSignals(initialSignals, { type: "attention" }, true)).toEqual(initialSignals)
   })
 
-  it("output-idle flips a hidden working session to attention (agent went quiet)", () => {
-    const busy: Signals = { status: "working", unread: false }
+  it("output-idle flips a hidden RUNNING session to attention, never the focused one", () => {
+    const busy: Signals = { status: "working", unread: false, running: true }
     expect(reduceSignals(busy, { type: "output-idle" }, false).status).toBe("attention")
-    // ...but never nags the pane you're looking at
-    expect(reduceSignals(busy, { type: "output-idle" }, true)).toEqual(busy)
-    // idle/attention sessions are untouched by the idle timer
+    expect(reduceSignals(busy, { type: "output-idle" }, true)).toEqual(busy) // focused → untouched
+    // not running / fresh idle → untouched by the idle timer
     expect(reduceSignals(initialSignals, { type: "output-idle" }, false)).toEqual(initialSignals)
-    const attn: Signals = { status: "attention", unread: true }
-    expect(reduceSignals(attn, { type: "output-idle" }, false)).toEqual(attn)
+    const notRunning: Signals = { status: "working", unread: false, running: false }
+    expect(reduceSignals(notRunning, { type: "output-idle" }, false)).toEqual(notRunning)
   })
 
-  it("output resumes a quiet task (attention → working) but never wakes a fresh prompt", () => {
-    const attn: Signals = { status: "attention", unread: false }
-    expect(reduceSignals(attn, { type: "output" }, true).status).toBe("working")
-    // idle prompt output is not a running command — stays idle
-    expect(reduceSignals(initialSignals, { type: "output" }, true).status).toBe("idle")
+  it("output keeps a running agent working (even from idle) but never wakes a fresh prompt", () => {
+    const runningQuiet: Signals = { status: "idle", unread: false, running: true }
+    expect(reduceSignals(runningQuiet, { type: "output" }, true).status).toBe("working") // key fix
+    const attn: Signals = { status: "attention", unread: false, running: false }
+    expect(reduceSignals(attn, { type: "output" }, true).status).toBe("working") // resume
+    expect(reduceSignals(initialSignals, { type: "output" }, true).status).toBe("idle") // stays idle
   })
 
-  it("reveal clears unread and downgrades attention to idle, but keeps working", () => {
-    const attn: Signals = { status: "attention", unread: true }
-    expect(reduceSignals(attn, { type: "reveal" }, true)).toEqual({
-      status: "idle",
-      unread: false,
-    })
-    const busy: Signals = { status: "working", unread: true }
-    expect(reduceSignals(busy, { type: "reveal" }, true)).toEqual({
+  it("reveal clears attention → working if still running, else idle", () => {
+    const runningAttn: Signals = { status: "attention", unread: true, running: true }
+    expect(reduceSignals(runningAttn, { type: "reveal" }, true)).toEqual({
       status: "working",
       unread: false,
+      running: true,
+    })
+    const doneAttn: Signals = { status: "attention", unread: true, running: false }
+    expect(reduceSignals(doneAttn, { type: "reveal" }, true)).toEqual({
+      status: "idle",
+      unread: false,
+      running: false,
     })
   })
 })
