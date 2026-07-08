@@ -75,3 +75,7 @@ src/
 - **Quit is guarded.** `before-quit` shows a native confirm dialog when PTYs are live (unless
   `settings.confirmQuit` is false); the frameless close button routes through `app.quit()` too. The
   dialog's "don't warn again" writes `confirmQuit:false` to settings.json.
+- **Agent-status reducer has a known flaw** (`lib/session-status.ts`): `running` = OSC-133 C..D
+  (process alive) ≠ actively working, so interactive agents read "running" while waiting, and
+  revisiting a pane can re-notify. Don't quick-patch it — the planned activity-based + latched rewrite
+  needs a real test matrix. See ARCHITECTURE §9a + ROADMAP M3.6 Track C.

@@ -233,6 +233,39 @@ Delivery via Electron `Notification`. On macOS/Windows a **signed/identified app
 reliable delivery — handled at packaging (§10). (This was unverifiable on the Tauri dev build; on
 Electron, notifications work in dev too.)
 
+### 9a. Agent-status state machine — current design & a known flaw ⚠️
+
+**What's implemented** (`src/lib/session-status.ts` reducer + `terminal/terminal-manager.ts` signals):
+
+- Three statuses per session: `idle` / `working` ("running") / `attention` ("needs input").
+- A **`running`** flag tracks OSC 133 **C..D** (a command started but hasn't finished). `working`
+  status is driven by it.
+- **`attention`** is raised by: OSC 9 (message → the reason), the terminal **bell**, or the
+  **output-idle** heuristic (a `running` session that goes quiet ~1.2 s while off-screen).
+- **Visibility is per-focused-pane** (`isVisibleIn`): the heuristic never flags the pane you're
+  driving. Focusing/revealing a pane runs `seen()` → clears attention (a still-`running` session
+  falls back to `working`, not `idle`). OS notifications fire on the transition into attention, only
+  when the window is unfocused.
+
+**The flaw (documented 2026-07-08; fix deferred, needs many tests).** `running` = _process alive_
+(C..D), which is **not** the same as _actively working_. For an interactive agent (`claude`), OSC 133
+`C` fires once at launch and `D` only fires on exit — so `running` stays true the whole session,
+whether it's generating or waiting. Consequences the user hit:
+
+1. **needs-input → running on focus:** `seen()` sees `running === true` and promotes a _waiting_
+   agent's `attention → working`, so it wrongly reads "running" after you look at it.
+2. **re-notify on leave:** focusing a pane triggers a TUI **redraw** (re-attach/resize) → that repaint
+   is **output** → re-arms the idle timer → when you switch away it fires `output-idle` → attention
+   again → a fresh (duplicate) notification, even though nothing new happened.
+
+**Intended fix** (activity-based, latched — _to build with a proper test matrix_): derive `working`
+from **recent output activity** (streaming) rather than C..D process-liveness; make `attention` a
+**latch** that clears on view and only **re-arms after genuinely new activity** (a new streaming burst
+since you last saw it), so a stale waiting-state can't re-nag; on focus, show `working` only if it's
+actually streaming, else a calm state. Needs a `lastActivityAt` + "seen-since-activity" marker and
+**substantial unit tests** across the timing/visibility/latch matrix before it replaces the current
+reducer. See ROADMAP M3.6.
+
 ---
 
 ## 10. Packaging & distribution

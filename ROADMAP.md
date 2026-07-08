@@ -285,6 +285,24 @@ should be ~0%), **React re-render** discipline under high-frequency status updat
 - **Store selectors** — verify busy sessions (150ms output signals / status flips) don't re-render the
   whole sidebar/top-bar; keep selectors narrow.
 
+### Track C — Attention model refinement ⬜ _(deferred; needs a big test pass)_
+
+The shipped attention/notification machinery (bell, reason, flash, clear-on-view) works, but the
+status derivation has a **known flaw** documented in ARCHITECTURE §9a: `running` = _process alive_
+(OSC 133 C..D), not _actively working_, so an interactive agent (`claude`) reads "running" the whole
+session. Symptoms: focusing a **waiting** agent flips **needs-input → running** (wrong), and revisiting
+a pane triggers a TUI redraw that **re-arms the idle timer → duplicate notification** on leave.
+
+**Planned fix** (activity-based + latched — see ARCHITECTURE §9a): derive `working` from **recent
+output activity** not C..D; make `attention` a **latch** cleared on view that **re-arms only after
+genuinely new activity**; on focus show a calm state unless actually streaming. **Blocked on a proper
+test matrix** — this reducer is timing/visibility-sensitive and mis-tuning it nags the user, so it
+needs substantial unit tests (activity windows, latch re-arm, per-pane visibility, TUI-redraw noise)
+before replacing the current `session-status` reducer.
+
+**Open Qs (from 2026-07-08 discussion):** focused-waiting shows `idle` vs a distinct calm "waiting"
+label; latch-only (no re-nag) vs periodic re-nag while waiting.
+
 ---
 
 ## M4 — Packaging & distribution ⬜
