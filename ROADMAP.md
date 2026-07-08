@@ -11,14 +11,14 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 
 ## Milestone status at a glance
 
-| Milestone  | Theme                                                               | Status              |
-| ---------- | ------------------------------------------------------------------- | ------------------- |
-| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri) |
-| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done             |
-| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | ✅ done             |
-| **M3.6**   | Session identity (OSC-title/branch/cwd) + performance & load tests  | ⬜ **next**         |
-| **M4**     | Packaging & signed cross-platform builds                            | ⬜                  |
-| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                  |
+| Milestone  | Theme                                                               | Status                             |
+| ---------- | ------------------------------------------------------------------- | ---------------------------------- |
+| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri)                |
+| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done                            |
+| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | ✅ done                            |
+| **M3.6**   | Session identity (OSC-title/branch/cwd) + performance & load tests  | 🚧 A ✅ · B: harness+coalescing ✅ |
+| **M4**     | Packaging & signed cross-platform builds                            | ⬜                                 |
+| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                                 |
 
 > **Direction (2026-07-07):**
 >
@@ -234,9 +234,9 @@ event fidelity beyond idle-detection, write attribution, approval interception) 
 
 ---
 
-## M3.6 — Session identity + performance ⬜ _(planned; discussed 2026-07-08)_
+## M3.6 — Session identity + performance 🚧 _(A ✅ · B: harness + coalescing ✅)_
 
-### Track A — Richer session identity (sidebar / tabs / pane headers)
+### Track A — Richer session identity (sidebar / tabs / pane headers) ✅
 
 Today a node shows the shell name (`zsh` · `/bin/zsh` · idle) — not useful. Make each read like
 cmux: a meaningful **title**, a **`branch • ~/cwd`** subline, and a clear **status**. Sourced from
