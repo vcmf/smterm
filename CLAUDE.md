@@ -75,6 +75,11 @@ src/
 - **Quit is guarded.** `before-quit` shows a native confirm dialog when PTYs are live (unless
   `settings.confirmQuit` is false); the frameless close button routes through `app.quit()` too. The
   dialog's "don't warn again" writes `confirmQuit:false` to settings.json.
+- **Renderer is auto-managed (WebGL only for on-screen panes).** Many simultaneous WebGL contexts
+  corrupt the glyph atlas (garbled text — xterm.js #4379/#3303). `terminal-manager.reconcileRenderers()`
+  gives WebGL only to the active tab's panes, and only when ≤ `MAX_WEBGL_PANES` (4) are visible; else
+  DOM. Background tabs release their context (PTY keeps running). Policy = pure `lib/renderer-policy.ts`
+  (tested); called on tab-switch/split/close (app.tsx) + attach. No renderer setting — it's automatic.
 - **Don't animate compositing properties on a pane that holds the WebGL canvas.**
   A `box-shadow`/`transform`/opacity animation on `.terminal-pane` (e.g. the removed "attention flash")
   can leave the child xterm **WebGL canvas showing stale/garbled glyphs** — only the animated pane
