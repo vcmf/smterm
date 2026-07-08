@@ -88,14 +88,25 @@ function registerIpc() {
   // PTY — one node-pty per session; stream output back over pty:data:<id>.
   ipcMain.handle(
     "pty:spawn",
-    (event, opts: { id: string; cols: number; rows: number; shell: string; args: string[] }) => {
+    (
+      event,
+      opts: {
+        id: string
+        cols: number
+        rows: number
+        shell: string
+        args: string[]
+        cwd?: string
+      },
+    ) => {
       const shellCmd = opts.shell || defaultShell()
       const inj = buildInjection(shellCmd)
+      const startCwd = opts.cwd && fs.existsSync(opts.cwd) ? opts.cwd : os.homedir()
       const proc = pty.spawn(shellCmd, [...(opts.args ?? []), ...(inj?.args ?? [])], {
         name: "xterm-256color",
         cols: opts.cols || 80,
         rows: opts.rows || 24,
-        cwd: os.homedir(),
+        cwd: startCwd,
         env: { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>,
       })
       proc.onData((data) => event.sender.send(`pty:data:${opts.id}`, data))

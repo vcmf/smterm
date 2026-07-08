@@ -165,4 +165,22 @@ describe("store — cwd & UI toggles", () => {
     st().setGit({ isRepo: true, branch: "main", ahead: 1, behind: 0, files: [], add: 0, del: 0 })
     expect(st().git?.branch).toBe("main")
   })
+
+  it("splitActive inherits the source pane's cwd", () => {
+    st().newTab(shell)
+    const src = allSessionIds(firstTab().root)[0]!
+    st().setSessionCwd(src, "/proj/a")
+    st().splitActive("row", shell)
+    const other = allSessionIds(firstTab().root).find((id) => id !== src)!
+    expect(st().sessions[other]!.cwd).toBe("/proj/a")
+  })
+
+  it("newTab inherits the focused terminal's cwd", () => {
+    st().newTab(shell)
+    const first = allSessionIds(firstTab().root)[0]!
+    st().setSessionCwd(first, "/proj/b")
+    st().newTab(shell) // focus is still the first tab's session at call time
+    const newSession = allSessionIds(st().tabs[1]!.root)[0]!
+    expect(st().sessions[newSession]!.cwd).toBe("/proj/b")
+  })
 })

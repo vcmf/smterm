@@ -9,7 +9,7 @@ import type { GitStatus } from "./lib/ipc"
 
 const newId = () => crypto.randomUUID()
 
-function makeSession(shell: ShellOption): Session {
+function makeSession(shell: ShellOption, initialCwd?: string): Session {
   return {
     id: newId(),
     title: shell.label,
@@ -17,7 +17,15 @@ function makeSession(shell: ShellOption): Session {
     args: shell.args,
     status: "idle",
     unread: false,
+    cwd: initialCwd,
   }
+}
+
+/** The cwd of the currently focused terminal, if known — new panes/tabs inherit it. */
+function focusedCwd(state: AppState): string | undefined {
+  const tab = state.tabs.find((t) => t.id === state.activeTabId)
+  const sid = tab?.activeSessionId
+  return sid ? state.sessions[sid]?.cwd : undefined
 }
 
 interface AppState {
@@ -88,7 +96,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   newTab: (shell) =>
     set((state) => {
-      const session = makeSession(shell)
+      const session = makeSession(shell, focusedCwd(state))
       const tab: Tab = {
         id: newId(),
         title: shell.label,
@@ -128,7 +136,9 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => {
       const tab = state.tabs.find((t) => t.id === state.activeTabId)
       if (!tab) return {}
-      const session = makeSession(shell)
+      // Inherit the split source pane's cwd (the tab's currently active session).
+      const srcCwd = state.sessions[tab.activeSessionId]?.cwd
+      const session = makeSession(shell, srcCwd)
       const root: PaneNode = splitNode(
         tab.root,
         tab.activeSessionId,

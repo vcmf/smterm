@@ -102,6 +102,7 @@ function spawn(session: Session, entry: Entry) {
       rows: term.rows,
       shell: session.command,
       args: session.args,
+      cwd: session.cwd, // inherited from the pane this was split/opened from
     })
     .catch((e) => term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`))
 

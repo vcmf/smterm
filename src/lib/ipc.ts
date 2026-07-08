@@ -9,6 +9,7 @@ export interface SpawnOpts {
   rows: number
   shell: string
   args: string[]
+  cwd?: string // start directory; falls back to $HOME in main if unset
 }
 
 export interface Ipc {
