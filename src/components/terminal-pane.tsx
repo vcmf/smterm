@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { Terminal, X, Columns, Rows } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
@@ -38,23 +38,11 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
     return () => ro.disconnect()
   }, [sessionId])
 
-  // Briefly flash the pane border when it starts needing attention (and isn't
-  // the focused pane) — a glanceable cue that settles into the amber rail.
-  const [flash, setFlash] = useState(false)
-  useEffect(() => {
-    if (status === "attention" && !focused) {
-      setFlash(true)
-      const t = setTimeout(() => setFlash(false), 1600)
-      return () => clearTimeout(t)
-    }
-    setFlash(false)
-  }, [status, focused])
-
   const railClass = focused ? " focused" : status === "attention" ? " waiting" : ""
 
   return (
     <div
-      className={`terminal-pane${railClass}${flash ? " attn-flash" : ""}`}
+      className={`terminal-pane${railClass}`}
       onMouseDown={() => useStore.getState().setActivePane(tabId, sessionId)}
       // Re-focus the terminal after any click/selection so keystrokes reach the
       // PTY (the textarea doesn't always keep focus after a selection).

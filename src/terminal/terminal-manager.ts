@@ -20,30 +20,6 @@ interface Entry {
   joinerId?: number
   idleTimer?: ReturnType<typeof setTimeout>
   lastOutputSignal?: number
-  clearAtlas?: () => void // rebuild the WebGL glyph atlas (recover from corruption)
-  resizeTimer?: ReturnType<typeof setTimeout>
-  lastCols?: number
-  lastRows?: number
-}
-
-// Resizing and DPR changes (moving between monitors) can corrupt xterm's WebGL
-// glyph atlas → garbled text. Rebuild the atlas when either settles.
-let dprWatchStarted = false
-function watchDpr() {
-  if (dprWatchStarted || typeof window === "undefined") return
-  dprWatchStarted = true
-  const arm = () => {
-    const mql = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
-    mql.addEventListener(
-      "change",
-      () => {
-        for (const e of entries.values()) e.clearAtlas?.()
-        arm() // re-arm for the next DPR
-      },
-      { once: true },
-    )
-  }
-  arm()
 }
 
 // Output quiet for this long (while a command runs) ⇒ the task is waiting.
@@ -188,15 +164,7 @@ function spawn(session: Session, entry: Entry) {
 function syncSize(id: string, entry: Entry) {
   try {
     entry.fit.fit()
-    const { cols, rows } = entry.term
-    ipc.ptyResize(id, cols, rows)
-    if (cols !== entry.lastCols || rows !== entry.lastRows) {
-      entry.lastCols = cols
-      entry.lastRows = rows
-      // Rebuild the atlas once the resize settles (guards against corruption).
-      clearTimeout(entry.resizeTimer)
-      entry.resizeTimer = setTimeout(() => entry.clearAtlas?.(), 150)
-    }
+    ipc.ptyResize(id, entry.term.cols, entry.term.rows)
   } catch {
     // Container not measurable yet; a later fit() call will settle it.
   }
@@ -235,8 +203,6 @@ export const TerminalManager = {
             // addon disposed
           }
         }
-        e.clearAtlas = rerender // reused on resize / DPR change to self-heal
-        watchDpr()
         const s = useStore.getState().settings
         void ensureFontLoaded(fontStack(s.font.family), s.font.size).then(rerender)
       } catch {
@@ -280,7 +246,6 @@ export const TerminalManager = {
     const entry = entries.get(id)
     if (!entry) return
     clearTimeout(entry.idleTimer)
-    clearTimeout(entry.resizeTimer)
     entry.offData?.()
     ipc.ptyKill(id)
     entry.term.dispose()
