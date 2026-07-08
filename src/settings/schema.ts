@@ -9,6 +9,7 @@ export interface Settings {
   cursorBlink: boolean
   scrollback: number
   confirmQuit: boolean
+  defaultShell: string // command path of the preferred shell; "" = system $SHELL
 }
 
 export const defaultSettings: Settings = {
@@ -20,6 +21,7 @@ export const defaultSettings: Settings = {
   cursorBlink: true,
   scrollback: 5000,
   confirmQuit: true,
+  defaultShell: "",
 }
 
 const num = (v: unknown, fallback: number, min: number, max: number): number =>
@@ -49,6 +51,7 @@ export function mergeSettings(input: unknown): Settings {
     cursorBlink: bool(o.cursorBlink, d.cursorBlink),
     scrollback: num(o.scrollback, d.scrollback, 0, 1_000_000),
     confirmQuit: bool(o.confirmQuit, d.confirmQuit),
+    defaultShell: typeof o.defaultShell === "string" ? o.defaultShell : d.defaultShell,
   }
 }
 

@@ -13,6 +13,7 @@ import {
 import { useStore } from "../store"
 import { THEMES } from "../settings/themes"
 import { openSettingsFile, saveSettings } from "../settings/io"
+import { resolveDefaultShell } from "../lib/shells"
 
 interface Command {
   group: string
@@ -36,18 +37,19 @@ export function CommandPalette() {
 
   const commands = useMemo<Command[]>(() => {
     const store = useStore.getState()
-    const shell = shells[0]
+    const shell = resolveDefaultShell(shells, settings.defaultShell)
     const list: Command[] = []
 
     if (shell) {
       list.push({
         group: "Session",
         label: "New session",
-        sub: shell.label,
+        sub: `${shell.label} (default)`,
         icon: <Plus size={16} />,
         run: () => store.newTab(shell),
       })
-      for (const sh of shells.slice(1)) {
+      for (const sh of shells) {
+        if (sh.id === shell.id) continue
         list.push({
           group: "Session",
           label: "New session",

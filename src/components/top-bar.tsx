@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import {
   TerminalWindow,
   Plus,
+  CaretDown,
   MagnifyingGlass,
   GearSix,
   GitDiff,
@@ -15,6 +16,7 @@ import { ipc } from "../lib/ipc"
 import { allSessionIds } from "../lib/pane-tree"
 import { aggregateBadge } from "../lib/session-status"
 import { tabTitle } from "../lib/session-label"
+import { resolveDefaultShell } from "../lib/shells"
 
 /** The mux top bar: brand · session tabs · search pill · window controls. */
 export function TopBar() {
@@ -23,8 +25,10 @@ export function TopBar() {
   const shells = useStore((s) => s.shells)
   const sessions = useStore((s) => s.sessions)
   const home = useStore((s) => s.home)
+  const defaultShellPref = useStore((s) => s.settings.defaultShell)
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
   const [maximized, setMaximized] = useState(false)
+  const [shellMenu, setShellMenu] = useState(false)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
@@ -42,7 +46,12 @@ export function TopBar() {
     return ipc.onMaximizeChange(setMaximized)
   }, [])
 
-  const defaultShell = shells[0]
+  const defaultShell = resolveDefaultShell(shells, defaultShellPref)
+
+  const openTab = (shell = defaultShell) => {
+    if (shell) useStore.getState().newTab(shell)
+    setShellMenu(false)
+  }
 
   const startRename = (id: string, title: string) => {
     setDraft(title)
@@ -114,14 +123,37 @@ export function TopBar() {
             </div>
           )
         })}
-        <button
-          className="iconbtn"
-          title="New tab"
-          disabled={!defaultShell}
-          onClick={() => defaultShell && useStore.getState().newTab(defaultShell)}
-        >
-          <Plus size={14} />
-        </button>
+        <div className="newtab">
+          <button
+            className="iconbtn"
+            title="New tab"
+            disabled={!defaultShell}
+            onClick={() => openTab()}
+          >
+            <Plus size={14} />
+          </button>
+          <button
+            className="iconbtn newtab-caret"
+            title="New tab in…"
+            disabled={shells.length === 0}
+            onClick={() => setShellMenu((v) => !v)}
+          >
+            <CaretDown size={11} />
+          </button>
+          {shellMenu && (
+            <>
+              <div className="menu-backdrop" onMouseDown={() => setShellMenu(false)} />
+              <div className="shell-menu">
+                {shells.map((sh) => (
+                  <button key={sh.id} className="shell-menu-item" onMouseDown={() => openTab(sh)}>
+                    <span>{sh.label}</span>
+                    {sh.id === defaultShell?.id && <span className="shell-menu-def">default</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="topbar-right">

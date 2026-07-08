@@ -34,6 +34,12 @@ describe("SettingsPanel", () => {
     expect(st().settings.theme).toBe("gruvbox")
   })
 
+  it("choosing a default shell persists it", () => {
+    render(<SettingsPanel />)
+    fireEvent.change(screen.getByLabelText("Default shell"), { target: { value: "/bin/sh" } })
+    expect(st().settings.defaultShell).toBe("/bin/sh")
+  })
+
   it("the close button dismisses the panel", () => {
     st().setSettingsOpen(true)
     render(<SettingsPanel />)

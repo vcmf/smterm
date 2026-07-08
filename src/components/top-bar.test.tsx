@@ -49,4 +49,17 @@ describe("TopBar", () => {
     fireEvent.click(screen.getByTitle("Toggle changes panel"))
     expect(st().diffPanelOpen).toBe(true)
   })
+
+  it("the shell menu opens and spawns a chosen shell", () => {
+    useStore.setState({
+      shells: [testShell, { id: "bash", label: "bash", command: "/bin/bash", args: [] }],
+    })
+    const { container } = render(<TopBar />)
+    fireEvent.click(screen.getByTitle("New tab in…"))
+    expect(container.querySelector(".shell-menu")).toBeTruthy()
+    const before = st().tabs.length
+    fireEvent.mouseDown(screen.getByText("bash")) // menu item
+    expect(st().tabs.length).toBe(before + 1)
+    expect(container.querySelector(".shell-menu")).toBeFalsy() // menu closed
+  })
 })

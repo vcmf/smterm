@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 
 export function SettingsPanel() {
   const settings = useStore((s) => s.settings)
+  const shells = useStore((s) => s.shells)
   const [path, setPath] = useState("")
 
   useEffect(() => {
@@ -81,6 +82,21 @@ export function SettingsPanel() {
             {Object.entries(THEMES).map(([key, theme]) => (
               <option key={key} value={key}>
                 {theme.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="settings-row">
+          <span>Default shell</span>
+          <select
+            value={settings.defaultShell}
+            onChange={(e) => update({ ...settings, defaultShell: e.target.value })}
+          >
+            <option value="">System default</option>
+            {shells.map((sh) => (
+              <option key={sh.id} value={sh.command}>
+                {sh.label}
               </option>
             ))}
           </select>
