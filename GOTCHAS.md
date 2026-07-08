@@ -1,0 +1,100 @@
+# Gotchas — smterm
+
+The non-obvious traps, with the _why_. CLAUDE.md carries a one-line flag for each of
+these; this file is the detail you read when one bites. See also `ARCHITECTURE.md`
+(design) and `TESTING.md` (quality bar).
+
+## Renderer ↔ main seam {#seam}
+
+Renderer talks to main **only via `src/lib/ipc.ts`** (preload exposes it as
+`window.smterm`). Don't import Electron in React. This one seam is also the insulation
+point for the out-of-process session daemon (ARCHITECTURE Appendix A).
+
+Terminals live in **`terminal/terminal-manager.ts`, OUTSIDE the React tree**, keyed by
+session id — so splitting a pane or switching tabs **re-attaches** instead of respawning
+the shell. Dispose a terminal only when its session leaves the store.
+
+## Fonts & ligatures {#fonts}
+
+Terminal fonts must be **bundled `@font-face`** (`public/fonts/`): the WebGL renderer
+needs the primary font to carry Nerd/Powerline icons (no per-glyph fallback). The WebGL
+atlas rasterizes glyphs via canvas, which only uses an `@font-face` **after it's
+explicitly loaded** — `document.fonts.ready` is not enough (see `ensureFontLoaded`).
+
+Ligatures need `allowProposedApi` + the character joiner (works on WebGL, not the DOM
+renderer). Default is **off** (`font.ligatures: false`) — WebGL + the ligature joiner
+can leave paint remnants (xterm.js #3303), worse with multiple panes.
+
+## Renderer policy: WebGL only for on-screen panes {#renderer}
+
+Many simultaneous WebGL contexts **corrupt the glyph atlas** (garbled text — xterm.js
+#4379/#3303). `terminal-manager.reconcileRenderers()` gives WebGL only to the active
+tab's panes, and only when ≤ `MAX_WEBGL_PANES` (4) are visible; otherwise DOM.
+Background tabs release their context (PTY keeps running) and re-acquire on return.
+Policy is the pure, tested `lib/renderer-policy.ts`; called on tab-switch/split/close
+(app.tsx) + attach. There is **no renderer setting** — it's automatic.
+
+**Don't animate compositing properties** (`box-shadow`/`transform`/opacity) on a pane
+that holds the WebGL canvas (`.terminal-pane`): it can leave the child xterm WebGL
+canvas showing **stale/garbled glyphs** — only the animated pane corrupts. Any per-pane
+attention cue must avoid animating the terminal's container (use the sidebar dot/bell,
+or a non-compositing indicator). Renderer stays WebGL (VS Code's choice; xterm's canvas
+addon is deprecated).
+
+## Self-heal a crashed TUI's mouse mode {#mouse-reset}
+
+A full-screen TUI killed abnormally (classic case: an agent dying on lid-close/sleep)
+never restores the mouse-tracking modes it enabled, so afterwards every mouse move
+floods the prompt with raw SGR reports (`35;70;25M…`). Our zsh/bash `precmd`
+(`electron/shell-integration.ts`) emits the mouse-mode disables (`\e[?1000/1002/1003/
+1006 l`) every prompt, so the terminal self-heals the instant control returns to the
+shell — safe there since no full-screen program is running. Only heals in shells with
+our integration (zsh/bash); plain PowerShell/cmd/fish won't self-heal.
+
+## Sessions, cwd & PTY lifetime {#session-survival}
+
+**cwd tracking is OSC-7-based.** `session.cwd` is set only when the shell emits OSC 7
+(our zsh/bash integration does, from `precmd`). It drives the **git diff panel** and
+**cwd inheritance** (splits + new tabs open in the focused terminal's dir). Shells that
+don't emit OSC 7 (plain PowerShell/cmd, or before the first prompt) have no cwd → the
+diff panel is empty and new panes fall back to `$HOME`. Not a bug — graceful degradation.
+
+**Layout is persisted, processes are not — across a full quit.** The tab/pane tree +
+each pane's `{command,args,cwd}` are saved (debounced) to `~/.config/smterm/
+workspace.json` and restored on launch (VS Code-style: fresh shells respawn in the saved
+cwds; scrollback/running programs are gone).
+
+**But PTYs survive a renderer reload (sleep/dev-HMR/GPU-crash).** PTYs live in the main
+process, which outlives a renderer reload. `pty:spawn` is **attach-or-spawn**: a spawn
+for an already-live session id **reattaches** — main rebinds output to the new renderer,
+resizes, and replays recent history from a bounded per-session `OutputBuffer` — instead
+of respawning and orphaning the live shell. Diagnosed via `electron/diagnostics.ts`
+(a lid-close showed suspend→resume with no app reboot, only a renderer reload). Explicit
+`pty:kill` (pane/tab close) still truly terminates + frees the buffer.
+
+**True reattach across a full app quit** (live processes surviving a quit, via a detached
+daemon) is still **ROADMAP M5** — a full quit kills PTYs (they're children of main +
+`killAllPtys()`). See ARCHITECTURE Appendix A.
+
+**Quit is guarded.** `before-quit` shows a native confirm dialog when PTYs are live
+(unless `settings.confirmQuit` is false); the frameless close button routes through
+`app.quit()` too. The dialog's "don't warn again" writes `confirmQuit:false` to
+settings.json.
+
+## node-pty is a native module {#node-pty}
+
+After install / Electron upgrades run `npx electron-rebuild -o node-pty` (in
+`make install`). Vitest can't load it (Electron ABI), so PTY spawning isn't unit-tested
+there — push logic into pure modules (`output-buffer`, `coalescer`, shell-integration
+parsers) and test those; verify the PTY path manually / via the diagnostics log.
+
+## Windows {#windows}
+
+The app spawns `wsl.exe` as a shell — it never runs _inside_ WSL.
+
+## Agent-status reducer has a known flaw {#agent-status}
+
+`lib/session-status.ts`: `running` = OSC-133 C..D (process alive) ≠ actively working, so
+interactive agents read "running" while waiting, and revisiting a pane can re-notify.
+Don't quick-patch it — the planned activity-based + latched rewrite needs a real test
+matrix. See ARCHITECTURE §9a + ROADMAP M3.6 Track C.
