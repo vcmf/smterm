@@ -37,6 +37,19 @@ describe("Sidebar", () => {
     expect(screen.getAllByText("sh").length).toBeGreaterThan(0)
   })
 
+  it("shows the attention reason as a subline", () => {
+    st().newTab(testShell)
+    const id = allSessionIds(st().tabs[0]!.root)[0]!
+    useStore.setState((s) => ({
+      sessions: {
+        ...s.sessions,
+        [id]: { ...s.sessions[id]!, status: "attention", detail: "Claude needs your permission" },
+      },
+    }))
+    render(<Sidebar />)
+    expect(screen.getByText("Claude needs your permission")).toBeInTheDocument()
+  })
+
   it("clicking a pane row focuses that session", () => {
     st().newTab(testShell)
     st().splitActive("row", testShell)

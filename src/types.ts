@@ -16,6 +16,7 @@ export interface Session {
   unread: boolean
   cwd?: string // reported by the shell via OSC 7; drives the git diff panel
   oscTitle?: string // raw window title from OSC 0/2 (a program may set it)
+  detail?: string // why it needs attention (OSC-9 message / "needs input")
 }
 
 /** A tab's layout: a binary tree of leaves (terminals) and splits. */

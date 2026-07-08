@@ -9,6 +9,7 @@ import { ipc } from "../lib/ipc"
 import { getTheme } from "../settings/themes"
 import type { Settings } from "../settings/schema"
 import { ligatureRanges } from "./ligatures"
+import { displaySessionTitle } from "../lib/session-label"
 
 interface Entry {
   term: Terminal
@@ -124,12 +125,27 @@ function spawn(session: Session, entry: Entry) {
     return true
   })
 
-  // OSC 9 — attention; OSC 133;C/D — command start/finish.
+  // A program asks for attention (OSC 9 message, or the terminal bell). Notify
+  // only on the transition into attention (de-noise) and only when off-screen.
+  const raiseAttention = (detail?: string) => {
+    const wasAttention = useStore.getState().sessions[session.id]?.status === "attention"
+    store.signalSession(session.id, { type: "attention", detail })
+    if (!isSessionVisible(session.id) && !wasAttention) {
+      const s = useStore.getState().sessions[session.id]
+      const home = useStore.getState().home
+      void notify(displaySessionTitle(s, home), detail || "wants your attention")
+    }
+  }
+
+  // OSC 9 — desktop-notification escape (its text is the reason).
   term.parser.registerOscHandler(9, (data) => {
-    store.signalSession(session.id, { type: "attention" })
-    if (!isSessionVisible(session.id)) void notify(session.title, data || "smterm")
+    raiseAttention(data || undefined)
     return true
   })
+  // Terminal bell — a generic "waiting on you" from readline/prompts/agents.
+  term.onBell(() => raiseAttention())
+
+  // OSC 133;C/D — command start/finish.
   term.parser.registerOscHandler(133, (data) => {
     const kind = data.charAt(0)
     if (kind === "C") store.signalSession(session.id, { type: "command-start" })

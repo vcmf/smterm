@@ -112,11 +112,17 @@ export function Sidebar() {
                           <span className="tree-primary">{displaySessionTitle(s, home)}</span>
                           <span className="pane-badge">{shellType(s.command)}</span>
                         </span>
-                        <span className="tree-sub">{shortCwd(s.cwd, home) || "shell"}</span>
+                        {s.status === "attention" && s.detail ? (
+                          <span className="tree-sub attn">{s.detail}</span>
+                        ) : (
+                          <span className="tree-sub">{shortCwd(s.cwd, home) || "shell"}</span>
+                        )}
                       </div>
-                      <span className="tree-meta" style={{ color: `var(--${ui.dot})` }}>
-                        {ui.word}
-                      </span>
+                      {s.status !== "attention" && (
+                        <span className="tree-meta" style={{ color: `var(--${ui.dot})` }}>
+                          {ui.word}
+                        </span>
+                      )}
                       <span className={`dot ${ui.dot}${ui.pulse ? " pulse" : ""}`} />
                     </div>
                   )

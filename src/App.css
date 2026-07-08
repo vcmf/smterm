@@ -224,6 +224,27 @@ body {
   color: var(--accent);
   background: var(--elev);
 }
+.iconbtn.bell {
+  position: relative;
+}
+.iconbtn.bell.has {
+  color: var(--amber);
+}
+.bell-count {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--amber);
+  color: #0b0b0d;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+}
 
 .topbar-right {
   display: flex;
@@ -429,6 +450,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.tree-sub.attn {
+  color: var(--amber);
 }
 .tree-meta {
   font-size: 10px;

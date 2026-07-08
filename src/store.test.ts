@@ -110,6 +110,22 @@ describe("store — status signals & visibility", () => {
     expect(st().sessions[id]!.status).toBe("attention")
   })
 
+  it("attention carries a detail (OSC-9 message); reveal clears it", () => {
+    const id = setup()
+    useStore.setState({ windowFocused: false })
+    st().signalSession(id, { type: "attention", detail: "Claude needs your permission" })
+    expect(st().sessions[id]!.detail).toBe("Claude needs your permission")
+    st().revealTab(firstTab().id)
+    expect(st().sessions[id]!.detail).toBeUndefined()
+  })
+
+  it("output-idle attention detail defaults to 'needs input'", () => {
+    const id = setup()
+    st().signalSession(id, { type: "command-start" })
+    st().signalSession(id, { type: "output-idle" })
+    expect(st().sessions[id]!.detail).toBe("needs input")
+  })
+
   it("revealTab clears unread and downgrades attention to idle", () => {
     const id = setup()
     useStore.setState({ windowFocused: false })

@@ -6,6 +6,7 @@ import {
   MagnifyingGlass,
   GearSix,
   GitDiff,
+  Bell,
   Minus,
   Square,
   X,
@@ -17,6 +18,7 @@ import { allSessionIds } from "../lib/pane-tree"
 import { aggregateBadge } from "../lib/session-status"
 import { tabTitle } from "../lib/session-label"
 import { resolveDefaultShell } from "../lib/shells"
+import { TerminalManager } from "../terminal/terminal-manager"
 
 /** The mux top bar: brand · session tabs · search pill · window controls. */
 export function TopBar() {
@@ -51,6 +53,25 @@ export function TopBar() {
   const openTab = (shell = defaultShell) => {
     if (shell) useStore.getState().newTab(shell)
     setShellMenu(false)
+  }
+
+  // Sessions awaiting the user, in tab order — drives the bell count + jump.
+  const waiting: { tabId: string; sessionId: string }[] = []
+  for (const tab of tabs) {
+    for (const id of allSessionIds(tab.root)) {
+      if (sessions[id]?.status === "attention") waiting.push({ tabId: tab.id, sessionId: id })
+    }
+  }
+
+  const jumpToWaiting = () => {
+    if (waiting.length === 0) return
+    const cur = tabs.find((t) => t.id === activeTabId)?.activeSessionId
+    const idx = waiting.findIndex((w) => w.tabId === activeTabId && w.sessionId === cur)
+    const target = waiting[(idx + 1) % waiting.length]! // idx === -1 → first
+    const store = useStore.getState()
+    store.setActiveTab(target.tabId)
+    store.setActivePane(target.tabId, target.sessionId)
+    requestAnimationFrame(() => TerminalManager.focus(target.sessionId))
   }
 
   const startRename = (id: string, title: string) => {
@@ -157,6 +178,15 @@ export function TopBar() {
       </div>
 
       <div className="topbar-right">
+        <button
+          className={`iconbtn bell${waiting.length ? " has" : ""}`}
+          title={waiting.length ? `${waiting.length} waiting — jump` : "No sessions waiting"}
+          disabled={waiting.length === 0}
+          onClick={jumpToWaiting}
+        >
+          <Bell size={15} weight={waiting.length ? "fill" : "regular"} />
+          {waiting.length > 0 && <span className="bell-count">{waiting.length}</span>}
+        </button>
         <button className="searchpill" onClick={() => useStore.getState().setPaletteOpen(true)}>
           <MagnifyingGlass size={12} />
           <span>Search or run</span>

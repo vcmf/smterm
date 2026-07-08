@@ -10,7 +10,7 @@ export const initialSignals: Signals = { status: "idle", unread: false }
 export type SignalEvent =
   | { type: "command-start" } // OSC 133;C — a command began running
   | { type: "command-end" } // OSC 133;D — command finished
-  | { type: "attention" } // OSC 9 — program/agent requests attention
+  | { type: "attention"; detail?: string } // OSC 9 / bell — program requests attention
   | { type: "output" } // any PTY output
   | { type: "output-idle" } // output went quiet for a while (idle-timer fired)
   | { type: "reveal" } // the session became visible to the user

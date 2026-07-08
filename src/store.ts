@@ -212,8 +212,21 @@ export const useStore = create<AppState>((set, get) => ({
         ev,
         isVisibleIn(state, sessionId),
       )
-      if (next.status === session.status && next.unread === session.unread) return {}
-      return { sessions: { ...state.sessions, [sessionId]: { ...session, ...next } } }
+      // The attention reason (OSC-9 message / "needs input"); cleared otherwise.
+      const detail =
+        next.status === "attention"
+          ? ev.type === "attention"
+            ? ev.detail || "needs input"
+            : "needs input"
+          : undefined
+      if (
+        next.status === session.status &&
+        next.unread === session.unread &&
+        detail === session.detail
+      ) {
+        return {}
+      }
+      return { sessions: { ...state.sessions, [sessionId]: { ...session, ...next, detail } } }
     }),
 
   revealTab: (tabId) =>
@@ -226,8 +239,8 @@ export const useStore = create<AppState>((set, get) => ({
         const s = sessions[id]
         if (!s) continue
         const status = s.status === "attention" ? "idle" : s.status
-        if (s.unread || status !== s.status) {
-          sessions[id] = { ...s, status, unread: false }
+        if (s.unread || status !== s.status || s.detail) {
+          sessions[id] = { ...s, status, unread: false, detail: undefined }
           changed = true
         }
       }
