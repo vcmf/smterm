@@ -41,6 +41,8 @@ const smtermStub = {
   gitDiff: vi.fn(async () => []),
   readWorkspace: vi.fn(async () => ""),
   writeWorkspace: vi.fn(),
+  appMetrics: vi.fn(async () => []),
+  perfMode: vi.fn(async () => false),
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -46,6 +46,13 @@ function createWindow() {
   win.on("maximize", sendMax)
   win.on("unmaximize", sendMax)
 
+  // Load-test mode: surface the renderer's [PERF] report lines on stdout.
+  if (process.env.SMTERM_PERF === "1") {
+    win.webContents.on("console-message", (_e, _l, message) => {
+      if (message.startsWith("[PERF]")) console.log(message)
+    })
+  }
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -154,6 +161,17 @@ function registerIpc() {
   // Git — working-tree status + per-file diff for the changes panel.
   ipcMain.handle("git:status", async (_e, cwd: string) => gitStatus(cwd))
   ipcMain.handle("git:diff", async (_e, cwd: string, file: string) => gitDiff(cwd, file))
+
+  // Perf: process CPU/memory metrics + whether we're in load-test mode.
+  ipcMain.handle("app:metrics", async () =>
+    app.getAppMetrics().map((m) => ({
+      type: m.type,
+      pid: m.pid,
+      cpu: m.cpu?.percentCPUUsage ?? 0,
+      memoryKB: m.memory?.workingSetSize ?? 0,
+    })),
+  )
+  ipcMain.handle("app:perf-mode", async () => process.env.SMTERM_PERF === "1")
 
   // Platform label for the status bar (macOS / Windows / Linux).
   ipcMain.handle("platform:info", async () => {

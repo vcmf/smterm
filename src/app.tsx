@@ -151,6 +151,13 @@ function App() {
     }
   }, [activeCwd])
 
+  // Load-test mode (SMTERM_PERF=1): run the perf suite once, then report.
+  useEffect(() => {
+    void ipc.perfMode().then((on) => {
+      if (on) void import("./lib/perf").then((m) => m.runPerfSuite())
+    })
+  }, [])
+
   // Global ⌘K / Ctrl-K toggles the command palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

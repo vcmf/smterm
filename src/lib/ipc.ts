@@ -37,6 +37,15 @@ export interface Ipc {
   gitDiff: (cwd: string, file: string) => Promise<DiffLine[]>
   readWorkspace: () => Promise<string>
   writeWorkspace: (contents: string) => void
+  appMetrics: () => Promise<ProcMetric[]>
+  perfMode: () => Promise<boolean>
+}
+
+export interface ProcMetric {
+  type: string
+  pid: number
+  cpu: number // percent
+  memoryKB: number
 }
 
 export interface PlatformInfo {

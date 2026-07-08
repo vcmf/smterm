@@ -249,10 +249,20 @@ cmux: a meaningful **title**, a **`branch • ~/cwd`** subline, and a clear **st
 | Status  | reuse the output-idle heuristic; better words/icons: working → spinner, attention → **"Needs input"** (bell), idle → idle                                                                       |
 
 Applies to sidebar rows (two-line, per the mux tree spec), tab titles/tooltips, and pane headers.
-**Open Qs:** ellipsis rules; do tabs also adopt the OSC title; prefer title vs `branch•cwd` when both.
+**Decisions (2026-07-08):**
+
+- The **tab/group row shows the focused pane's** title + that pane's `branch • cwd` (not a separate
+  group name) — the tab reflects whatever pane you're in.
+- **Manual rename pins:** a user rename wins and freezes the title; otherwise the OSC title flows
+  through live. (Un-pin = rename back to empty, TBD.)
+
 **Non-goal:** reading an agent's conversation/transcript — that's deep per-agent integration (M5).
 
 ### Track B — Performance + load testing
+
+**Status:** harness + first baselines **done** (see [PERF.md](./PERF.md); run `SMTERM_PERF=1 make run`).
+Key finding: one command = **~17.3k main→renderer IPC messages**, IPC halves throughput (49→21 MB/s).
+**Next:** coalesce PTY output in main (the clear win), then flow control.
 
 **Dimensions:** output **throughput** (blast `seq`/`cat`/`yes` — does xterm keep up?), input latency,
 **scale** (N panes, some busy → CPU + RSS), **idle cost** (git poll 2.5s + clock + status signals

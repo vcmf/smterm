@@ -53,6 +53,9 @@ const api = {
 
   readWorkspace: () => ipcRenderer.invoke("workspace:read") as Promise<string>,
   writeWorkspace: (contents: string) => ipcRenderer.invoke("workspace:write", contents),
+
+  appMetrics: () => ipcRenderer.invoke("app:metrics"),
+  perfMode: () => ipcRenderer.invoke("app:perf-mode") as Promise<boolean>,
 }
 
 contextBridge.exposeInMainWorld("smterm", api)
