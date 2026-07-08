@@ -260,9 +260,10 @@ Applies to sidebar rows (two-line, per the mux tree spec), tab titles/tooltips, 
 
 ### Track B — Performance + load testing
 
-**Status:** harness + first baselines **done** (see [PERF.md](./PERF.md); run `SMTERM_PERF=1 make run`).
-Key finding: one command = **~17.3k main→renderer IPC messages**, IPC halves throughput (49→21 MB/s).
-**Next:** coalesce PTY output in main (the clear win), then flow control.
+**Status:** harness + baselines **done**, and the first win landed (see [PERF.md](./PERF.md); run
+`SMTERM_PERF=1 make run`). **IPC output coalescing ✅** (`electron/coalescer.ts`, 4 ms / 256 KB flush):
+fair A/B shows **~165× fewer IPC messages** (17.7k → ~108) and **~1.6× throughput** (21 → 34 MB/s).
+**Next candidates:** flow control (pause node-pty when the renderer lags), N-busy-panes scaling.
 
 **Dimensions:** output **throughput** (blast `seq`/`cat`/`yes` — does xterm keep up?), input latency,
 **scale** (N panes, some busy → CPU + RSS), **idle cost** (git poll 2.5s + clock + status signals

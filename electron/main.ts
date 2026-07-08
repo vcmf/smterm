@@ -8,12 +8,18 @@ import type { IPty } from "node-pty"
 import { watch } from "chokidar"
 import { listShells, buildInjection } from "./shell-integration"
 import { gitStatus, gitDiff } from "./git"
+import { OutputCoalescer } from "./coalescer"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
 const ptys = new Map<string, IPty>()
+const coalescers = new Map<string, OutputCoalescer>()
 let mainWindow: BrowserWindow | null = null
 let quitConfirmed = false
+
+// PTY output batching (see electron/coalescer.ts + PERF.md).
+const PTY_FLUSH_MS = 4
+const PTY_MAX_FLUSH_BYTES = 256 * 1024
 
 function defaultShell(): string {
   return process.env.SHELL ?? (process.platform === "win32" ? "powershell.exe" : "/bin/zsh")
@@ -127,8 +133,24 @@ function registerIpc() {
         cwd: startCwd,
         env: { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>,
       })
-      proc.onData((data) => event.sender.send(`pty:data:${opts.id}`, data))
-      proc.onExit(() => ptys.delete(opts.id))
+      const send = (data: string) => {
+        if (!event.sender.isDestroyed()) event.sender.send(`pty:data:${opts.id}`, data)
+      }
+      if (process.env.SMTERM_NO_COALESCE === "1") {
+        // A/B baseline: one IPC message per node-pty chunk (the old path).
+        proc.onData(send)
+        proc.onExit(() => ptys.delete(opts.id))
+      } else {
+        // Coalesce output into fewer IPC messages.
+        const coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, send)
+        coalescers.set(opts.id, coalescer)
+        proc.onData((data) => coalescer.push(data))
+        proc.onExit(() => {
+          coalescer.flush() // don't lose the final output
+          coalescers.delete(opts.id)
+          ptys.delete(opts.id)
+        })
+      }
       ptys.set(opts.id, proc)
     },
   )
@@ -141,6 +163,8 @@ function registerIpc() {
     }
   })
   ipcMain.on("pty:kill", (_e, id: string) => {
+    coalescers.get(id)?.dispose()
+    coalescers.delete(id)
     ptys.get(id)?.kill()
     ptys.delete(id)
   })
@@ -224,6 +248,8 @@ app.on("window-all-closed", () => {
 })
 
 function killAllPtys() {
+  for (const c of coalescers.values()) c.dispose()
+  coalescers.clear()
   for (const p of ptys.values()) {
     try {
       p.kill()

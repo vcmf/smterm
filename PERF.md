@@ -31,23 +31,32 @@ command line doesn't trip the timing — see the comment in `perf.ts`).
 
 Machine: Apple Silicon MacBook Pro, macOS, zsh (with shell integration). Dev build.
 
-| Metric                         | 2026-07-08 (baseline)  | Notes                                   |
-| ------------------------------ | ---------------------- | --------------------------------------- |
-| Renderer throughput            | **~49 MB/s**           | 20 MB drained in ~410 ms (WebGL)        |
-| End-to-end throughput          | **~21 MB/s**           | 14.5 MB in ~697 ms                      |
-| **IPC messages / 14.5 MB**     | **~17,300**            | ⚠️ ~880 B per message — per-chunk sends |
-| Idle CPU (main / renderer)     | **0% / 0%**            | background timers are effectively free  |
-| Memory (main / renderer / GPU) | **~144 / 251 / 84 MB** | ~480 MB total (Electron baseline)       |
+**Output IPC coalescing — fair A/B** (interleaved, same machine state; `SMTERM_NO_COALESCE=1` toggles
+the old per-chunk path). This is the honest comparison; absolute MB/s drifts with machine load, so
+compare the two columns to each other, not across sessions.
+
+| Metric (14.5 MB firehose) | per-chunk (before) | **coalesced (after)** | Δ           |
+| ------------------------- | ------------------ | --------------------- | ----------- |
+| End-to-end throughput     | ~21 MB/s           | **~34 MB/s**          | **1.6× ↑**  |
+| IPC messages              | ~17,700            | **~108**              | **≈165× ↓** |
+
+Other baselines (2026-07-08):
+
+| Metric                         | Value                  | Notes                                  |
+| ------------------------------ | ---------------------- | -------------------------------------- |
+| Renderer throughput            | **~49 MB/s**           | 20 MB via xterm+WebGL (no PTY/IPC)     |
+| Idle CPU (main / renderer)     | **0% / 0%**            | background timers are effectively free |
+| Memory (main / renderer / GPU) | **~140 / 250 / 80 MB** | ~480 MB total (Electron baseline)      |
 
 ## Findings & next steps
 
-1. **IPC coalescing is the clear win.** One command produced **~17.3k main→renderer messages**, and the
-   IPC hop roughly halves throughput (49 → 21 MB/s). `main.ts` currently does one
-   `event.sender.send` per `node-pty` `onData` chunk. **Fix:** buffer chunks in main and flush on a
-   small timer (~4–8 ms) or size threshold, sending one message per flush. Expected: message count
-   down ~10–50×, e2e throughput approaching the renderer ceiling.
-2. **Flow control (follow-up).** Under a sustained firehose, pause `node-pty` when xterm's `write()`
-   callback backlog grows and resume when drained, so the PTY can't outrun the renderer / balloon memory.
+1. **IPC coalescing — done ✅.** Batching PTY output in main (`electron/coalescer.ts`, 4 ms / 256 KB
+   flush) cut messages ~165× and raised throughput ~1.6× (numbers above). The message-count drop also
+   slashes per-byte CPU, which matters most with **many concurrent busy panes**. Toggle the old path
+   with `SMTERM_NO_COALESCE=1` for regression A/Bs.
+2. **Flow control (next candidate).** Under a sustained firehose, pause `node-pty` when xterm's
+   `write()` callback backlog grows and resume when drained, so the PTY can't outrun the renderer /
+   balloon memory. Measure first — may not be worth it now that message overhead is gone.
 3. **Idle is already fine** — no action; keep it that way as features add timers.
-4. **Not yet measured** (add scenarios as needed): input latency, N-busy-panes CPU/RSS scaling, huge-repo
-   git-poll cost, and React re-render counts under high-frequency status updates.
+4. **Not yet measured** (add scenarios as needed): input latency, N-busy-panes CPU/RSS scaling,
+   huge-repo git-poll cost, and React re-render counts under high-frequency status updates.
