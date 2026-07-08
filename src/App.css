@@ -592,7 +592,10 @@ body {
 .terminal-mount {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 4px 6px;
+  padding: 2px 4px;
+  /* Match the terminal background so the fixed-cell remainder + scrollbar gutter
+     blend in instead of showing a lighter --panel strip on the right/bottom. */
+  background: var(--bg);
 }
 .terminal-host,
 .terminal-host .xterm,
