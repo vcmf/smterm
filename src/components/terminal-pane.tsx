@@ -2,12 +2,14 @@ import { useEffect, useRef } from "react"
 import { Terminal, X, Columns, Rows } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
+import { displaySessionTitle, shellType } from "../lib/session-label"
 
 /** A mount point for one session's terminal. The terminal itself lives in
  *  TerminalManager, so this component can mount/unmount freely. */
 export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: string }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const session = useStore((s) => s.sessions[sessionId])
+  const home = useStore((s) => s.home)
   const focused = useStore(
     (s) =>
       s.activeTabId === tabId && s.tabs.find((t) => t.id === tabId)?.activeSessionId === sessionId,
@@ -48,8 +50,8 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
     >
       <div className="pane-header">
         <Terminal size={14} weight="fill" color={focused ? "var(--accent)" : "var(--dim)"} />
-        <span className="pane-title">{session?.title ?? "shell"}</span>
-        <span className="pane-badge">shell</span>
+        <span className="pane-title">{displaySessionTitle(session, home)}</span>
+        <span className="pane-badge">{shellType(session?.command ?? "")}</span>
         <div className="pane-header-spacer" />
         <button
           className="iconbtn"

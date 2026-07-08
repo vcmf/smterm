@@ -4,7 +4,13 @@ import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { allSessionIds } from "../lib/pane-tree"
 import { statusUi } from "../lib/status-ui"
-import { tabTitle, shortCwd, sessionSubline } from "../lib/session-label"
+import {
+  tabTitle,
+  shortCwd,
+  sessionSubline,
+  displaySessionTitle,
+  shellType,
+} from "../lib/session-label"
 
 /** Left sidebar: a tree of real sessions (tabs) → panes, with live status dots. */
 export function Sidebar() {
@@ -70,7 +76,10 @@ export function Sidebar() {
                   {open ? <CaretDown size={13} /> : <CaretRight size={13} />}
                 </button>
                 <div className="tree-labels">
-                  <span className="tree-primary session">{tabTitle(tab, sessions)}</span>
+                  <span className="tree-primary-row">
+                    <span className="tree-primary session">{tabTitle(tab, sessions, home)}</span>
+                    {focused && <span className="pane-badge">{shellType(focused.command)}</span>}
+                  </span>
                   {groupSub && <span className="tree-sub">{groupSub}</span>}
                 </div>
                 <span className="tree-meta status-faint">
@@ -99,10 +108,11 @@ export function Sidebar() {
                         />
                       </span>
                       <div className="tree-labels">
-                        <span className="tree-primary">{s.title}</span>
-                        <span className="tree-sub">
-                          {shortCwd(s.cwd, home) || s.command || "shell"}
+                        <span className="tree-primary-row">
+                          <span className="tree-primary">{displaySessionTitle(s, home)}</span>
+                          <span className="pane-badge">{shellType(s.command)}</span>
                         </span>
+                        <span className="tree-sub">{shortCwd(s.cwd, home) || "shell"}</span>
                       </div>
                       <span className="tree-meta" style={{ color: `var(--${ui.dot})` }}>
                         {ui.word}

@@ -43,7 +43,7 @@ interface AppState {
   home: string
 
   setHome: (home: string) => void
-  setSessionTitle: (sessionId: string, title: string) => void
+  setSessionOscTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
   setDiffPanelOpen: (open: boolean) => void
   setSessionCwd: (sessionId: string, cwd: string) => void
@@ -88,12 +88,12 @@ export const useStore = create<AppState>((set, get) => ({
   home: "",
 
   setHome: (home) => set({ home }),
-  setSessionTitle: (sessionId, title) =>
+  setSessionOscTitle: (sessionId, title) =>
     set((state) => {
       const s = state.sessions[sessionId]
       const next = title.trim()
-      if (!s || !next || s.title === next) return {}
-      return { sessions: { ...state.sessions, [sessionId]: { ...s, title: next } } }
+      if (!s || !next || s.oscTitle === next) return {}
+      return { sessions: { ...state.sessions, [sessionId]: { ...s, oscTitle: next } } }
     }),
   setGit: (git) => set({ git }),
   setDiffPanelOpen: (diffPanelOpen) => set({ diffPanelOpen }),

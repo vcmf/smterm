@@ -22,6 +22,7 @@ export function TopBar() {
   const activeTabId = useStore((s) => s.activeTabId)
   const shells = useStore((s) => s.shells)
   const sessions = useStore((s) => s.sessions)
+  const home = useStore((s) => s.home)
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
   const [maximized, setMaximized] = useState(false)
 
@@ -80,7 +81,7 @@ export function TopBar() {
               key={tab.id}
               className={`tab${tab.id === activeTabId ? " active" : ""}`}
               onMouseDown={() => useStore.getState().setActiveTab(tab.id)}
-              onDoubleClick={() => startRename(tab.id, tabTitle(tab, sessions))}
+              onDoubleClick={() => startRename(tab.id, tabTitle(tab, sessions, home))}
             >
               {badge && <span className={`dot ${dotClass}${pulse ? " pulse" : ""}`} />}
               {editingId === tab.id ? (
@@ -97,7 +98,7 @@ export function TopBar() {
                   }}
                 />
               ) : (
-                <span className="tab-title">{tabTitle(tab, sessions)}</span>
+                <span className="tab-title">{tabTitle(tab, sessions, home)}</span>
               )}
               {ids.length > 1 && <span className="tab-count">{ids.length}</span>}
               <button

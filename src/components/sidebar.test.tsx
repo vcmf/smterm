@@ -33,17 +33,19 @@ describe("Sidebar", () => {
     render(<Sidebar />)
     // "idle" appears both as the pane meta and the legend
     expect(screen.getAllByText("idle").length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText("/bin/sh")).toBeInTheDocument()
+    // shell-type badge is shown (uppercased via CSS; textContent is "sh")
+    expect(screen.getAllByText("sh").length).toBeGreaterThan(0)
   })
 
   it("clicking a pane row focuses that session", () => {
     st().newTab(testShell)
-    st().renameTab(st().tabs[0]!.id, "work")
     st().splitActive("row", testShell)
     const ids = allSessionIds(st().tabs[0]!.root)
+    // Distinct cwds → distinct derived titles so we can target one pane.
+    st().setSessionCwd(ids[0]!, "/w/alpha")
+    st().setSessionCwd(ids[1]!, "/w/beta")
     render(<Sidebar />)
-    const paneRows = screen.getAllByText("sh") // both pane primaries
-    fireEvent.mouseDown(paneRows[0]!)
+    fireEvent.mouseDown(screen.getByText("alpha"))
     expect(st().tabs[0]!.activeSessionId).toBe(ids[0])
   })
 })

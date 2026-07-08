@@ -166,14 +166,14 @@ describe("store — cwd & UI toggles", () => {
     expect(st().git?.branch).toBe("main")
   })
 
-  it("setSessionTitle updates a session's live title; ignores empty/unknown", () => {
+  it("setSessionOscTitle records the raw OSC title; ignores empty/unknown", () => {
     st().newTab(shell)
     const id = allSessionIds(firstTab().root)[0]!
-    st().setSessionTitle(id, "claude: fix auth")
-    expect(st().sessions[id]!.title).toBe("claude: fix auth")
-    st().setSessionTitle(id, "   ") // blank → ignored
-    expect(st().sessions[id]!.title).toBe("claude: fix auth")
-    st().setSessionTitle("nope", "x") // unknown → no-op
+    st().setSessionOscTitle(id, "Explore hexgate")
+    expect(st().sessions[id]!.oscTitle).toBe("Explore hexgate")
+    st().setSessionOscTitle(id, "   ") // blank → ignored
+    expect(st().sessions[id]!.oscTitle).toBe("Explore hexgate")
+    st().setSessionOscTitle("nope", "x") // unknown → no-op
     expect(st().sessions.nope).toBeUndefined()
   })
 

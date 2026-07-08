@@ -111,7 +111,7 @@ function spawn(session: Session, entry: Entry) {
   // OSC 0/2 (window title) → live session title (shells set it to cmd/cwd;
   // agents like Claude Code can set it to the task). Manual rename still wins
   // at the tab level (store keeps tab.title as the pin).
-  term.onTitleChange((title) => store.setSessionTitle(session.id, title))
+  term.onTitleChange((title) => store.setSessionOscTitle(session.id, title))
 
   // OSC 7 — the shell reports its working directory (file://host/path).
   term.parser.registerOscHandler(7, (data) => {

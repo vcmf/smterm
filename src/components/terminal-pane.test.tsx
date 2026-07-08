@@ -24,11 +24,12 @@ beforeEach(() => {
 })
 
 describe("TerminalPane", () => {
-  it("renders the pane header (title + SHELL badge)", () => {
+  it("renders the pane header (cwd-basename title + shell-type badge)", () => {
     const { tabId, id } = mountPane()
+    st().setSessionCwd(id, "/w/proj")
     render(<TerminalPane sessionId={id} tabId={tabId} />)
-    expect(screen.getByText("sh")).toBeInTheDocument()
-    expect(screen.getByText("shell")).toBeInTheDocument()
+    expect(screen.getByText("proj")).toBeInTheDocument() // title = cwd basename
+    expect(screen.getByText("sh")).toBeInTheDocument() // badge = shell type
   })
 
   it("the split-right button splits this pane", () => {
