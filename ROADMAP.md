@@ -16,6 +16,7 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 | **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri) |
 | **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done             |
 | **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | ✅ done             |
+| **M3.6**   | Session identity (OSC-title/branch/cwd) + performance & load tests  | ⬜ **next**         |
 | **M4**     | Packaging & signed cross-platform builds                            | ⬜                  |
 | **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                  |
 
@@ -230,6 +231,48 @@ tree, session-persistence daemon, cross-platform runtime targeting, per-agent fi
 **Why it fits "polish":** Track A is pure reskin on our existing architecture; Track B's status is a
 refinement of M2, and the git-diff panel is self-contained and deterministic. The risky parts (agent
 event fidelity beyond idle-detection, write attribution, approval interception) are exactly what's deferred.
+
+---
+
+## M3.6 — Session identity + performance ⬜ _(planned; discussed 2026-07-08)_
+
+### Track A — Richer session identity (sidebar / tabs / pane headers)
+
+Today a node shows the shell name (`zsh` · `/bin/zsh` · idle) — not useful. Make each read like
+cmux: a meaningful **title**, a **`branch • ~/cwd`** subline, and a clear **status**. Sourced from
+**generic terminal signals only** (no per-agent transcript parsing):
+
+| Piece   | Source                                                                                                                                                                                          |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Title   | **OSC 0/2** (terminal-title escape) — what the running program advertises (shell → cmd/cwd; Claude Code etc. → task title). Fall back: cwd basename → shell name. Standard tmux/iTerm mechanism |
+| Subline | **`branch • ~/short/cwd`** from the existing OSC-7 cwd + git branch (reuses M3.5-B2 data)                                                                                                       |
+| Status  | reuse the output-idle heuristic; better words/icons: working → spinner, attention → **"Needs input"** (bell), idle → idle                                                                       |
+
+Applies to sidebar rows (two-line, per the mux tree spec), tab titles/tooltips, and pane headers.
+**Open Qs:** ellipsis rules; do tabs also adopt the OSC title; prefer title vs `branch•cwd` when both.
+**Non-goal:** reading an agent's conversation/transcript — that's deep per-agent integration (M5).
+
+### Track B — Performance + load testing
+
+**Dimensions:** output **throughput** (blast `seq`/`cat`/`yes` — does xterm keep up?), input latency,
+**scale** (N panes, some busy → CPU + RSS), **idle cost** (git poll 2.5s + clock + status signals
+should be ~0%), **React re-render** discipline under high-frequency status updates.
+
+**Plan (measure before optimizing):**
+
+1. Define scenarios + metrics: MB/s drained, CPU%, RSS (via `app.getAppMetrics()` / `process.getProcessMemoryInfo()`).
+2. Repeatable load harness + baselines (compare vs iTerm2 / VS Code on the same box).
+3. Fix the biggest offender, re-measure.
+
+**Hypotheses (to confirm, not assume):**
+
+- **Per-chunk IPC is the prime suspect** — `main.ts` does `event.sender.send` per `node-pty` onData;
+  heavy output = thousands of main→renderer messages/sec. Likely fix: **coalesce** chunks over a small
+  window (~4–8ms or size threshold) into one message.
+- **Flow control** — pause `node-pty` when xterm's write buffer backs up (xterm `write()` callback),
+  resume when drained, so a firehose can't outrun the renderer.
+- **Store selectors** — verify busy sessions (150ms output signals / status flips) don't re-render the
+  whole sidebar/top-bar; keep selectors narrow.
 
 ---
 
