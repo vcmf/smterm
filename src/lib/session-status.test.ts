@@ -24,11 +24,13 @@ describe("reduceSignals", () => {
     expect(reduceSignals(initialSignals, { type: "attention" }, true)).toEqual(initialSignals)
   })
 
-  it("output-idle flips a working session to attention (agent went quiet)", () => {
+  it("output-idle flips a hidden working session to attention (agent went quiet)", () => {
     const busy: Signals = { status: "working", unread: false }
-    expect(reduceSignals(busy, { type: "output-idle" }, true).status).toBe("attention")
+    expect(reduceSignals(busy, { type: "output-idle" }, false).status).toBe("attention")
+    // ...but never nags the pane you're looking at
+    expect(reduceSignals(busy, { type: "output-idle" }, true)).toEqual(busy)
     // idle/attention sessions are untouched by the idle timer
-    expect(reduceSignals(initialSignals, { type: "output-idle" }, true)).toEqual(initialSignals)
+    expect(reduceSignals(initialSignals, { type: "output-idle" }, false)).toEqual(initialSignals)
     const attn: Signals = { status: "attention", unread: true }
     expect(reduceSignals(attn, { type: "output-idle" }, false)).toEqual(attn)
   })

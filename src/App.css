@@ -535,6 +535,19 @@ body {
 .terminal-pane.waiting {
   box-shadow: inset 0 2px 0 var(--amber);
 }
+/* Brief full-border flash when a pane first needs attention, then it settles. */
+.terminal-pane.attn-flash {
+  animation: attn-flash 0.5s ease-in-out 3;
+}
+@keyframes attn-flash {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 2px var(--amber);
+  }
+  50% {
+    box-shadow: inset 0 0 0 2px transparent;
+  }
+}
 .pane-header {
   height: 32px;
   flex: 0 0 auto;

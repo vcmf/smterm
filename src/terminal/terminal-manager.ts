@@ -3,7 +3,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import type { Session } from "../types"
-import { useStore, isSessionVisible } from "../store"
+import { useStore } from "../store"
 import { notify } from "../lib/notify"
 import { ipc } from "../lib/ipc"
 import { getTheme } from "../settings/themes"
@@ -130,7 +130,9 @@ function spawn(session: Session, entry: Entry) {
   const raiseAttention = (detail?: string) => {
     const wasAttention = useStore.getState().sessions[session.id]?.status === "attention"
     store.signalSession(session.id, { type: "attention", detail })
-    if (!isSessionVisible(session.id) && !wasAttention) {
+    // OS notification only when you're away from the app (the dot/bell cover the
+    // in-app case), and only on the transition into attention (de-noise).
+    if (!useStore.getState().windowFocused && !wasAttention) {
       const s = useStore.getState().sessions[session.id]
       const home = useStore.getState().home
       void notify(displaySessionTitle(s, home), detail || "wants your attention")

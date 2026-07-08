@@ -24,6 +24,10 @@ export type SignalEvent =
  * quiet it flips to "attention" — the moment an agent (e.g. Claude Code) finishes
  * a turn and waits for input. Fresh output resumes "working". A plain idle prompt
  * never enters working (only command-start does), so it never false-flags.
+ *
+ * The heuristic never flags the pane you're looking at (`visible`): you're the
+ * input, so nagging the focused pane is wrong — that only creates a
+ * running↔needs-input flicker as you type.
  */
 export function reduceSignals(cur: Signals, ev: SignalEvent, visible: boolean): Signals {
   switch (ev.type) {
@@ -41,9 +45,7 @@ export function reduceSignals(cur: Signals, ev: SignalEvent, visible: boolean): 
       return { status, unread: visible ? cur.unread : true }
     }
     case "output-idle":
-      return cur.status === "working"
-        ? { status: "attention", unread: cur.unread || !visible }
-        : cur
+      return !visible && cur.status === "working" ? { status: "attention", unread: true } : cur
   }
 }
 

@@ -64,11 +64,24 @@ interface AppState {
   revealTab: (tabId: string) => void
 }
 
-/** Whether a session is currently on-screen (window focused + in the active tab). */
+/** Whether the user is actively looking at this exact session: window focused +
+ *  it's the active tab's focused pane. Per-pane, so the heuristic never nags (and
+ *  we don't badge) the pane you're driving. */
 export function isVisibleIn(state: AppState, sessionId: string): boolean {
   if (!state.windowFocused || !state.activeTabId) return false
   const tab = state.tabs.find((t) => t.id === state.activeTabId)
-  return tab ? allSessionIds(tab.root).includes(sessionId) : false
+  return tab?.activeSessionId === sessionId
+}
+
+/** Mark a session as seen: drop its attention/unread/reason. */
+function seen(s: Session): Session {
+  if (s.status !== "attention" && !s.unread && !s.detail) return s
+  return {
+    ...s,
+    status: s.status === "attention" ? "idle" : s.status,
+    unread: false,
+    detail: undefined,
+  }
 }
 
 export const isSessionVisible = (sessionId: string): boolean =>
@@ -193,9 +206,14 @@ export const useStore = create<AppState>((set, get) => ({
     }),
 
   setActivePane: (tabId, sessionId) =>
-    set((state) => ({
-      tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, activeSessionId: sessionId } : t)),
-    })),
+    set((state) => {
+      const session = state.sessions[sessionId]
+      return {
+        tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, activeSessionId: sessionId } : t)),
+        // Focusing a pane = you've seen it: clear its attention/unread/reason.
+        sessions: session ? { ...state.sessions, [sessionId]: seen(session) } : state.sessions,
+      }
+    }),
 
   setWindowFocused: (focused) => {
     set({ windowFocused: focused })

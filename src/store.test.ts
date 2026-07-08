@@ -103,9 +103,12 @@ describe("store — status signals & visibility", () => {
     expect(st().sessions[id]!.unread).toBe(true)
   })
 
-  it("output-idle flips a working session to attention", () => {
+  it("output-idle flips a hidden working session to attention (not the focused one)", () => {
     const id = setup()
     st().signalSession(id, { type: "command-start" })
+    st().signalSession(id, { type: "output-idle" }) // focused → ignored
+    expect(st().sessions[id]!.status).toBe("working")
+    useStore.setState({ windowFocused: false }) // now hidden
     st().signalSession(id, { type: "output-idle" })
     expect(st().sessions[id]!.status).toBe("attention")
   })
@@ -122,8 +125,20 @@ describe("store — status signals & visibility", () => {
   it("output-idle attention detail defaults to 'needs input'", () => {
     const id = setup()
     st().signalSession(id, { type: "command-start" })
+    useStore.setState({ windowFocused: false })
     st().signalSession(id, { type: "output-idle" })
     expect(st().sessions[id]!.detail).toBe("needs input")
+  })
+
+  it("focusing a pane (setActivePane) clears its attention", () => {
+    const id = setup()
+    st().splitActive("row", shell)
+    useStore.setState({ windowFocused: false })
+    st().signalSession(id, { type: "attention", detail: "needs input" })
+    expect(st().sessions[id]!.status).toBe("attention")
+    st().setActivePane(firstTab().id, id) // go look at it
+    expect(st().sessions[id]!.status).toBe("idle")
+    expect(st().sessions[id]!.detail).toBeUndefined()
   })
 
   it("revealTab clears unread and downgrades attention to idle", () => {
