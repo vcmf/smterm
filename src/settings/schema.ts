@@ -16,7 +16,10 @@ export const defaultSettings: Settings = {
   // FiraCode Nerd Font Mono has BOTH ligatures and Nerd/Powerline icons in one
   // font (xterm's canvas renderer doesn't fall back per-glyph, so the primary
   // font must carry the icons). Falls back to bundled JetBrains Mono if absent.
-  font: { family: "FiraCode Nerd Font Mono", size: 13, ligatures: true, lineHeight: 1.2 },
+  // Ligatures default OFF: the WebGL renderer + ligature joiner leaves paint
+  // remnants → garbled glyphs with multiple panes (xterm.js #3303). Opt in if you
+  // don't hit it. See ARCHITECTURE §9a / the rendering notes.
+  font: { family: "FiraCode Nerd Font Mono", size: 13, ligatures: false, lineHeight: 1.2 },
   theme: "minimal-dark",
   cursorBlink: true,
   scrollback: 5000,
