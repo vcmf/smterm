@@ -603,6 +603,11 @@ body {
   height: 100%;
   width: 100%;
 }
+/* xterm paints the viewport pure black; the grid is whole cells, so the sub-cell
+   remainder below the last row showed a black strip. Match the terminal bg. */
+.terminal-host .xterm-viewport {
+  background-color: var(--bg) !important;
+}
 
 /* react-resizable-panels: fill container; 1px hairline seams via bg showing through */
 [data-group] {
