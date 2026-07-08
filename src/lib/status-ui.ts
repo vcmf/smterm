@@ -12,7 +12,7 @@ export function statusUi(status: SessionStatus): StatusUi {
     case "working":
       return { dot: "accent", word: "running", pulse: true }
     case "attention":
-      return { dot: "amber", word: "waiting", pulse: false }
+      return { dot: "amber", word: "needs input", pulse: false }
     default:
       return { dot: "faint", word: "idle", pulse: false }
   }

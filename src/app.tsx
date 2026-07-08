@@ -151,6 +151,11 @@ function App() {
     }
   }, [activeCwd])
 
+  // Cache $HOME once (for home-relative cwd labels in the sidebar).
+  useEffect(() => {
+    void ipc.platformInfo().then((i) => useStore.getState().setHome(i.home))
+  }, [])
+
   // Load-test mode (SMTERM_PERF=1): run the perf suite once, then report.
   useEffect(() => {
     void ipc.perfMode().then((on) => {

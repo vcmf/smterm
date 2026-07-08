@@ -4,12 +4,15 @@ import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { allSessionIds } from "../lib/pane-tree"
 import { statusUi } from "../lib/status-ui"
+import { tabTitle, shortCwd, sessionSubline } from "../lib/session-label"
 
 /** Left sidebar: a tree of real sessions (tabs) → panes, with live status dots. */
 export function Sidebar() {
   const tabs = useStore((s) => s.tabs)
   const activeTabId = useStore((s) => s.activeTabId)
   const sessions = useStore((s) => s.sessions)
+  const git = useStore((s) => s.git)
+  const home = useStore((s) => s.home)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   const toggle = (id: string) =>
@@ -27,6 +30,15 @@ export function Sidebar() {
     requestAnimationFrame(() => TerminalManager.focus(sessionId))
   }
 
+  // Branch is only known for the focused session's cwd (single git poller).
+  const branchFor = (sessionId: string) =>
+    activeTabId &&
+    tabs.find((t) => t.id === activeTabId)?.activeSessionId === sessionId &&
+    git?.isRepo &&
+    git.branch
+      ? git.branch
+      : undefined
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -39,6 +51,8 @@ export function Sidebar() {
           const ids = allSessionIds(tab.root)
           const open = !collapsed.has(tab.id)
           const active = tab.id === activeTabId
+          const focused = sessions[tab.activeSessionId]
+          const groupSub = sessionSubline(focused?.cwd, home, branchFor(tab.activeSessionId))
           return (
             <div key={tab.id}>
               <div
@@ -56,7 +70,8 @@ export function Sidebar() {
                   {open ? <CaretDown size={13} /> : <CaretRight size={13} />}
                 </button>
                 <div className="tree-labels">
-                  <span className="tree-primary session">{tab.title}</span>
+                  <span className="tree-primary session">{tabTitle(tab, sessions)}</span>
+                  {groupSub && <span className="tree-sub">{groupSub}</span>}
                 </div>
                 <span className="tree-meta status-faint">
                   {ids.length} {ids.length === 1 ? "pane" : "panes"}
@@ -85,12 +100,11 @@ export function Sidebar() {
                       </span>
                       <div className="tree-labels">
                         <span className="tree-primary">{s.title}</span>
-                        <span className="tree-sub">{s.command || "shell"}</span>
+                        <span className="tree-sub">
+                          {shortCwd(s.cwd, home) || s.command || "shell"}
+                        </span>
                       </div>
-                      <span
-                        className="tree-meta"
-                        style={{ color: `var(--${ui.dot === "faint" ? "faint" : ui.dot})` }}
-                      >
+                      <span className="tree-meta" style={{ color: `var(--${ui.dot})` }}>
                         {ui.word}
                       </span>
                       <span className={`dot ${ui.dot}${ui.pulse ? " pulse" : ""}`} />
@@ -107,7 +121,7 @@ export function Sidebar() {
           <span className="dot accent" /> running
         </span>
         <span className="legend-item">
-          <span className="dot amber" /> waiting
+          <span className="dot amber" /> needs input
         </span>
         <span className="legend-item">
           <span className="dot faint" /> idle

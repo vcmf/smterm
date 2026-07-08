@@ -201,7 +201,7 @@ function registerIpc() {
   ipcMain.handle("platform:info", async () => {
     const label =
       process.platform === "darwin" ? "macOS" : process.platform === "win32" ? "Windows" : "Linux"
-    return { platform: process.platform, label, release: os.release() }
+    return { platform: process.platform, label, release: os.release(), home: os.homedir() }
   })
 
   // Settings.

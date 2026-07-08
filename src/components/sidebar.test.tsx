@@ -25,7 +25,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("work")).toBeInTheDocument() // session (tab) row
     expect(screen.getByText("1 pane")).toBeInTheDocument()
     expect(screen.getByText("running")).toBeInTheDocument()
-    expect(screen.getByText("waiting")).toBeInTheDocument()
+    expect(screen.getByText("needs input")).toBeInTheDocument()
   })
 
   it("shows a pane row per session with its status word", () => {

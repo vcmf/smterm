@@ -166,6 +166,27 @@ describe("store — cwd & UI toggles", () => {
     expect(st().git?.branch).toBe("main")
   })
 
+  it("setSessionTitle updates a session's live title; ignores empty/unknown", () => {
+    st().newTab(shell)
+    const id = allSessionIds(firstTab().root)[0]!
+    st().setSessionTitle(id, "claude: fix auth")
+    expect(st().sessions[id]!.title).toBe("claude: fix auth")
+    st().setSessionTitle(id, "   ") // blank → ignored
+    expect(st().sessions[id]!.title).toBe("claude: fix auth")
+    st().setSessionTitle("nope", "x") // unknown → no-op
+    expect(st().sessions.nope).toBeUndefined()
+  })
+
+  it("newTab starts unpinned (empty tab title)", () => {
+    st().newTab(shell)
+    expect(firstTab().title).toBe("")
+  })
+
+  it("setHome stores $HOME", () => {
+    st().setHome("/Users/me")
+    expect(st().home).toBe("/Users/me")
+  })
+
   it("splitActive inherits the source pane's cwd", () => {
     st().newTab(shell)
     const src = allSessionIds(firstTab().root)[0]!

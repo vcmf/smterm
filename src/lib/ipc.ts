@@ -52,6 +52,7 @@ export interface PlatformInfo {
   platform: string
   label: string
   release: string
+  home: string
 }
 
 export type ChangeStatus = "M" | "A" | "D" | "R" | "?"

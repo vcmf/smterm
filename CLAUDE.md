@@ -28,6 +28,7 @@ src/
   lib/pane-tree.ts      pure split/remove/collapse/query (unit-tested)
   lib/session-status.ts pure status reducer + tab-badge aggregation (unit-tested)
   lib/status-ui.ts      status → dot colour/word/pulse (shared by sidebar/status/pane)
+  lib/session-label.ts  tab title (OSC/pin) + branch•cwd sublines (pure, tested)
   lib/use-active-cwd.ts hook: focused session's cwd (OSC-7 tracked) → git panel/status bar
   terminal/terminal-manager.ts  xterm+PTY kept OUTSIDE React, keyed by session id
   settings/            schema (merge/validate) · themes (tokens→CSS+xterm) · io

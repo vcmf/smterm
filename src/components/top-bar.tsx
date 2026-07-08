@@ -14,6 +14,7 @@ import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
 import { allSessionIds } from "../lib/pane-tree"
 import { aggregateBadge } from "../lib/session-status"
+import { tabTitle } from "../lib/session-label"
 
 /** The mux top bar: brand · session tabs · search pill · window controls. */
 export function TopBar() {
@@ -79,7 +80,7 @@ export function TopBar() {
               key={tab.id}
               className={`tab${tab.id === activeTabId ? " active" : ""}`}
               onMouseDown={() => useStore.getState().setActiveTab(tab.id)}
-              onDoubleClick={() => startRename(tab.id, tab.title)}
+              onDoubleClick={() => startRename(tab.id, tabTitle(tab, sessions))}
             >
               {badge && <span className={`dot ${dotClass}${pulse ? " pulse" : ""}`} />}
               {editingId === tab.id ? (
@@ -96,7 +97,7 @@ export function TopBar() {
                   }}
                 />
               ) : (
-                <span className="tab-title">{tab.title}</span>
+                <span className="tab-title">{tabTitle(tab, sessions)}</span>
               )}
               {ids.length > 1 && <span className="tab-count">{ids.length}</span>}
               <button

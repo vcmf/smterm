@@ -40,7 +40,10 @@ interface AppState {
   paletteOpen: boolean
   diffPanelOpen: boolean
   git: GitStatus | null
+  home: string
 
+  setHome: (home: string) => void
+  setSessionTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
   setDiffPanelOpen: (open: boolean) => void
   setSessionCwd: (sessionId: string, cwd: string) => void
@@ -82,7 +85,16 @@ export const useStore = create<AppState>((set, get) => ({
   paletteOpen: false,
   diffPanelOpen: false,
   git: null,
+  home: "",
 
+  setHome: (home) => set({ home }),
+  setSessionTitle: (sessionId, title) =>
+    set((state) => {
+      const s = state.sessions[sessionId]
+      const next = title.trim()
+      if (!s || !next || s.title === next) return {}
+      return { sessions: { ...state.sessions, [sessionId]: { ...s, title: next } } }
+    }),
   setGit: (git) => set({ git }),
   setDiffPanelOpen: (diffPanelOpen) => set({ diffPanelOpen }),
   setSessionCwd: (sessionId, cwd) =>
@@ -104,7 +116,7 @@ export const useStore = create<AppState>((set, get) => ({
       const session = makeSession(shell, focusedCwd(state))
       const tab: Tab = {
         id: newId(),
-        title: shell.label,
+        title: "", // unpinned — display derives from the focused pane's live title
         root: makeLeaf(session.id),
         activeSessionId: session.id,
       }

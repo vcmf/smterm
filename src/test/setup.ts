@@ -28,7 +28,12 @@ const smtermStub = {
   closeWindow: vi.fn(),
   isMaximized: vi.fn(async () => false),
   onMaximizeChange: vi.fn(unsub),
-  platformInfo: vi.fn(async () => ({ platform: "darwin", label: "macOS", release: "test" })),
+  platformInfo: vi.fn(async () => ({
+    platform: "darwin",
+    label: "macOS",
+    release: "test",
+    home: "/Users/test",
+  })),
   gitStatus: vi.fn(async () => ({
     isRepo: false,
     branch: "",
