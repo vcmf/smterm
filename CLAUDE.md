@@ -61,3 +61,10 @@ src/
   (in `make install`). Vitest can't load it (Electron ABI), so PTY spawning isn't unit-tested there.
 - Ligatures need `allowProposedApi` + the character joiner (works on WebGL, not the DOM renderer).
 - On Windows the app spawns `wsl.exe` as a shell — it never runs _inside_ WSL.
+- **cwd tracking is OSC-7-based.** `session.cwd` is set only when the shell emits OSC 7 (our
+  zsh/bash integration does, from `precmd`). It drives the **git diff panel** and **cwd inheritance**
+  (splits + new tabs open in the focused terminal's dir). Shells that don't emit OSC 7 (plain
+  PowerShell/cmd, or before the first prompt) have no cwd → the diff panel is empty and new panes
+  fall back to `$HOME`. Not a bug — graceful degradation.
+- **No session persistence (yet).** State is in-memory Zustand; `before-quit` kills every PTY. Closing
+  the app loses all tabs/panes; reopening starts fresh. Restore/reattach is ROADMAP M5.
