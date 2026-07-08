@@ -9,6 +9,7 @@ import { watch } from "chokidar"
 import { listShells, buildInjection } from "./shell-integration"
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
+import { OutputBuffer } from "./output-buffer"
 import { appendDiag } from "./diagnostics"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
@@ -19,14 +20,32 @@ const dir = path.dirname(fileURLToPath(import.meta.url))
 const diag = (event: string, fields?: Record<string, string | number | boolean>) =>
   appendDiag(configDir(), event, fields)
 
-const ptys = new Map<string, IPty>()
-const coalescers = new Map<string, OutputCoalescer>()
+// One record per live PTY. The PTY lives in the main process, so it survives a
+// renderer reload (dev HMR on resume, or a GPU-process crash) — `sender` is the
+// CURRENT renderer target and is rebound on reattach; `buffer` holds recent output
+// so the reloaded renderer can replay history instead of respawning the shell.
+interface PtySession {
+  id: string
+  proc: IPty
+  buffer: OutputBuffer
+  sender: Electron.WebContents
+  coalescer?: OutputCoalescer // absent only in the SMTERM_NO_COALESCE=1 A/B baseline
+  shell: string
+}
+const sessions = new Map<string, PtySession>()
 let mainWindow: BrowserWindow | null = null
 let quitConfirmed = false
 
 // PTY output batching (see electron/coalescer.ts + PERF.md).
 const PTY_FLUSH_MS = 4
 const PTY_MAX_FLUSH_BYTES = 256 * 1024
+// Recent output kept per session for replay when a reloaded renderer reattaches.
+const PTY_REPLAY_BYTES = 256 * 1024
+
+// Send PTY output to the session's current renderer (skips a destroyed one).
+function emit(rec: PtySession, data: string): void {
+  if (!rec.sender.isDestroyed()) rec.sender.send(`pty:data:${rec.id}`, data)
+}
 
 function defaultShell(): string {
   return process.env.SHELL ?? (process.platform === "win32" ? "powershell.exe" : "/bin/zsh")
@@ -116,7 +135,9 @@ function writeSettings(contents: string): void {
 }
 
 function registerIpc() {
-  // PTY — one node-pty per session; stream output back over pty:data:<id>.
+  // PTY — one node-pty per session; stream output back over pty:data:<id>. When a
+  // reloaded renderer asks to spawn a session that's already live, REATTACH: rebind
+  // output to the new renderer and replay recent history, rather than respawn.
   ipcMain.handle(
     "pty:spawn",
     (
@@ -129,7 +150,23 @@ function registerIpc() {
         args: string[]
         cwd?: string
       },
-    ) => {
+    ): { reattached: boolean } => {
+      const existing = sessions.get(opts.id)
+      if (existing) {
+        // Reattach: point output at the new renderer, drop stale in-flight bytes
+        // (they're in the buffer), resize to the new xterm, then replay history.
+        existing.sender = event.sender
+        existing.coalescer?.reset()
+        try {
+          existing.proc.resize(opts.cols || 80, opts.rows || 24)
+        } catch {
+          // transient 0-size during layout — a later resize settles it
+        }
+        emit(existing, existing.buffer.dump())
+        diag("pty-reattach", { id: opts.id, pid: existing.proc.pid })
+        return { reattached: true }
+      }
+
       const shellCmd = opts.shell || defaultShell()
       const inj = buildInjection(shellCmd)
       const startCwd = opts.cwd && fs.existsSync(opts.cwd) ? opts.cwd : os.homedir()
@@ -140,47 +177,48 @@ function registerIpc() {
         cwd: startCwd,
         env: { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>,
       })
-      const send = (data: string) => {
-        if (!event.sender.isDestroyed()) event.sender.send(`pty:data:${opts.id}`, data)
+      const coalesce = process.env.SMTERM_NO_COALESCE !== "1"
+      const rec: PtySession = {
+        id: opts.id,
+        proc,
+        buffer: new OutputBuffer(PTY_REPLAY_BYTES),
+        sender: event.sender,
+        shell: shellCmd,
       }
-      const onExit = (e: { exitCode: number; signal?: number }) =>
+      if (coalesce) {
+        rec.coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, (d) => emit(rec, d))
+      }
+      proc.onData((data) => {
+        rec.buffer.push(data) // keep for replay on reattach
+        if (rec.coalescer) rec.coalescer.push(data)
+        else emit(rec, data) // A/B baseline: one IPC message per node-pty chunk
+      })
+      proc.onExit((e) => {
         diag("pty-exit", { id: opts.id, code: e.exitCode, signal: e.signal ?? 0 })
-      if (process.env.SMTERM_NO_COALESCE === "1") {
-        // A/B baseline: one IPC message per node-pty chunk (the old path).
-        proc.onData(send)
-        proc.onExit((e) => {
-          onExit(e)
-          ptys.delete(opts.id)
-        })
-      } else {
-        // Coalesce output into fewer IPC messages.
-        const coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, send)
-        coalescers.set(opts.id, coalescer)
-        proc.onData((data) => coalescer.push(data))
-        proc.onExit((e) => {
-          onExit(e)
-          coalescer.flush() // don't lose the final output
-          coalescers.delete(opts.id)
-          ptys.delete(opts.id)
-        })
-      }
-      ptys.set(opts.id, proc)
+        rec.coalescer?.flush() // don't lose the final output
+        sessions.delete(opts.id)
+      })
+      sessions.set(opts.id, rec)
       diag("pty-spawn", { id: opts.id, pid: proc.pid, shell: path.basename(shellCmd) })
+      return { reattached: false }
     },
   )
-  ipcMain.on("pty:write", (_e, id: string, data: string) => ptys.get(id)?.write(data))
+  ipcMain.on("pty:write", (_e, id: string, data: string) => sessions.get(id)?.proc.write(data))
   ipcMain.on("pty:resize", (_e, id: string, cols: number, rows: number) => {
     try {
-      ptys.get(id)?.resize(cols, rows)
+      sessions.get(id)?.proc.resize(cols, rows)
     } catch {
       // ignore transient 0-size during layout
     }
   })
+  // Explicit kill (pane/tab closed) — really terminate + free the replay buffer.
   ipcMain.on("pty:kill", (_e, id: string) => {
-    coalescers.get(id)?.dispose()
-    coalescers.delete(id)
-    ptys.get(id)?.kill()
-    ptys.delete(id)
+    const rec = sessions.get(id)
+    if (!rec) return
+    rec.coalescer?.dispose()
+    rec.buffer.clear()
+    rec.proc.kill()
+    sessions.delete(id)
   })
 
   // Shells — per-OS defaults + WSL distro enumeration.
@@ -259,7 +297,7 @@ app.whenReady().then(() => {
   // we can register them in a loop.
   const onPower = powerMonitor.on.bind(powerMonitor) as (e: string, cb: () => void) => void
   for (const ev of ["suspend", "resume", "lock-screen", "unlock-screen", "shutdown"]) {
-    onPower(ev, () => diag(`power-${ev}`, { ptys: ptys.size }))
+    onPower(ev, () => diag(`power-${ev}`, { ptys: sessions.size }))
   }
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -271,20 +309,19 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
 
-app.on("will-quit", () => diag("will-quit", { ptys: ptys.size }))
+app.on("will-quit", () => diag("will-quit", { ptys: sessions.size }))
 app.on("quit", () => diag("quit"))
 
 function killAllPtys() {
-  for (const c of coalescers.values()) c.dispose()
-  coalescers.clear()
-  for (const p of ptys.values()) {
+  for (const rec of sessions.values()) {
+    rec.coalescer?.dispose()
     try {
-      p.kill()
+      rec.proc.kill()
     } catch {
       // already gone
     }
   }
-  ptys.clear()
+  sessions.clear()
 }
 
 // Is the quit-confirmation prompt enabled? (reads settings.json live)
@@ -309,13 +346,13 @@ function disableConfirmQuit() {
 
 // Guard quit (⌘Q or the close button) when live sessions would be killed.
 app.on("before-quit", (e) => {
-  diag("before-quit", { ptys: ptys.size, confirmed: quitConfirmed })
-  if (quitConfirmed || ptys.size === 0 || !confirmQuitEnabled() || !mainWindow) {
+  diag("before-quit", { ptys: sessions.size, confirmed: quitConfirmed })
+  if (quitConfirmed || sessions.size === 0 || !confirmQuitEnabled() || !mainWindow) {
     killAllPtys()
     return
   }
   e.preventDefault()
-  const n = ptys.size
+  const n = sessions.size
   void dialog
     .showMessageBox(mainWindow, {
       type: "warning",

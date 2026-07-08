@@ -13,7 +13,9 @@ export interface SpawnOpts {
 }
 
 export interface Ipc {
-  ptySpawn: (opts: SpawnOpts) => Promise<void>
+  // Resolves { reattached: true } when the session was already live in main and we
+  // reconnected the (reloaded) renderer to it, replaying history, instead of spawning.
+  ptySpawn: (opts: SpawnOpts) => Promise<{ reattached: boolean }>
   onPtyData: (id: string, cb: (data: string) => void) => () => void
   ptyWrite: (id: string, data: string) => void
   ptyResize: (id: string, cols: number, rows: number) => void
