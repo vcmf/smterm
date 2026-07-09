@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Terminal, X, Columns, Rows } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
+import { allSessionIds } from "../lib/pane-tree"
 import { displaySessionTitle, shellType } from "../lib/session-label"
 
 /** A mount point for one session's terminal. The terminal itself lives in
@@ -16,6 +17,12 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
       s.activeTabId === tabId && s.tabs.find((t) => t.id === tabId)?.activeSessionId === sessionId,
   )
   const status = session?.status ?? "idle"
+  // The focus/attention top rail only disambiguates between panes — pointless when
+  // the tab has a single pane, so suppress it there.
+  const isSplit = useStore((s) => {
+    const tab = s.tabs.find((t) => t.id === tabId)
+    return tab ? allSessionIds(tab.root).length > 1 : false
+  })
 
   // Quick split (cmux-style): split THIS pane, inheriting its shell + cwd.
   const split = (direction: "row" | "column") => {
@@ -37,7 +44,7 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
     return () => ro.disconnect()
   }, [sessionId])
 
-  const railClass = focused ? " focused" : status === "attention" ? " waiting" : ""
+  const railClass = !isSplit ? "" : focused ? " focused" : status === "attention" ? " waiting" : ""
 
   // Right-click clipboard menu. Copy is disabled without a selection.
   const openMenu = (e: React.MouseEvent) => {
