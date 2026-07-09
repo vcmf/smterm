@@ -26,6 +26,9 @@ dev: run ## Alias for `run`
 build: ## Build the app (electron-vite)
 	npm run build
 
+dist: ## Package installable artifacts for this OS (ad-hoc signed; .dmg/.zip on mac)
+	npm run dist
+
 ## ─────────────────────────────── Lint ────────────────────────────────
 
 .PHONY: lint

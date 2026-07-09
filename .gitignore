@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+out
+release
 *.local
 
 # Claude Code local (machine-specific) settings
