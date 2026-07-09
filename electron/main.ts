@@ -15,7 +15,13 @@ import os from "node:os"
 import * as pty from "node-pty"
 import type { IPty } from "node-pty"
 import { watch } from "chokidar"
-import { listShells, buildInjection, isWslShell, wslCdArgs } from "./shell-integration"
+import {
+  listShells,
+  buildInjection,
+  isWslShell,
+  wslCdArgs,
+  buildWslInjection,
+} from "./shell-integration"
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
 import { OutputBuffer } from "./output-buffer"
@@ -178,11 +184,12 @@ function registerIpc() {
       }
 
       const shellCmd = opts.shell || defaultShell()
-      const inj = buildInjection(shellCmd)
-      // WSL: the Linux shell runs inside wsl.exe. A Windows cwd would translate to
-      // /mnt/c/... so we drive the Linux start dir via wsl's own --cd (home unless we
-      // have a tracked Linux path), and launch wsl.exe from a valid Windows dir.
+      // WSL: the Linux shell runs inside wsl.exe. Drive the Linux start dir via wsl's
+      // own --cd (home unless we have a tracked Linux path); inject our integration
+      // INSIDE WSL (best-effort → OSC-133 status + OSC-7 cwd); launch wsl.exe from a
+      // valid Windows dir. Local shells inject the usual way.
       const wsl = isWslShell(shellCmd)
+      const inj = wsl ? buildWslInjection(opts.args ?? []) : buildInjection(shellCmd)
       const wslArgs = wsl ? wslCdArgs(opts.cwd) : []
       const startCwd = !wsl && opts.cwd && fs.existsSync(opts.cwd) ? opts.cwd : os.homedir()
       const proc = pty.spawn(shellCmd, [...(opts.args ?? []), ...wslArgs, ...(inj?.args ?? [])], {

@@ -168,6 +168,67 @@ export function wslCdArgs(cwd: string | undefined): string[] {
   return ["--cd", cwd && cwd.startsWith("/") ? cwd : "~"]
 }
 
+/** The login shell (last field) of a `getent passwd` line. Pure — tested. */
+export function parseLoginShell(getentLine: string): string {
+  const f = getentLine.trim().split(":")
+  return f.length >= 7 ? (f[f.length - 1] ?? "") : ""
+}
+
+/** Trailing `wsl.exe` args + env to run the login shell with our integration sourced
+ *  INSIDE WSL — reusing the same OSC-133/OSC-7 scripts we use natively (so status +
+ *  cwd work). `wslBase` is our script dir already translated to a WSL path. Pure —
+ *  tested. Returns null for shells we don't integrate (fish, …) → plain shell.
+ *  `wslenv` lists env vars WSL must forward across the boundary (via $WSLENV). */
+export function wslInjection(
+  loginShell: string,
+  wslBase: string,
+): { args: string[]; env: Record<string, string>; wslenv: string[] } | null {
+  const name = loginShell.split("/").pop() ?? ""
+  if (name === "bash") {
+    // --rcfile takes a literal path (already WSL-translated); it sources ~/.bashrc.
+    return { args: ["--", "bash", "--rcfile", `${wslBase}/bash/bashrc`, "-i"], env: {}, wslenv: [] }
+  }
+  if (name === "zsh") {
+    // zsh finds our .zshrc via $ZDOTDIR; it restores ZDOTDIR to $HOME + sources ~/.zshrc.
+    const zdir = `${wslBase}/zsh`
+    return {
+      args: ["--", "zsh", "-i"],
+      env: { ZDOTDIR: zdir, SMTERM_SHELL_INTEGRATION: "1" },
+      wslenv: ["ZDOTDIR", "SMTERM_SHELL_INTEGRATION"],
+    }
+  }
+  return null
+}
+
+/** Best-effort WSL integration: translate our script dir into the distro (`wslpath`)
+ *  + detect its login shell (`getent`), then build the injection. Returns null on any
+ *  failure so the caller falls back to a plain `wsl.exe` (never breaks WSL). */
+export function buildWslInjection(
+  distroArgs: string[],
+): { args: string[]; env: Record<string, string> } | null {
+  try {
+    const base = integrationBase()
+    materialize(base)
+    const run = (extra: string[]) =>
+      execFileSync("wsl.exe", [...distroArgs, ...extra], {
+        encoding: "utf8",
+        timeout: 5000,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+    const wslBase = run(["wslpath", "-u", base]).trim()
+    if (!wslBase) return null
+    const passwd = run(["-e", "sh", "-c", 'getent passwd "$(id -un)"'])
+    const inj = wslInjection(parseLoginShell(passwd), wslBase)
+    if (!inj) return null
+    const env: Record<string, string> = { ...inj.env }
+    if (inj.wslenv.length)
+      env.WSLENV = [process.env.WSLENV, ...inj.wslenv].filter(Boolean).join(":")
+    return { args: inj.args, env }
+  } catch {
+    return null // WSL not ready / wslpath missing / exotic setup → plain shell
+  }
+}
+
 /** Parse `wsl.exe -l -q` output (one distro per line). Pure — unit-tested. */
 export function parseWslDistros(output: string): string[] {
   return output

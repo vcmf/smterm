@@ -4,6 +4,8 @@ import {
   buildInjection,
   isWslShell,
   wslCdArgs,
+  parseLoginShell,
+  wslInjection,
   ZSH_ZSHRC,
   BASH_RC,
 } from "./shell-integration"
@@ -41,6 +43,37 @@ describe("wslCdArgs", () => {
   })
   it("passes through a tracked Linux path", () => {
     expect(wslCdArgs("/home/me/proj")).toEqual(["--cd", "/home/me/proj"])
+  })
+})
+
+describe("parseLoginShell", () => {
+  it("takes the last field of a getent passwd line", () => {
+    expect(parseLoginShell("me:x:1000:1000:Me:/home/me:/usr/bin/zsh")).toBe("/usr/bin/zsh")
+    expect(parseLoginShell("root:x:0:0:root:/root:/bin/bash\n")).toBe("/bin/bash")
+  })
+  it("returns empty for a malformed line", () => {
+    expect(parseLoginShell("garbage")).toBe("")
+  })
+})
+
+describe("wslInjection", () => {
+  const base = "/mnt/c/Users/me/AppData/Local/Temp/smterm/shell-integration"
+
+  it("bash → --rcfile with the WSL-translated path", () => {
+    const r = wslInjection("/bin/bash", base)
+    expect(r?.args).toEqual(["--", "bash", "--rcfile", `${base}/bash/bashrc`, "-i"])
+    expect(r?.wslenv).toEqual([])
+  })
+
+  it("zsh → ZDOTDIR forwarded across the WSL boundary", () => {
+    const r = wslInjection("/usr/bin/zsh", base)
+    expect(r?.args).toEqual(["--", "zsh", "-i"])
+    expect(r?.env.ZDOTDIR).toBe(`${base}/zsh`)
+    expect(r?.wslenv).toContain("ZDOTDIR")
+  })
+
+  it("unsupported shells (fish) → null (plain shell, no integration)", () => {
+    expect(wslInjection("/usr/bin/fish", base)).toBeNull()
   })
 })
 
