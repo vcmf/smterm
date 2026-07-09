@@ -5,6 +5,12 @@ appId: com.smterm.app
 productName: smterm
 copyright: Copyright © 2026 smterm authors
 
+# CI publishes artifacts to GitHub Releases for the pushed tag (release.yml).
+publish:
+  provider: github
+  owner: vcmf
+  repo: smterm
+
 directories:
   output: release
   buildResources: build
