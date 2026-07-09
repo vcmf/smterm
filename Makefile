@@ -26,6 +26,16 @@ dev: run ## Alias for `run`
 build: ## Build the app (electron-vite)
 	npm run build
 
+.PHONY: dist
+dist: ## Package installable artifacts for this OS (ad-hoc signed; .dmg/.zip on mac)
+	npm run dist
+
+.PHONY: release
+release: ## Cut a release: bump version + tag + push (BUMP=patch|minor|major, default patch)
+	npm version $(or $(BUMP),patch) -m "release: v%s"
+	git push --follow-tags
+	@echo "Pushed tag — the Release workflow will build + publish installers."
+
 ## ─────────────────────────────── Lint ────────────────────────────────
 
 .PHONY: lint

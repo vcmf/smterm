@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
+import { SearchAddon, type ISearchOptions } from "@xterm/addon-search"
 import type { Session } from "../types"
 import { useStore } from "../store"
 import { notify } from "../lib/notify"
@@ -12,10 +13,14 @@ import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
 import { allSessionIds } from "../lib/pane-tree"
 import { shouldUseWebgl } from "../lib/renderer-policy"
+import { keyAction } from "../lib/terminal-keys"
+
+const isMac = /mac/i.test(navigator.userAgent)
 
 interface Entry {
   term: Terminal
   fit: FitAddon
+  search: SearchAddon
   host: HTMLDivElement
   opened: boolean
   offData?: () => void
@@ -121,9 +126,49 @@ function build(): Entry {
   })
   const fit = new FitAddon()
   term.loadAddon(fit)
+  const search = new SearchAddon()
+  term.loadAddon(search)
   // Clicking a URL opens it in the OS default browser (no embedded browser).
   term.loadAddon(new WebLinksAddon((_event, uri) => ipc.openExternal(uri)))
-  return { term, fit, host, opened: false }
+  // Copy / paste / select-all. Returning false stops xterm from also processing
+  // the key; preventDefault stops the browser's native copy/paste (avoids a double
+  // paste). Everything else (incl. ⌃C SIGINT) passes straight through to the PTY.
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== "keydown") return true
+    const action = keyAction(e, { isMac, hasSelection: term.hasSelection() })
+    if (!action) return true
+    if (action === "copy") {
+      const sel = term.getSelection()
+      if (sel) ipc.clipboardWrite(sel)
+      // Windows/Linux plain Ctrl+C copies-when-selected; clear the selection so an
+      // immediate second Ctrl+C sends SIGINT instead of re-copying.
+      if (!isMac && e.ctrlKey && !e.shiftKey) term.clearSelection()
+    } else if (action === "paste") {
+      void ipc.clipboardRead().then((text) => text && term.paste(text))
+    } else {
+      term.selectAll()
+    }
+    e.preventDefault()
+    return false
+  })
+  return { term, fit, search, host, opened: false }
+}
+
+// Search match highlighting — amber for all matches, orange for the active one
+// (translucent so text stays readable; solid on the overview ruler).
+function searchOptions(caseSensitive: boolean, incremental: boolean): ISearchOptions {
+  return {
+    caseSensitive,
+    incremental, // type-as-you-go: keep the current match instead of jumping ahead
+    decorations: {
+      matchBackground: "rgba(255, 213, 79, 0.35)",
+      matchBorder: "rgba(255, 213, 79, 0.9)",
+      matchOverviewRuler: "#ffd54f",
+      activeMatchBackground: "rgba(255, 152, 0, 0.55)",
+      activeMatchBorder: "rgba(255, 152, 0, 1)",
+      activeMatchColorOverviewRuler: "#ff9800",
+    },
+  }
 }
 
 /** Register/deregister the ligature character joiner to match the setting. */
@@ -261,6 +306,41 @@ export const TerminalManager = {
 
   focus(id: string) {
     entries.get(id)?.term.focus()
+  },
+
+  // Clipboard actions for the pane context menu (keyboard is handled in build()).
+  hasSelection(id: string): boolean {
+    return entries.get(id)?.term.hasSelection() ?? false
+  },
+  copySelection(id: string) {
+    const sel = entries.get(id)?.term.getSelection()
+    if (sel) ipc.clipboardWrite(sel)
+  },
+  paste(id: string) {
+    const entry = entries.get(id)
+    if (entry) void ipc.clipboardRead().then((text) => text && entry.term.paste(text))
+  },
+  selectAll(id: string) {
+    entries.get(id)?.term.selectAll()
+  },
+
+  // Find-in-scrollback (drives @xterm/addon-search on the focused pane).
+  // `incremental` (type-as-you-go) keeps the current match rather than advancing.
+  searchNext(id: string, query: string, caseSensitive: boolean, incremental = false) {
+    entries.get(id)?.search.findNext(query, searchOptions(caseSensitive, incremental))
+  },
+  searchPrevious(id: string, query: string, caseSensitive: boolean) {
+    entries.get(id)?.search.findPrevious(query, searchOptions(caseSensitive, false))
+  },
+  clearSearch(id: string) {
+    entries.get(id)?.search.clearDecorations()
+  },
+  /** Subscribe to result counts ({resultIndex, resultCount}); returns an unsubscribe. */
+  onSearchResults(id: string, cb: (r: { resultIndex: number; resultCount: number }) => void) {
+    const entry = entries.get(id)
+    if (!entry) return () => {}
+    const d = entry.search.onDidChangeResults(cb)
+    return () => d.dispose()
   },
 
   /** Apply settings (font/theme/etc.) to every live terminal. */

@@ -15,6 +15,7 @@ export function resetStore() {
     settings: defaultSettings,
     settingsOpen: false,
     paletteOpen: false,
+    searchOpen: false,
     diffPanelOpen: false,
     git: null,
   })

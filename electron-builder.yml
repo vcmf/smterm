@@ -1,0 +1,41 @@
+# Packaging config (v0 free dev channel). electron-vite builds to out/, then
+# electron-builder packages it. No paid notarization: macOS is ad-hoc signed (free,
+# so Apple Silicon will launch); notarized double-click installers are v0.1 (M4).
+appId: com.smterm.app
+productName: smterm
+copyright: Copyright © 2026 smterm authors
+
+# CI publishes artifacts to GitHub Releases for the pushed tag (release.yml).
+publish:
+  provider: github
+  owner: vcmf
+  repo: smterm
+
+directories:
+  output: release
+  buildResources: build
+
+# Ad-hoc sign the macOS bundle after packing (identity:null only linker-signs the
+# inner binary, leaving the bundle unsealed). See build/after-pack.cjs.
+afterPack: ./build/after-pack.cjs
+
+# node-pty is a native module — its .node binary can't run from inside app.asar,
+# so it must be unpacked. (electron-builder rebuilds it for the packaged Electron.)
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # Ad-hoc signing (identity: null) — free, no Apple account; enough for a
+  # curl/brew/scoop install (terminal downloads aren't Gatekeeper-quarantined).
+  identity: null
+
+win:
+  target: nsis
+
+linux:
+  target: AppImage
+  category: Utility

@@ -36,13 +36,20 @@ export class OutputCoalescer {
     this.onFlush(data)
   }
 
-  /** Drop any buffered output + pending timer without flushing (on kill). */
-  dispose(): void {
+  /** Drop buffered output + pending timer without flushing, but stay usable.
+   *  Used on reattach: the dropped bytes are already in the session's OutputBuffer
+   *  and get replayed from there, so flushing them here too would duplicate output. */
+  reset(): void {
     if (this.timer !== null) {
       clearTimeout(this.timer)
       this.timer = null
     }
     this.chunks = []
     this.size = 0
+  }
+
+  /** Drop any buffered output + pending timer without flushing (on kill). */
+  dispose(): void {
+    this.reset()
   }
 }

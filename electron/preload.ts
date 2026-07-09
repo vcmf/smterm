@@ -31,6 +31,9 @@ const api = {
   openPath: (p: string) => ipcRenderer.send("open-path", p),
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),
 
+  clipboardWrite: (text: string) => ipcRenderer.send("clipboard:write", text),
+  clipboardRead: () => ipcRenderer.invoke("clipboard:read") as Promise<string>,
+
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
   maximizeWindow: () => ipcRenderer.send("window:maximize"),
   closeWindow: () => ipcRenderer.send("window:close"),

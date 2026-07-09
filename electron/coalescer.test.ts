@@ -53,4 +53,16 @@ describe("OutputCoalescer", () => {
     expect(out).toEqual([])
     expect(vi.getTimerCount()).toBe(0)
   })
+
+  it("reset drops pending output but the coalescer stays usable", () => {
+    const out: string[] = []
+    const c = new OutputCoalescer(4, 1000, (d) => out.push(d))
+    c.push("dropme")
+    c.reset() // drop pending (already replayed from the OutputBuffer)
+    vi.advanceTimersByTime(10)
+    expect(out).toEqual([]) // nothing from before reset
+    c.push("live")
+    vi.advanceTimersByTime(4)
+    expect(out).toEqual(["live"]) // still batching after reset
+  })
 })

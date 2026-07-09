@@ -934,3 +934,81 @@ body {
   word-break: break-all;
   font-family: var(--code-font);
 }
+
+/* Find-in-scrollback overlay (⌘F), top-right of the terminal area */
+.search-bar {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  background: var(--elev);
+  border: 1px solid var(--border2);
+  border-radius: 9px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+.search-input {
+  width: 190px;
+  padding: 4px 8px;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.search-input:focus {
+  border-color: var(--accent);
+}
+.search-count {
+  min-width: 54px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.search-bar .iconbtn.on {
+  color: var(--accent);
+  background: var(--panel);
+}
+
+/* Terminal right-click clipboard menu */
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+.ctx-menu {
+  position: fixed;
+  z-index: 51;
+  min-width: 148px;
+  padding: 4px;
+  background: var(--elev);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+.ctx-item {
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ctx-item:hover:not(:disabled) {
+  background: var(--panel);
+}
+.ctx-item:disabled {
+  color: var(--faint);
+  cursor: default;
+}

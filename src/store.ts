@@ -38,6 +38,7 @@ interface AppState {
   settings: Settings
   settingsOpen: boolean
   paletteOpen: boolean
+  searchOpen: boolean
   diffPanelOpen: boolean
   git: GitStatus | null
   home: string
@@ -48,6 +49,7 @@ interface AppState {
   setDiffPanelOpen: (open: boolean) => void
   setSessionCwd: (sessionId: string, cwd: string) => void
   setPaletteOpen: (open: boolean) => void
+  setSearchOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
   setSettings: (settings: Settings) => void
   setShells: (shells: ShellOption[]) => void
@@ -97,6 +99,7 @@ export const useStore = create<AppState>((set, get) => ({
   settings: defaultSettings,
   settingsOpen: false,
   paletteOpen: false,
+  searchOpen: false,
   diffPanelOpen: false,
   git: null,
   home: "",
@@ -118,6 +121,7 @@ export const useStore = create<AppState>((set, get) => ({
       return { sessions: { ...state.sessions, [sessionId]: { ...s, cwd } } }
     }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  setSearchOpen: (searchOpen) => set({ searchOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setSettings: (settings) => set({ settings }),
   setShells: (shells) => set({ shells }),

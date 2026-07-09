@@ -1,0 +1,55 @@
+name: Release
+
+# Cut a release by pushing a SemVer tag, e.g.  git push origin v0.1.0
+# (see `make release`). Builds + publishes installers to the GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the release + upload assets
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Gate: don't ship from red code.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test
+
+  release:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # electron-vite → out/, then electron-builder packages for this OS and
+      # publishes to the GitHub Release. Native node-pty is rebuilt by
+      # electron-builder for the packaged Electron; mac is ad-hoc signed
+      # (build/after-pack.cjs). Windows/Linux are unsigned for now.
+      - name: Build renderer/main/preload
+        run: npm run build
+      - name: Package & publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --publish always
