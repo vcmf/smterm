@@ -50,19 +50,21 @@ browser-only); free OV signing via **SignPath Foundation** (OSS). Linux AppImage
 The mass-market **notarized `.dmg` + signed `.exe` double-click flow is deferred to v0.1** (that's the
 only thing needing Apple's $99/yr — see M4).
 
-### Phase 1 — Table-stakes terminal features
+### Phase 1 — Table-stakes terminal features ✅
 
 | ID  | Feature            | Notes                                                                   | Status |
 | --- | ------------------ | ----------------------------------------------------------------------- | ------ |
-| F10 | Copy / paste       | xterm selection + ⌘C/⌘V + right-click context menu (Electron clipboard) | ⬜     |
-| F9  | Find in scrollback | `@xterm/addon-search` + a ⌘F overlay (next/prev, match count)           | ⬜     |
+| F10 | Copy / paste       | xterm selection + ⌘C/⌘V + right-click context menu (Electron clipboard) | ✅     |
+| F9  | Find in scrollback | `@xterm/addon-search` + a ⌘F overlay (next/prev, match count)           | ✅     |
 
-### Phase 2 — Correctness
+### Phase 2 — Correctness 🧊 _(deferred to v0.1 — works today with the known §9a flaw)_
 
-| Item                                    | Notes                                                                                                                               | Status |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Attention-model rewrite (Track C / §9a) | Activity-based + **latched** reducer behind a real test matrix; fixes focused-waiting→running + duplicate-notify (ARCHITECTURE §9a) | ⬜     |
-| Diagnostics cleanup                     | Gate `electron/diagnostics.ts` behind `SMTERM_DIAG=1` (keep as opt-in) or remove                                                    | ⬜     |
+The attention model functions; the rewrite is polish, not a v0 blocker. Deferred (2026-07-09).
+
+| Item                                    | Notes                                                                                                                                 | Status |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Attention-model rewrite (Track C / §9a) | Activity-gated `working` (`running && active`) + attention **latch** (seen-since-activity) + redraw suppression, behind a test matrix | 🧊     |
+| Diagnostics cleanup                     | Gate `electron/diagnostics.ts` behind `SMTERM_DIAG=1` (or remove) — small standalone, fold into Phase 3/4                             | ⬜     |
 
 ### Phase 3 — Packaging (free dev channel)
 
@@ -84,13 +86,13 @@ only thing needing Apple's $99/yr — see M4).
 | WSL / Windows   | verify on a real box or clearly mark untested                                                                      | ⬜     |
 
 **Exit criteria:** `curl | sh` (and `brew install` / `scoop install`) drop a working, launch-clean
-smterm on macOS + Windows + Linux; copy/paste + find work; notifications fire correctly (attention model
-fixed); lint + tests green; LICENSE + README published.
+smterm on macOS + Windows + Linux; copy/paste + find work; lint + tests green; LICENSE + README published.
 
-**Deferred to v0.1+:** notarized double-click `.dmg` + signed `.exe` (Apple $99/yr — M4); auto-update;
-detached daemon for full-quit session survival (M5); tab reorder / drag-rearrange / saved layouts.
+**Deferred to v0.1+:** attention-model rewrite (Phase 2 above — works today with the §9a flaw); notarized
+double-click `.dmg` + signed `.exe` (Apple $99/yr — M4); auto-update; detached daemon for full-quit
+session survival (M5); tab reorder / drag-rearrange / saved layouts.
 
-**Order:** Phases 1–2 need no Apple/CI setup — start now. Phase 3 in parallel once an app icon exists.
+**Order:** Phase 1 ✅. Next = **Phase 3 (packaging)** then Phase 4 (QA + OSS readiness). Phase 2 deferred.
 
 ---
 
