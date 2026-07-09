@@ -136,6 +136,9 @@ function build(): Entry {
     if (action === "copy") {
       const sel = term.getSelection()
       if (sel) ipc.clipboardWrite(sel)
+      // Windows/Linux plain Ctrl+C copies-when-selected; clear the selection so an
+      // immediate second Ctrl+C sends SIGINT instead of re-copying.
+      if (!isMac && e.ctrlKey && !e.shiftKey) term.clearSelection()
     } else if (action === "paste") {
       void ipc.clipboardRead().then((text) => text && term.paste(text))
     } else {

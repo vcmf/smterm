@@ -3,7 +3,9 @@
 // rules are unit-tested; terminal-manager supplies isMac + hasSelection and runs it.
 //
 // macOS: ⌘C / ⌘V / ⌘A (⌘C only with a selection; ⌃C stays SIGINT).
-// Linux/Windows: ⌃⇧C / ⌃⇧V / ⌃⇧A — plain ⌃C/⌃V stay SIGINT / literal so the shell keeps them.
+// Linux/Windows (Windows-terminal convention): plain ⌃C **copies when there's a
+// selection, else sends SIGINT**; ⌃⇧C / ⌃⇧V / ⌃⇧A are the explicit forms. (The caller
+// clears the selection after a ⌃C copy so a second ⌃C interrupts.)
 
 export type TermKeyAction = "copy" | "paste" | "select-all" | null
 
@@ -31,10 +33,18 @@ export function keyAction(
     return null
   }
 
-  // Linux/Windows: require Ctrl+Shift (never plain Ctrl — that's SIGINT etc.).
-  if (!e.ctrlKey || !e.shiftKey || e.metaKey) return null
-  if (key === "c") return opts.hasSelection ? "copy" : null
-  if (key === "v") return "paste"
-  if (key === "a") return "select-all"
+  // Linux/Windows.
+  if (e.metaKey) return null
+  // Plain Ctrl+C copies only when there's a selection (else it passes through as
+  // SIGINT); other plain-Ctrl keys (Ctrl+V literal, etc.) pass through untouched.
+  if (e.ctrlKey && !e.shiftKey) {
+    return key === "c" && opts.hasSelection ? "copy" : null
+  }
+  // Ctrl+Shift+{C,V,A} — explicit copy / paste / select-all.
+  if (e.ctrlKey && e.shiftKey) {
+    if (key === "c") return opts.hasSelection ? "copy" : null
+    if (key === "v") return "paste"
+    if (key === "a") return "select-all"
+  }
   return null
 }

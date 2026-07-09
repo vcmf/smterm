@@ -42,8 +42,12 @@ describe("keyAction — Linux/Windows", () => {
     expect(pc(ev({ key: "a", ctrlKey: true, shiftKey: true }))).toBe("select-all")
   })
 
-  it("plain Ctrl+C / Ctrl+V are left alone (SIGINT / literal)", () => {
-    expect(pc(ev({ key: "c", ctrlKey: true }), true)).toBeNull()
+  it("plain Ctrl+C copies WITH a selection, but is SIGINT without one", () => {
+    expect(pc(ev({ key: "c", ctrlKey: true }), true)).toBe("copy") // selection → copy
+    expect(pc(ev({ key: "c", ctrlKey: true }), false)).toBeNull() // no selection → SIGINT
+  })
+
+  it("plain Ctrl+V passes through (literal), not paste", () => {
     expect(pc(ev({ key: "v", ctrlKey: true }))).toBeNull()
   })
 
