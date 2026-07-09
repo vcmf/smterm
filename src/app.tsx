@@ -4,6 +4,7 @@ import { TopBar } from "./components/top-bar"
 import { Sidebar } from "./components/sidebar"
 import { StatusBar } from "./components/status-bar"
 import { CommandPalette } from "./components/command-palette"
+import { SearchBar } from "./components/search-bar"
 import { DiffPanel } from "./components/diff-panel"
 import { PaneLayout } from "./components/pane-layout"
 import { SettingsPanel } from "./components/settings-panel"
@@ -24,6 +25,7 @@ function App() {
   const settings = useStore((s) => s.settings)
   const settingsOpen = useStore((s) => s.settingsOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
+  const searchOpen = useStore((s) => s.searchOpen)
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
   const activeCwd = useActiveCwd()
 
@@ -173,13 +175,19 @@ function App() {
     })
   }, [])
 
-  // Global ⌘K / Ctrl-K toggles the command palette.
+  // Global shortcuts: ⌘K/Ctrl-K = command palette; ⌘F (mac) / Ctrl+Shift+F = find.
+  // Plain Ctrl+F is left for the shell (readline forward-char).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      const k = e.key.toLowerCase()
+      if ((e.metaKey || e.ctrlKey) && k === "k") {
         e.preventDefault()
         const s = useStore.getState()
         s.setPaletteOpen(!s.paletteOpen)
+      } else if ((e.metaKey && k === "f") || (e.ctrlKey && e.shiftKey && k === "f")) {
+        e.preventDefault()
+        const s = useStore.getState()
+        s.setSearchOpen(!s.searchOpen)
       }
     }
     window.addEventListener("keydown", onKey)
@@ -199,6 +207,7 @@ function App() {
           ) : (
             <div className="empty">No sessions — open a tab.</div>
           )}
+          {searchOpen && <SearchBar />}
         </div>
         {diffPanelOpen && <DiffPanel />}
       </div>
