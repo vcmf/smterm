@@ -35,8 +35,14 @@ export default tseslint.config(
     },
   },
   {
-    // Config files, Electron main/preload, and test setup run in Node.
-    files: ["*.{ts,js,mjs,cjs}", "electron/**", "src/test/**"],
+    // Config files, Electron main/preload, build scripts, and test setup run in Node.
+    files: ["*.{ts,js,mjs,cjs}", "electron/**", "src/test/**", "build/**"],
     languageOptions: { globals: { ...globals.node } },
+  },
+  {
+    // CommonJS build scripts (electron-builder hooks): require/module/exports.
+    files: ["**/*.cjs"],
+    languageOptions: { sourceType: "commonjs", globals: { ...globals.node } },
+    rules: { "@typescript-eslint/no-require-imports": "off" },
   },
 )
