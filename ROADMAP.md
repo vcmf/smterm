@@ -11,14 +11,15 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 
 ## Milestone status at a glance
 
-| Milestone  | Theme                                                               | Status                             |
-| ---------- | ------------------------------------------------------------------- | ---------------------------------- |
-| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes       | ✅ (built on Tauri)                |
-| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions) | ✅ done                            |
-| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)     | ✅ done                            |
-| **M3.6**   | Session identity (OSC-title/branch/cwd) + performance & load tests  | 🚧 A ✅ · B: harness+coalescing ✅ |
-| **M4**     | Packaging & signed cross-platform builds                            | ⬜                                 |
-| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)   | 🧊                                 |
+| Milestone  | Theme                                                                     | Status                             |
+| ---------- | ------------------------------------------------------------------------- | ---------------------------------- |
+| **M0–M3a** | Spike → multi-session → agent signals → settings/fonts/themes             | ✅ (built on Tauri)                |
+| **MΩ**     | **Electron port** (node-pty + IPC + WebGL + ligatures; conventions)       | ✅ done                            |
+| **M3.5**   | Adopt `mux` design + agent awareness (reskin, status, git-diff)           | ✅ done                            |
+| **M3.6**   | Session identity (OSC-title/branch/cwd) + performance & load tests        | 🚧 A ✅ · B: harness+coalescing ✅ |
+| **v0**     | **First public OSS release — free dev-channel install (curl/brew/scoop)** | 🚧 **current** (branch `v0`)       |
+| **M4**     | Notarized double-click installers (Apple $99/yr)                          | ⬜ → v0.1                          |
+| **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)         | 🧊                                 |
 
 > **Direction (2026-07-07):**
 >
@@ -31,6 +32,65 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 > 3. **Design:** adopt the hi-fi `mux` design (`mux_product_spec.md` + `design_handoff_mux_terminal/`)
 >    at M3.5; agent status via output-idle heuristic; files-in-flight via **git watching only**.
 >    Deferred: approvals, orchestration, persistence daemon. **Name stays `smterm`.**
+
+---
+
+## v0 — First public (open-source) release 🚧 _(current focus — branch `v0`)_
+
+**Definition:** anyone can install smterm and daily-drive it as a real terminal + agent runner.
+The agent-runner differentiators already work (status, notifications, git panel, splits, reskin, PTY
+reattach); v0 closes the **table-stakes gaps**, the one known **correctness bug**, and ships it
+**installable** to our audience — developers.
+
+**Distribution decision (2026-07-09): free dev channel, no paid notarization for v0.**
+Terminal-downloaded files aren't Gatekeeper-quarantined, so a `curl | sh` install (+ a Homebrew tap +
+Scoop) launches without notarization. Apple Silicon needs _some_ signature to run → **ad-hoc sign
+(free, no Apple account)**. Windows: Scoop / `irm|iex` avoids SmartScreen (Mark-of-the-Web is
+browser-only); free OV signing via **SignPath Foundation** (OSS). Linux AppImage is free.
+The mass-market **notarized `.dmg` + signed `.exe` double-click flow is deferred to v0.1** (that's the
+only thing needing Apple's $99/yr — see M4).
+
+### Phase 1 — Table-stakes terminal features
+
+| ID  | Feature            | Notes                                                                   | Status |
+| --- | ------------------ | ----------------------------------------------------------------------- | ------ |
+| F10 | Copy / paste       | xterm selection + ⌘C/⌘V + right-click context menu (Electron clipboard) | ⬜     |
+| F9  | Find in scrollback | `@xterm/addon-search` + a ⌘F overlay (next/prev, match count)           | ⬜     |
+
+### Phase 2 — Correctness
+
+| Item                                    | Notes                                                                                                                               | Status |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Attention-model rewrite (Track C / §9a) | Activity-based + **latched** reducer behind a real test matrix; fixes focused-waiting→running + duplicate-notify (ARCHITECTURE §9a) | ⬜     |
+| Diagnostics cleanup                     | Gate `electron/diagnostics.ts` behind `SMTERM_DIAG=1` (keep as opt-in) or remove                                                    | ⬜     |
+
+### Phase 3 — Packaging (free dev channel)
+
+| Item                 | Notes                                                                                              | Status |
+| -------------------- | -------------------------------------------------------------------------------------------------- | ------ |
+| App identity + icon  | bundle id, app icon, `AppUserModelID` (for later Windows toasts)                                   | ⬜     |
+| `electron-builder`   | `.app`/`.dmg` + `.exe`/`.zip` + Linux **AppImage**; hardened-runtime entitlements incl. `node-pty` | ⬜     |
+| Ad-hoc / OSS signing | macOS **ad-hoc** (free); Windows via **SignPath Foundation** (OSS, free)                           | ⬜     |
+| Install channels     | `curl \| sh` script + **Homebrew tap** + **Scoop** bucket; GitHub Releases artifacts               | ⬜     |
+| CI release           | GH Actions: tag → build (mac/win/linux) → sign → publish                                           | ⬜     |
+
+### Phase 4 — QA + open-source readiness
+
+| Item            | Notes                                                                                                              | Status |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ | ------ |
+| Acceptance pass | tabs/splits/shells, **notification delivery**, copy/paste, search, reattach, settings live-edit, themes, git panel | ⬜     |
+| LICENSE         | pick an OSS license (MIT default)                                                                                  | ⬜     |
+| README          | install per channel + screenshots + what it is                                                                     | ⬜     |
+| WSL / Windows   | verify on a real box or clearly mark untested                                                                      | ⬜     |
+
+**Exit criteria:** `curl | sh` (and `brew install` / `scoop install`) drop a working, launch-clean
+smterm on macOS + Windows + Linux; copy/paste + find work; notifications fire correctly (attention model
+fixed); lint + tests green; LICENSE + README published.
+
+**Deferred to v0.1+:** notarized double-click `.dmg` + signed `.exe` (Apple $99/yr — M4); auto-update;
+detached daemon for full-quit session survival (M5); tab reorder / drag-rearrange / saved layouts.
+
+**Order:** Phases 1–2 need no Apple/CI setup — start now. Phase 3 in parallel once an app icon exists.
 
 ---
 
@@ -305,9 +365,12 @@ label; latch-only (no re-nag) vs periodic re-nag while waiting.
 
 ---
 
-## M4 — Packaging & distribution ⬜
+## M4 — Notarized double-click installers ⬜ _(v0.1 — the mass-market layer)_
 
-**Goal:** installable, signed apps on all four targets.
+**Goal:** the frictionless "download from a page → double-click → runs" experience for non-terminal
+users, on top of v0's free dev-channel install. This is the only part that needs Apple's **$99/yr**
+(macOS notarization); Windows signing stays free via SignPath. Not a v0 blocker — v0 ships installable
+via `curl | sh` / Homebrew tap / Scoop with ad-hoc/OSS signing (see the **v0** section).
 
 | Task                | Description                                                                             | Status |
 | ------------------- | --------------------------------------------------------------------------------------- | ------ |
