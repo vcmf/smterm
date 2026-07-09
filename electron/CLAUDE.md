@@ -14,6 +14,8 @@ ownership, native modules. No DOM, no React here. (Renderer rules: root `CLAUDE.
 - `git.ts` — pure git parsers + `gitStatus`/`gitDiff` for the changes panel.
 - `coalescer.ts` / `output-buffer.ts` — PTY output batching (IPC) + replay buffer (reattach).
 - `diagnostics.ts` — temporary always-on event log (`~/.config/smterm/diagnostics.log`).
+- `shell-env.ts` — import the login-shell PATH/env at startup (packaged GUI launches get
+  a bare launchd PATH). → `../GOTCHAS.md#shell-env`
 
 ## Rules
 

@@ -88,6 +88,17 @@ After install / Electron upgrades run `npx electron-rebuild -o node-pty` (in
 there — push logic into pure modules (`output-buffer`, `coalescer`, shell-integration
 parsers) and test those; verify the PTY path manually / via the diagnostics log.
 
+## GUI launch has a bare PATH — import the login-shell env {#shell-env}
+
+A macOS/Linux app launched from Finder/Dock inherits a minimal `launchd` PATH
+(`/usr/bin:/bin:/usr/sbin:/sbin`), **not** the user's shell PATH — so Homebrew/cargo
+tools (`starship`, etc.) are missing and `.zshrc` lines like `starship init` fail with
+"command not found". Only bites the **packaged** app; `npm run dev` is launched from a
+terminal that already has the full env. Fix (`electron/shell-env.ts`, VS Code's approach):
+on startup, when `app.isPackaged` and not Windows, run the login+interactive shell once,
+capture its env, and import PATH (+ missing vars) into `process.env` before any PTY
+spawns. Parser is pure + tested; the shell probe is best-effort (returns `{}` on failure).
+
 ## Windows {#windows}
 
 The app spawns `wsl.exe` as a shell — it never runs _inside_ WSL.

@@ -20,6 +20,7 @@ import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
 import { OutputBuffer } from "./output-buffer"
 import { appendDiag } from "./diagnostics"
+import { applyLoginShellEnv } from "./shell-env"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -300,6 +301,11 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
+  // GUI-launched apps (Finder/Dock) inherit a bare launchd PATH, so shells can't find
+  // Homebrew/cargo tools (starship, etc.). Import the login shell's real env before any
+  // PTY spawns. Only when packaged — in dev the app is launched from a terminal that
+  // already has the full env, so this cost (~one shell invocation) is skipped.
+  if (process.platform !== "win32" && app.isPackaged) applyLoginShellEnv(defaultShell())
   registerIpc()
   createWindow()
   startSettingsWatcher()
