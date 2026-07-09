@@ -66,15 +66,15 @@ The attention model functions; the rewrite is polish, not a v0 blocker. Deferred
 | Attention-model rewrite (Track C / §9a) | Activity-gated `working` (`running && active`) + attention **latch** (seen-since-activity) + redraw suppression, behind a test matrix | 🧊     |
 | Diagnostics cleanup                     | Gate `electron/diagnostics.ts` behind `SMTERM_DIAG=1` (or remove) — small standalone, fold into Phase 3/4                             | ⬜     |
 
-### Phase 3 — Packaging (free dev channel)
+### Phase 3 — Packaging (free dev channel) 🚧
 
-| Item                 | Notes                                                                                              | Status |
-| -------------------- | -------------------------------------------------------------------------------------------------- | ------ |
-| App identity + icon  | bundle id, app icon, `AppUserModelID` (for later Windows toasts)                                   | ⬜     |
-| `electron-builder`   | `.app`/`.dmg` + `.exe`/`.zip` + Linux **AppImage**; hardened-runtime entitlements incl. `node-pty` | ⬜     |
-| Ad-hoc / OSS signing | macOS **ad-hoc** (free); Windows via **SignPath Foundation** (OSS, free)                           | ⬜     |
-| Install channels     | `curl \| sh` script + **Homebrew tap** + **Scoop** bucket; GitHub Releases artifacts               | ⬜     |
-| CI release           | GH Actions: tag → build (mac/win/linux) → sign → publish                                           | ⬜     |
+| Item                 | Notes                                                                                                  | Status |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | ------ |
+| App identity + icon  | `appId` com.smterm.app ✅; **placeholder icon** (real one + `AppUserModelID` TODO)                     | 🚧     |
+| `electron-builder`   | mac `.dmg`+`.zip` ✅ (node-pty asarUnpack'd + rebuilt); win nsis + linux AppImage **wired, not built** | 🚧     |
+| Ad-hoc / OSS signing | macOS **ad-hoc** ✅ (`build/after-pack.cjs`, verified launch); Windows via **SignPath** (OSS) TODO     | 🚧     |
+| Install channels     | `curl \| sh` script + **Homebrew tap** + **Scoop** bucket; GitHub Releases artifacts                   | ⬜     |
+| CI release           | GH Actions: tag → build (mac/win/linux) → sign → publish                                               | ⬜     |
 
 ### Phase 4 — QA + open-source readiness
 
