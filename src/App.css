@@ -134,6 +134,14 @@ body {
   align-items: center;
   gap: 4px;
   flex: 1 1 auto;
+  min-width: 0;
+  /* No overflow clip here — the new-tab shell dropdown drops below this row. */
+}
+.tab-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -258,6 +266,7 @@ body {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
 }
 .newtab-caret {
   width: 18px;

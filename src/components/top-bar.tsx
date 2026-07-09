@@ -104,55 +104,57 @@ export function TopBar() {
       <div className="vdivider" />
 
       <div className="tabs">
-        {tabs.map((tab) => {
-          const ids = allSessionIds(tab.root)
-          const badge = aggregateBadge(
-            ids.flatMap((id) => {
-              const s = sessions[id]
-              return s ? [{ status: s.status, unread: s.unread }] : []
-            }),
-          )
-          const pulse = badge === "working"
-          const dotClass =
-            badge === "attention" ? "amber" : badge === "working" ? "accent" : "faint"
-          return (
-            <div
-              key={tab.id}
-              className={`tab${tab.id === activeTabId ? " active" : ""}`}
-              onMouseDown={() => useStore.getState().setActiveTab(tab.id)}
-              onDoubleClick={() => startRename(tab.id, tabTitle(tab, sessions, home))}
-            >
-              {badge && <span className={`dot ${dotClass}${pulse ? " pulse" : ""}`} />}
-              {editingId === tab.id ? (
-                <input
-                  ref={inputRef}
-                  className="tab-rename"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onBlur={commitRename}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename()
-                    else if (e.key === "Escape") setEditingId(null)
-                  }}
-                />
-              ) : (
-                <span className="tab-title">{tabTitle(tab, sessions, home)}</span>
-              )}
-              {ids.length > 1 && <span className="tab-count">{ids.length}</span>}
-              <button
-                className="tab-close"
-                title="Close tab"
-                onMouseDown={(e) => {
-                  e.stopPropagation()
-                  useStore.getState().closeTab(tab.id)
-                }}
+        <div className="tab-list">
+          {tabs.map((tab) => {
+            const ids = allSessionIds(tab.root)
+            const badge = aggregateBadge(
+              ids.flatMap((id) => {
+                const s = sessions[id]
+                return s ? [{ status: s.status, unread: s.unread }] : []
+              }),
+            )
+            const pulse = badge === "working"
+            const dotClass =
+              badge === "attention" ? "amber" : badge === "working" ? "accent" : "faint"
+            return (
+              <div
+                key={tab.id}
+                className={`tab${tab.id === activeTabId ? " active" : ""}`}
+                onMouseDown={() => useStore.getState().setActiveTab(tab.id)}
+                onDoubleClick={() => startRename(tab.id, tabTitle(tab, sessions, home))}
               >
-                <X size={11} />
-              </button>
-            </div>
-          )
-        })}
+                {badge && <span className={`dot ${dotClass}${pulse ? " pulse" : ""}`} />}
+                {editingId === tab.id ? (
+                  <input
+                    ref={inputRef}
+                    className="tab-rename"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onBlur={commitRename}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitRename()
+                      else if (e.key === "Escape") setEditingId(null)
+                    }}
+                  />
+                ) : (
+                  <span className="tab-title">{tabTitle(tab, sessions, home)}</span>
+                )}
+                {ids.length > 1 && <span className="tab-count">{ids.length}</span>}
+                <button
+                  className="tab-close"
+                  title="Close tab"
+                  onMouseDown={(e) => {
+                    e.stopPropagation()
+                    useStore.getState().closeTab(tab.id)
+                  }}
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
         <div className="newtab">
           <button
             className="iconbtn"
