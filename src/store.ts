@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { PaneNode, Session, ShellOption, Tab } from "./types"
 import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "./lib/pane-tree"
+import { inheritShell } from "./lib/shells"
 import { reduceSignals } from "./lib/session-status"
 import type { SignalEvent } from "./lib/session-status"
 import { defaultSettings } from "./settings/schema"
@@ -58,7 +59,7 @@ interface AppState {
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
-  splitActive: (direction: "row" | "column", shell: ShellOption) => void
+  splitActive: (direction: "row" | "column", fallback?: ShellOption) => void
   closePane: (tabId: string, sessionId: string) => void
   setActivePane: (tabId: string, sessionId: string) => void
   setWindowFocused: (focused: boolean) => void
@@ -167,13 +168,15 @@ export const useStore = create<AppState>((set, get) => ({
       tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, title } : t)),
     })),
 
-  splitActive: (direction, shell) =>
+  splitActive: (direction, fallback) =>
     set((state) => {
       const tab = state.tabs.find((t) => t.id === state.activeTabId)
       if (!tab) return {}
-      // Inherit the split source pane's cwd (the tab's currently active session).
-      const srcCwd = state.sessions[tab.activeSessionId]?.cwd
-      const session = makeSession(shell, srcCwd)
+      // Inherit the source pane's shell + cwd (WSL → WSL), not the list's first entry.
+      const src = state.sessions[tab.activeSessionId]
+      const shell = inheritShell(state.shells, src) ?? fallback
+      if (!shell) return {}
+      const session = makeSession(shell, src?.cwd)
       const root: PaneNode = splitNode(
         tab.root,
         tab.activeSessionId,

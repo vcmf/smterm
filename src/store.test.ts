@@ -227,6 +227,23 @@ describe("store — cwd & UI toggles", () => {
     expect(st().sessions[other]!.cwd).toBe("/proj/a")
   })
 
+  it("splitActive inherits the source pane's shell, not the list's first (WSL bug)", () => {
+    // Windows: shells list is [PowerShell, WSL]; splitting a WSL pane must stay WSL.
+    const pwsh = { id: "powershell", label: "PowerShell", command: "powershell.exe", args: [] }
+    const wsl = {
+      id: "wsl:Ubuntu",
+      label: "WSL: Ubuntu",
+      command: "wsl.exe",
+      args: ["-d", "Ubuntu"],
+    }
+    useStore.setState({ shells: [pwsh, wsl] })
+    st().newTab(wsl) // active pane is WSL
+    st().splitActive("row") // no fallback → must inherit WSL
+    const created = st().sessions[firstTab().activeSessionId]!
+    expect(created.command).toBe("wsl.exe")
+    expect(created.args).toEqual(["-d", "Ubuntu"])
+  })
+
   it("newTab inherits the focused terminal's cwd", () => {
     st().newTab(shell)
     const first = allSessionIds(firstTab().root)[0]!

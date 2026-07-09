@@ -17,13 +17,11 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
   )
   const status = session?.status ?? "idle"
 
-  // Quick split (cmux-style): split THIS pane with the default shell.
+  // Quick split (cmux-style): split THIS pane, inheriting its shell + cwd.
   const split = (direction: "row" | "column") => {
     const store = useStore.getState()
-    const shell = store.shells[0]
-    if (!shell) return
     store.setActivePane(tabId, sessionId)
-    store.splitActive(direction, shell)
+    store.splitActive(direction)
   }
 
   useEffect(() => {
