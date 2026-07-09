@@ -156,6 +156,18 @@ export function buildInjection(shell: string): Injection | null {
   return null
 }
 
+/** Is this shell command `wsl.exe`? (The Linux shell runs INSIDE it.) Pure — tested. */
+export function isWslShell(shell: string): boolean {
+  return /(^|[\\/])wsl\.exe$/i.test(shell)
+}
+
+/** Extra `wsl.exe` args to set the Linux start dir: a tracked Linux path if we have
+ *  one, else `~`. Without this, wsl inherits the *Windows* cwd and lands in
+ *  `/mnt/c/...` instead of the home. Pure — tested. */
+export function wslCdArgs(cwd: string | undefined): string[] {
+  return ["--cd", cwd && cwd.startsWith("/") ? cwd : "~"]
+}
+
 /** Parse `wsl.exe -l -q` output (one distro per line). Pure — unit-tested. */
 export function parseWslDistros(output: string): string[] {
   return output

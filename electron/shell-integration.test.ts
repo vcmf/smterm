@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { parseWslDistros, buildInjection, ZSH_ZSHRC, BASH_RC } from "./shell-integration"
+import {
+  parseWslDistros,
+  buildInjection,
+  isWslShell,
+  wslCdArgs,
+  ZSH_ZSHRC,
+  BASH_RC,
+} from "./shell-integration"
 
 describe("parseWslDistros", () => {
   it("splits distro names and trims blank lines", () => {
@@ -9,6 +16,31 @@ describe("parseWslDistros", () => {
 
   it("strips NUL bytes (UTF-16 decode artifacts)", () => {
     expect(parseWslDistros("U\0b\0untu\n")).toEqual(["Ubuntu"])
+  })
+})
+
+describe("isWslShell", () => {
+  it("matches wsl.exe (any path, case-insensitive)", () => {
+    expect(isWslShell("wsl.exe")).toBe(true)
+    expect(isWslShell("C:\\Windows\\System32\\wsl.exe")).toBe(true)
+    expect(isWslShell("WSL.EXE")).toBe(true)
+  })
+  it("does not match other shells", () => {
+    expect(isWslShell("powershell.exe")).toBe(false)
+    expect(isWslShell("/bin/zsh")).toBe(false)
+    expect(isWslShell("mywsl.exe.sh")).toBe(false)
+  })
+})
+
+describe("wslCdArgs", () => {
+  it("starts in the Linux home when there's no tracked path", () => {
+    expect(wslCdArgs(undefined)).toEqual(["--cd", "~"])
+  })
+  it("ignores a Windows cwd (would translate to /mnt/c/...) and uses ~", () => {
+    expect(wslCdArgs("C:\\Users\\me\\proj")).toEqual(["--cd", "~"])
+  })
+  it("passes through a tracked Linux path", () => {
+    expect(wslCdArgs("/home/me/proj")).toEqual(["--cd", "/home/me/proj"])
   })
 })
 
