@@ -21,11 +21,18 @@ describe("Sidebar", () => {
     st().newTab(testShell)
     st().renameTab(st().tabs[0]!.id, "work")
     render(<Sidebar />)
-    expect(screen.getByText("Sessions & agents")).toBeInTheDocument()
+    expect(screen.getByText("Sessions")).toBeInTheDocument()
     expect(screen.getByText("work")).toBeInTheDocument() // session (tab) row
     expect(screen.getByText("1 pane")).toBeInTheDocument()
     expect(screen.getByText("running")).toBeInTheDocument()
     expect(screen.getByText("needs input")).toBeInTheDocument()
+  })
+
+  it("the header + button opens a new session (tab)", () => {
+    render(<Sidebar />)
+    expect(st().tabs).toHaveLength(0)
+    fireEvent.click(screen.getByTitle("New session"))
+    expect(st().tabs).toHaveLength(1)
   })
 
   it("shows a pane row per session with its status word", () => {

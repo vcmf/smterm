@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { CaretDown, CaretRight, TreeStructure, Terminal } from "@phosphor-icons/react"
+import { CaretDown, CaretRight, Plus, Terminal } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { allSessionIds } from "../lib/pane-tree"
+import { resolveDefaultShell } from "../lib/shells"
 import { statusUi } from "../lib/status-ui"
 import {
   tabTitle,
@@ -17,9 +18,16 @@ export function Sidebar() {
   const tabs = useStore((s) => s.tabs)
   const activeTabId = useStore((s) => s.activeTabId)
   const sessions = useStore((s) => s.sessions)
+  const shells = useStore((s) => s.shells)
+  const defaultShellPref = useStore((s) => s.settings.defaultShell)
   const git = useStore((s) => s.git)
   const home = useStore((s) => s.home)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+
+  const defaultShell = resolveDefaultShell(shells, defaultShellPref)
+  const newSession = () => {
+    if (defaultShell) useStore.getState().newTab(defaultShell)
+  }
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -48,8 +56,15 @@ export function Sidebar() {
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <span className="section-label">Sessions &amp; agents</span>
-        <TreeStructure size={14} />
+        <span className="section-label">Sessions</span>
+        <button
+          className="iconbtn"
+          title="New session"
+          disabled={!defaultShell}
+          onClick={newSession}
+        >
+          <Plus size={14} />
+        </button>
       </div>
 
       <div className="tree">

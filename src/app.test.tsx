@@ -27,7 +27,7 @@ describe("App (integration)", () => {
     render(<App />)
     // Chrome is present immediately.
     expect(screen.getByText("smterm")).toBeInTheDocument()
-    expect(screen.getByText("Sessions & agents")).toBeInTheDocument()
+    expect(screen.getByText("Sessions")).toBeInTheDocument()
     expect(screen.getByText("Search or run")).toBeInTheDocument()
     // Async effects: platform label + first session from listShells().
     expect(await screen.findByText("macOS")).toBeInTheDocument()

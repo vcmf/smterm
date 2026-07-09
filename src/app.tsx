@@ -27,6 +27,7 @@ function App() {
   const paletteOpen = useStore((s) => s.paletteOpen)
   const searchOpen = useStore((s) => s.searchOpen)
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
+  const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const activeCwd = useActiveCwd()
 
   // Load shells, then restore the saved workspace (VS Code-style) or open a tab.
@@ -200,7 +201,7 @@ function App() {
     <div className="app">
       <TopBar />
       <div className="body">
-        <Sidebar />
+        {!sidebarCollapsed && <Sidebar />}
         <div className="content">
           {activeTab ? (
             <PaneLayout key={activeTab.id} node={activeTab.root} tabId={activeTab.id} />

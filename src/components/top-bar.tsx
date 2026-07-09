@@ -11,6 +11,7 @@ import {
   Square,
   X,
   Copy,
+  SidebarSimple,
 } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
@@ -29,6 +30,7 @@ export function TopBar() {
   const home = useStore((s) => s.home)
   const defaultShellPref = useStore((s) => s.settings.defaultShell)
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
+  const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const [maximized, setMaximized] = useState(false)
   const [shellMenu, setShellMenu] = useState(false)
 
@@ -88,6 +90,13 @@ export function TopBar() {
 
   return (
     <div className="topbar">
+      <button
+        className={`iconbtn${sidebarCollapsed ? "" : " on"}`}
+        title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        onClick={() => useStore.getState().setSidebarCollapsed(!sidebarCollapsed)}
+      >
+        <SidebarSimple size={15} />
+      </button>
       <div className="brand">
         <TerminalWindow size={16} weight="fill" />
         <span className="brand-name">smterm</span>
