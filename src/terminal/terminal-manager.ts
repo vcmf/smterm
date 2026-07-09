@@ -12,6 +12,9 @@ import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
 import { allSessionIds } from "../lib/pane-tree"
 import { shouldUseWebgl } from "../lib/renderer-policy"
+import { keyAction } from "../lib/terminal-keys"
+
+const isMac = /mac/i.test(navigator.userAgent)
 
 interface Entry {
   term: Terminal
@@ -123,6 +126,24 @@ function build(): Entry {
   term.loadAddon(fit)
   // Clicking a URL opens it in the OS default browser (no embedded browser).
   term.loadAddon(new WebLinksAddon((_event, uri) => ipc.openExternal(uri)))
+  // Copy / paste / select-all. Returning false stops xterm from also processing
+  // the key; preventDefault stops the browser's native copy/paste (avoids a double
+  // paste). Everything else (incl. ⌃C SIGINT) passes straight through to the PTY.
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== "keydown") return true
+    const action = keyAction(e, { isMac, hasSelection: term.hasSelection() })
+    if (!action) return true
+    if (action === "copy") {
+      const sel = term.getSelection()
+      if (sel) ipc.clipboardWrite(sel)
+    } else if (action === "paste") {
+      void ipc.clipboardRead().then((text) => text && term.paste(text))
+    } else {
+      term.selectAll()
+    }
+    e.preventDefault()
+    return false
+  })
   return { term, fit, host, opened: false }
 }
 
@@ -261,6 +282,22 @@ export const TerminalManager = {
 
   focus(id: string) {
     entries.get(id)?.term.focus()
+  },
+
+  // Clipboard actions for the pane context menu (keyboard is handled in build()).
+  hasSelection(id: string): boolean {
+    return entries.get(id)?.term.hasSelection() ?? false
+  },
+  copySelection(id: string) {
+    const sel = entries.get(id)?.term.getSelection()
+    if (sel) ipc.clipboardWrite(sel)
+  },
+  paste(id: string) {
+    const entry = entries.get(id)
+    if (entry) void ipc.clipboardRead().then((text) => text && entry.term.paste(text))
+  },
+  selectAll(id: string) {
+    entries.get(id)?.term.selectAll()
   },
 
   /** Apply settings (font/theme/etc.) to every live terminal. */

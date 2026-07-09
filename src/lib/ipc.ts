@@ -28,6 +28,8 @@ export interface Ipc {
   openExternal: (url: string) => void
   openPath: (p: string) => void
   notify: (title: string, body: string) => void
+  clipboardWrite: (text: string) => void
+  clipboardRead: () => Promise<string>
 
   minimizeWindow: () => void
   maximizeWindow: () => void

@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, shell, Notification, dialog, powerMonitor } from "electron"
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  Notification,
+  dialog,
+  powerMonitor,
+  clipboard,
+} from "electron"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
@@ -277,6 +286,10 @@ function registerIpc() {
       // best-effort
     }
   })
+
+  // Clipboard (copy/paste) — main owns it; renderer never imports Electron.
+  ipcMain.on("clipboard:write", (_e, text: string) => clipboard.writeText(text))
+  ipcMain.handle("clipboard:read", async () => clipboard.readText())
 
   // Links + notifications.
   ipcMain.on("open-external", (_e, url: string) => void shell.openExternal(url))

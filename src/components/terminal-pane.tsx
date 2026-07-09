@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Terminal, X, Columns, Rows } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
@@ -8,6 +8,7 @@ import { displaySessionTitle, shellType } from "../lib/session-label"
  *  TerminalManager, so this component can mount/unmount freely. */
 export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: string }) {
   const mountRef = useRef<HTMLDivElement>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; hasSel: boolean } | null>(null)
   const session = useStore((s) => s.sessions[sessionId])
   const home = useStore((s) => s.home)
   const focused = useStore(
@@ -40,6 +41,18 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
 
   const railClass = focused ? " focused" : status === "attention" ? " waiting" : ""
 
+  // Right-click clipboard menu. Copy is disabled without a selection.
+  const openMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    useStore.getState().setActivePane(tabId, sessionId)
+    setMenu({ x: e.clientX, y: e.clientY, hasSel: TerminalManager.hasSelection(sessionId) })
+  }
+  const runMenu = (fn: () => void) => {
+    fn()
+    setMenu(null)
+    TerminalManager.focus(sessionId)
+  }
+
   return (
     <div
       className={`terminal-pane${railClass}`}
@@ -47,6 +60,7 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
       // Re-focus the terminal after any click/selection so keystrokes reach the
       // PTY (the textarea doesn't always keep focus after a selection).
       onMouseUp={() => TerminalManager.focus(sessionId)}
+      onContextMenu={openMenu}
     >
       <div className="pane-header">
         <Terminal size={14} weight="fill" color={focused ? "var(--accent)" : "var(--dim)"} />
@@ -88,6 +102,48 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
         </button>
       </div>
       <div className="terminal-mount" ref={mountRef} />
+      {menu && (
+        <>
+          <div
+            className="ctx-backdrop"
+            onMouseDown={() => setMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              setMenu(null)
+            }}
+          />
+          <div className="ctx-menu" style={{ left: menu.x, top: menu.y }}>
+            <button
+              className="ctx-item"
+              disabled={!menu.hasSel}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                runMenu(() => TerminalManager.copySelection(sessionId))
+              }}
+            >
+              Copy
+            </button>
+            <button
+              className="ctx-item"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                runMenu(() => TerminalManager.paste(sessionId))
+              }}
+            >
+              Paste
+            </button>
+            <button
+              className="ctx-item"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                runMenu(() => TerminalManager.selectAll(sessionId))
+              }}
+            >
+              Select all
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
