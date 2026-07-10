@@ -147,6 +147,10 @@ function build(): Entry {
       if (!isMac && e.ctrlKey && !e.shiftKey) term.clearSelection()
     } else if (action === "paste") {
       void ipc.clipboardRead().then((text) => text && term.paste(text))
+    } else if (action === "newline") {
+      // CSI-u encoding of Shift+Enter — apps that speak it (Claude Code etc.) insert
+      // a newline instead of submitting. `input()` routes through onData → the PTY.
+      term.input("\x1b[13;2u")
     } else {
       term.selectAll()
     }
