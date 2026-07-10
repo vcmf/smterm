@@ -28,36 +28,28 @@ can leave paint remnants (xterm.js #3303), worse with multiple panes.
 ## Renderer policy: WebGL only for on-screen panes {#renderer}
 
 Many simultaneous WebGL contexts **corrupt the glyph atlas** (garbled text — xterm.js
-#4379/#3303, still unsolved upstream; browsers also cap live contexts and evict the
-oldest). Splitting a tab full of agent TUIs is exactly that regime — the untouched panes
-garbled. The `renderer` setting (`lib/renderer-policy.ts` `webglPanes`, pure + tested) picks
-which panes get a context:
+#4379/#3303, still unsolved upstream; browsers also cap live contexts and evict the oldest).
+Creating a context disturbs the siblings that share xterm's atlas — that's the garble that hit
+the untouched panes when you split a tab full of agent TUIs. **The cure is an atlas rebuild after
+the pane set changes:** when `reconcileRenderers` creates a context **and** >1 will coexist, it
+schedules `repairRenderers(true)` on the next frame (`clearTextureAtlas()` + repaint on **all**
+live WebGL panes), so any glyphs the new context disturbed re-rasterize cleanly. With that in
+place, every visible pane can run WebGL crisply — the same shared-atlas approach VS Code uses.
+`acquireWebgl` returns whether it created a context so the reconcile knows when to rebuild.
 
-- **`auto`** (default) — WebGL on **only the focused pane**, DOM for the rest. One context
-  can't corrupt itself → garble-free by construction. The context follows focus
-  (`reconcileRenderers` re-runs when `activeSessionId` changes — a new `tabs` array).
-- **`webgl`** — WebGL on **every visible pane** (crisp everywhere, like VS Code). Multiple
-  contexts share xterm's glyph atlas, and creating one can disturb the others; so when
-  `reconcileRenderers` creates a context **and** >1 will coexist, it schedules
-  `repairRenderers(true)` next frame (`clearTextureAtlas()` + repaint on **all** live WebGL
-  panes) to re-rasterize any corrupted glyphs. Works on GPUs/drivers that hold multiple
-  contexts cleanly; if it still garbles on split, that machine can't — fall back to `auto`.
-- **`dom`** — no GPU anywhere; always correct, a bit slower.
+The `renderer` setting (`lib/renderer-policy.ts` `webglPanes`, pure + tested):
+
+- **`webgl`** (default) — WebGL on every visible pane.
+- **`dom`** — no GPU anywhere; always correct, a bit slower. The fallback for GPUs/drivers that
+  can't hold multiple contexts cleanly (VS Code keeps `gpuAcceleration: off` for the same reason;
+  it still ships occasional multi-terminal glitches — vscode#237688).
 
 `reconcileRenderers` runs on tab-switch / split / close (app.tsx) + attach + settings change.
-VS Code (`gpuAcceleration`) runs WebGL on all terminals via the same shared atlas and _still_
-ships multi-terminal glitches (vscode#237688) — so `webgl` mode isn't guaranteed, which is why
-`auto` is the safe default.
 
-**Mixed-renderer glyph difference (accepted).** Because `auto` runs the focused pane on WebGL and
-the rest on DOM, box-drawing/Powerline glyphs render slightly differently between them: xterm's
-`customGlyphs` (default **on**, which we keep) makes the **WebGL** renderer draw them with its own
-crisp geometry, while the **DOM** renderer always uses the font (it has no custom-glyph path). We
-keep `customGlyphs` on so the **focused** pane — the one you're working in — gets the nicer
-rendering; unfocused panes fall back to the font. We can't converge the other way (DOM can't
-custom-draw), and converging down (`customGlyphs: false`) makes every pane look plainer, so we
-accept the minor difference on the pane you're not looking at. (The cursor going solid↔hollow
-between panes is unrelated — normal focused-vs-blur cursor behaviour.)
+**Keep `customGlyphs` on (the default).** It makes the WebGL renderer draw box-drawing/Powerline
+glyphs with its own crisp, grid-aligned geometry rather than from the font. Turning it off makes
+those glyphs look plainer (that's all the DOM renderer can ever do — it has no custom-glyph path,
+which is why `dom` mode looks less sharp).
 
 **Compositing changes on the `.terminal-pane` container can garble the child WebGL canvas**
 (`box-shadow`/`transform`/opacity, animated _or_ just toggled). The focus/attention rail

@@ -98,10 +98,7 @@ export function SettingsPanel() {
               })
             }
           >
-            <option value="auto">Auto (GPU on the focused pane — recommended)</option>
-            <option value="webgl">
-              WebGL on all panes (crisp everywhere; may garble on split)
-            </option>
+            <option value="webgl">WebGL (GPU-accelerated — recommended)</option>
             <option value="dom">Off (DOM — no GPU, always correct)</option>
           </select>
         </label>

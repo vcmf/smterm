@@ -28,12 +28,11 @@ describe("mergeSettings", () => {
     expect(mergeSettings({ shiftEnterNewline: false }).shiftEnterNewline).toBe(false)
   })
 
-  it("renderer defaults to auto; accepts webgl/dom; rejects anything else", () => {
-    expect(mergeSettings({}).renderer).toBe("auto")
-    expect(mergeSettings({ renderer: "webgl" }).renderer).toBe("webgl")
+  it("renderer defaults to webgl; only 'dom' opts out of GPU", () => {
+    expect(mergeSettings({}).renderer).toBe("webgl")
     expect(mergeSettings({ renderer: "dom" }).renderer).toBe("dom")
-    expect(mergeSettings({ renderer: "canvas" }).renderer).toBe("auto") // unknown value → default
-    expect(mergeSettings({ renderer: true }).renderer).toBe("auto") // wrong type → default
+    expect(mergeSettings({ renderer: "auto" }).renderer).toBe("webgl") // removed mode → default
+    expect(mergeSettings({ renderer: true }).renderer).toBe("webgl") // wrong type → default
   })
 
   it("fileLinks defaults on; openPath defaults to the VS Code template and allows empty", () => {

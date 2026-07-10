@@ -155,7 +155,7 @@ function reconcileRenderers() {
   // Which panes get a live GPU context. Default (`auto`) is the focused pane only —
   // one context can't corrupt itself, so the multi-pane split garble is impossible
   // by construction (see GOTCHAS #renderer). `webgl` = all visible; `dom` = none.
-  const webgl = webglPanes(state.settings.renderer, visible, tab?.activeSessionId)
+  const webgl = webglPanes(state.settings.renderer, visible)
   let created = false
   for (const [id, entry] of entries) {
     if (!entry.opened) continue
@@ -165,9 +165,8 @@ function reconcileRenderers() {
   // Creating a WebGL context can disturb the sibling contexts that share xterm's
   // glyph atlas (garble on split with several panes — xterm.js #4379). Once the new
   // context has settled, rebuild the atlas on ALL live WebGL panes so any corrupted
-  // glyphs re-rasterize. Only when >1 context coexists (the `webgl` all-panes mode);
-  // a lone `auto` context can't corrupt itself. Deferred a frame so the new context
-  // is fully initialised before the rebuild.
+  // glyphs re-rasterize. Only when >1 context coexists; a lone context can't corrupt
+  // itself. Deferred a frame so the new context is fully initialised before the rebuild.
   if (created && webgl.size > 1) {
     requestAnimationFrame(() => repairRenderers(true))
   }

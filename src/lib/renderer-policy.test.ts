@@ -4,32 +4,15 @@ import { webglPanes } from "./renderer-policy"
 describe("webglPanes", () => {
   const three = ["a", "b", "c"]
 
-  it("dom mode: no pane gets a context", () => {
-    expect(webglPanes("dom", three, "a").size).toBe(0)
-  })
-
-  it("auto mode: exactly the focused visible pane", () => {
-    expect([...webglPanes("auto", three, "b")]).toEqual(["b"])
-  })
-
-  it("auto mode: falls back to the first visible pane when focus isn't on-screen", () => {
-    expect([...webglPanes("auto", three, "zzz")]).toEqual(["a"])
-    expect([...webglPanes("auto", three, null)]).toEqual(["a"])
-  })
-
-  it("auto mode: nothing visible → no context", () => {
-    expect(webglPanes("auto", [], "a").size).toBe(0)
-  })
-
-  it("auto mode never grants more than one context", () => {
-    expect(webglPanes("auto", three, "a").size).toBe(1)
-  })
-
   it("webgl mode: every visible pane gets a context", () => {
-    expect([...webglPanes("webgl", three, "b")].sort()).toEqual(["a", "b", "c"])
+    expect([...webglPanes("webgl", three)].sort()).toEqual(["a", "b", "c"])
   })
 
   it("webgl mode: nothing visible → no context", () => {
-    expect(webglPanes("webgl", [], "a").size).toBe(0)
+    expect(webglPanes("webgl", []).size).toBe(0)
+  })
+
+  it("dom mode: no pane gets a context", () => {
+    expect(webglPanes("dom", three).size).toBe(0)
   })
 })

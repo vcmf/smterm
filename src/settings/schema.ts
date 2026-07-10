@@ -6,10 +6,10 @@ export interface Settings {
     lineHeight: number
   }
   theme: string
-  // GPU acceleration (like VS Code's gpuAcceleration): "auto" = WebGL on the focused
-  // pane only (default; garble-free — one context can't corrupt itself); "webgl" = WebGL
-  // on every visible pane (crisp everywhere, but multiple contexts can garble); "dom" = none.
-  renderer: "auto" | "webgl" | "dom"
+  // GPU acceleration (like VS Code's gpuAcceleration): "webgl" = WebGL on every visible
+  // pane (default; crisp glyphs everywhere); "dom" = no GPU (fallback for GPUs/drivers
+  // that can't hold multiple contexts cleanly).
+  renderer: "webgl" | "dom"
   cursorBlink: boolean
   scrollback: number
   confirmQuit: boolean
@@ -29,7 +29,7 @@ export const defaultSettings: Settings = {
   // don't hit it. See ARCHITECTURE §9a / the rendering notes.
   font: { family: "FiraCode Nerd Font Mono", size: 13, ligatures: false, lineHeight: 1.2 },
   theme: "minimal-dark",
-  renderer: "auto",
+  renderer: "webgl",
   cursorBlink: true,
   scrollback: 5000,
   confirmQuit: true,
@@ -64,7 +64,7 @@ export function mergeSettings(input: unknown): Settings {
       lineHeight: num(f.lineHeight, d.font.lineHeight, 1, 3),
     },
     theme: str(o.theme, d.theme),
-    renderer: o.renderer === "dom" || o.renderer === "webgl" ? o.renderer : "auto",
+    renderer: o.renderer === "dom" ? "dom" : "webgl",
     cursorBlink: bool(o.cursorBlink, d.cursorBlink),
     scrollback: num(o.scrollback, d.scrollback, 0, 1_000_000),
     confirmQuit: bool(o.confirmQuit, d.confirmQuit),
