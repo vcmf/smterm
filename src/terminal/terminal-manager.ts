@@ -43,6 +43,11 @@ const OUTPUT_SIGNAL_THROTTLE_MS = 150
 // a pane or switching tabs re-attaches instead of respawning the shell.
 const entries = new Map<string, Entry>()
 
+// Set while WE call term.focus() programmatically (attach/mount/reparent) so the
+// textarea focus listener ignores it — only genuine user focus should change the
+// active pane. Otherwise a tab-switch/split mount storm would clobber the active pane.
+let suppressFocusSignal = false
+
 // File-link existence cache: the link provider fires on hover, so cache validated
 // paths briefly to avoid re-stat'ing the same line via IPC on every mouse move.
 const pathExistsCache = new Map<string, { ok: boolean; ts: number }>()
@@ -409,6 +414,15 @@ export const TerminalManager = {
     if (!entry.opened) {
       entry.term.open(entry.host) // DOM renderer by default; WebGL added by reconcile
       entry.opened = true
+      // Make this pane active whenever its terminal actually gains focus (click or
+      // keyboard). This is the reliable signal: a mousedown handler on the pane
+      // container misses clicks inside an agent TUI (mouse-tracking on), because
+      // xterm's selection service stopPropagation()s those mousedowns — which left
+      // the active pane stuck on the last-added one, so splits targeted the wrong pane.
+      entry.term.textarea?.addEventListener("focus", () => {
+        if (suppressFocusSignal) return
+        useStore.getState().focusSession(session.id)
+      })
       applyLigatures(entry, useStore.getState().settings.font.ligatures)
       syncSize(session.id, entry)
       spawn(session, entry)
@@ -416,7 +430,11 @@ export const TerminalManager = {
       syncSize(session.id, entry)
     }
     reconcileRenderers() // this pane is now on-screen — (re)acquire WebGL if apt
+    // Programmatic focus on (re)attach — don't let it change the active pane (a split
+    // or tab-switch mounts several panes; the store already knows which is active).
+    suppressFocusSignal = true
     entry.term.focus()
+    suppressFocusSignal = false
     // Reparenting the host (e.g. on split) moves the live WebGL canvas, which then
     // shows stale/garbled pixels until the next draw. Repaint on the next frame,
     // once the moved canvas has laid out. (This is the trigger PR #3's repair missed.)

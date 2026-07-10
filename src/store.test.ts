@@ -77,7 +77,31 @@ describe("store — tabs & panes", () => {
     st().setActivePane(firstTab().id, ids[0]!)
     expect(firstTab().activeSessionId).toBe(ids[0])
   })
+
+  it("focusSession finds the pane's tab and makes it active (drives split target)", () => {
+    st().newTab(shell)
+    st().splitActive("row", shell) // A | B, active = B
+    st().splitActive("row", shell) // A | B | C, active = C (last-added)
+    const [a, , c] = allSessionIds(firstTab().root)
+    expect(firstTab().activeSessionId).toBe(c)
+
+    st().focusSession(a!) // user focuses pane A's terminal (not the last-added one)
+    expect(firstTab().activeSessionId).toBe(a)
+
+    // …so the next split targets A: A is no longer a bare leaf, it split into A + new pane.
+    st().splitActive("row", shell)
+    expect(siblingOfLeaf(firstTab().root, a!)).toBe(firstTab().activeSessionId)
+  })
 })
+
+/** The leaf id that shares a split node with `target`, if any (else null). */
+function siblingOfLeaf(node: import("./types").PaneNode, target: string): string | null {
+  if (node.type === "leaf") return null
+  const [x, y] = node.children
+  if (x.type === "leaf" && x.sessionId === target && y.type === "leaf") return y.sessionId
+  if (y.type === "leaf" && y.sessionId === target && x.type === "leaf") return x.sessionId
+  return siblingOfLeaf(x, target) ?? siblingOfLeaf(y, target)
+}
 
 describe("store — status signals & visibility", () => {
   beforeEach(resetStore)

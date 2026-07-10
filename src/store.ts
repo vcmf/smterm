@@ -64,6 +64,7 @@ interface AppState {
   splitActive: (direction: "row" | "column", fallback?: ShellOption) => void
   closePane: (tabId: string, sessionId: string) => void
   setActivePane: (tabId: string, sessionId: string) => void
+  focusSession: (sessionId: string) => void
   setWindowFocused: (focused: boolean) => void
   signalSession: (sessionId: string, ev: SignalEvent) => void
   revealTab: (tabId: string) => void
@@ -223,6 +224,22 @@ export const useStore = create<AppState>((set, get) => ({
       return {
         tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, activeSessionId: sessionId } : t)),
         // Focusing a pane = you've seen it: clear its attention/unread/reason.
+        sessions: session ? { ...state.sessions, [sessionId]: seen(session) } : state.sessions,
+      }
+    }),
+
+  // The terminal itself gained focus (click/keyboard) — make its pane active. This is
+  // the authoritative focus signal: a click handler on the pane container misses clicks
+  // inside a terminal that has mouse-tracking on (agent TUIs), because xterm's selection
+  // service stopPropagation()s those mousedowns. Derives the tab from the session.
+  focusSession: (sessionId) =>
+    set((state) => {
+      const tab = state.tabs.find((t) => allSessionIds(t.root).includes(sessionId))
+      if (!tab) return {}
+      const session = state.sessions[sessionId]
+      return {
+        activeTabId: tab.id,
+        tabs: state.tabs.map((t) => (t.id === tab.id ? { ...t, activeSessionId: sessionId } : t)),
         sessions: session ? { ...state.sessions, [sessionId]: seen(session) } : state.sessions,
       }
     }),
