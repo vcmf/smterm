@@ -88,15 +88,15 @@ export function SettingsPanel() {
         </label>
 
         <label className="settings-row">
-          <span>Renderer</span>
+          <span>GPU acceleration</span>
           <select
             value={settings.renderer}
             onChange={(e) =>
-              update({ ...settings, renderer: e.target.value === "webgl" ? "webgl" : "dom" })
+              update({ ...settings, renderer: e.target.value === "dom" ? "dom" : "auto" })
             }
           >
-            <option value="dom">DOM (always correct)</option>
-            <option value="webgl">WebGL (faster, can garble split panes)</option>
+            <option value="auto">Auto (GPU on the focused pane — recommended)</option>
+            <option value="dom">Off (DOM — no GPU, always correct)</option>
           </select>
         </label>
 

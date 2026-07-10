@@ -1,15 +1,27 @@
 import { describe, it, expect } from "vitest"
-import { shouldUseWebgl, MAX_WEBGL_PANES } from "./renderer-policy"
+import { webglPanes } from "./renderer-policy"
 
-describe("shouldUseWebgl", () => {
-  it("uses WebGL for a normal number of visible panes", () => {
-    expect(shouldUseWebgl(1)).toBe(true)
-    expect(shouldUseWebgl(MAX_WEBGL_PANES)).toBe(true)
+describe("webglPanes", () => {
+  const three = ["a", "b", "c"]
+
+  it("dom mode: no pane gets a context", () => {
+    expect(webglPanes("dom", three, "a").size).toBe(0)
   })
-  it("falls back to DOM when too many panes are visible at once", () => {
-    expect(shouldUseWebgl(MAX_WEBGL_PANES + 1)).toBe(false)
+
+  it("auto mode: exactly the focused visible pane", () => {
+    expect([...webglPanes("auto", three, "b")]).toEqual(["b"])
   })
-  it("uses DOM when nothing is visible", () => {
-    expect(shouldUseWebgl(0)).toBe(false)
+
+  it("auto mode: falls back to the first visible pane when focus isn't on-screen", () => {
+    expect([...webglPanes("auto", three, "zzz")]).toEqual(["a"])
+    expect([...webglPanes("auto", three, null)]).toEqual(["a"])
+  })
+
+  it("auto mode: nothing visible → no context", () => {
+    expect(webglPanes("auto", [], "a").size).toBe(0)
+  })
+
+  it("never grants more than one context", () => {
+    expect(webglPanes("auto", three, "a").size).toBe(1)
   })
 })

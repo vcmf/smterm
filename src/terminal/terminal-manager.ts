@@ -12,7 +12,7 @@ import type { Settings } from "../settings/schema"
 import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
 import { allSessionIds } from "../lib/pane-tree"
-import { shouldUseWebgl } from "../lib/renderer-policy"
+import { webglPanes } from "../lib/renderer-policy"
 import { keyAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
@@ -147,14 +147,14 @@ function releaseWebgl(entry: Entry) {
 function reconcileRenderers() {
   const state = useStore.getState()
   const tab = state.tabs.find((t) => t.id === state.activeTabId)
-  const visible = new Set(tab ? allSessionIds(tab.root) : [])
-  // WebGL is opt-in: multiple live GPU contexts corrupt each other's glyph atlas
-  // (garble on split with several agent panes — see GOTCHAS #renderer). Default is the
-  // DOM renderer, which is always correct. `renderer: "webgl"` opts back in.
-  const useWebgl = state.settings.renderer === "webgl" && shouldUseWebgl(visible.size)
+  const visible = tab ? allSessionIds(tab.root) : []
+  // Which panes get a live GPU context. Default (`auto`) is the focused pane only —
+  // one context can't corrupt itself, so the multi-pane split garble is impossible
+  // by construction (see GOTCHAS #renderer). `webgl` = all visible; `dom` = none.
+  const webgl = webglPanes(state.settings.renderer, visible, tab?.activeSessionId)
   for (const [id, entry] of entries) {
     if (!entry.opened) continue
-    if (useWebgl && visible.has(id)) acquireWebgl(entry)
+    if (webgl.has(id)) acquireWebgl(entry)
     else releaseWebgl(entry)
   }
 }

@@ -28,11 +28,17 @@ can leave paint remnants (xterm.js #3303), worse with multiple panes.
 ## Renderer policy: WebGL only for on-screen panes {#renderer}
 
 Many simultaneous WebGL contexts **corrupt the glyph atlas** (garbled text — xterm.js
-#4379/#3303). `terminal-manager.reconcileRenderers()` gives WebGL only to the active
-tab's panes, and only when ≤ `MAX_WEBGL_PANES` (4) are visible; otherwise DOM.
-Background tabs release their context (PTY keeps running) and re-acquire on return.
-Policy is the pure, tested `lib/renderer-policy.ts`; called on tab-switch/split/close
-(app.tsx) + attach. There is **no renderer setting** — it's automatic.
+#4379/#3303, still unsolved upstream; browsers also cap live contexts and evict the
+oldest). Splitting a tab full of agent TUIs is exactly that regime — the untouched panes
+garbled. The cure is **at most one live context**: the default `auto` mode gives WebGL to
+**only the focused pane** (one context can't corrupt itself), DOM for the rest, and the
+context follows focus (`reconcileRenderers` re-runs when `activeSessionId` changes — a new
+`tabs` array). This mirrors VS Code (`gpuAcceleration`), which stays out of trouble mainly
+because it rarely renders many terminals at once; we force the same one-context regime
+explicitly. Policy is the pure, tested `lib/renderer-policy.ts` (`webglPanes`); called on
+tab-switch / split / close (app.tsx) + attach + settings change. The `renderer` setting is
+`auto` (default) or `dom` (no GPU); there is **deliberately no "WebGL on every pane" mode**
+— that's the unsupported many-contexts footgun.
 
 **Compositing changes on the `.terminal-pane` container can garble the child WebGL canvas**
 (`box-shadow`/`transform`/opacity, animated _or_ just toggled). The focus/attention rail
