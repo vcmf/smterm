@@ -14,6 +14,7 @@ import { displaySessionTitle } from "../lib/session-label"
 import { allSessionIds } from "../lib/pane-tree"
 import { shouldUseWebgl } from "../lib/renderer-policy"
 import { keyAction } from "../lib/terminal-keys"
+import { gridChanged, type Grid } from "../lib/resize"
 
 const isMac = /mac/i.test(navigator.userAgent)
 
@@ -27,6 +28,7 @@ interface Entry {
   joinerId?: number
   idleTimer?: ReturnType<typeof setTimeout>
   lastOutputSignal?: number
+  lastGrid?: Grid // last cols/rows sent to the PTY — skip no-op resizes (spurious SIGWINCH)
   webgl?: WebglAddon // present only while this terminal is rendering via WebGL
   webglFailed?: boolean // context was lost — stay on DOM, don't re-acquire
 }
@@ -269,7 +271,14 @@ function spawn(session: Session, entry: Entry) {
 function syncSize(id: string, entry: Entry) {
   try {
     entry.fit.fit()
-    ipc.ptyResize(id, entry.term.cols, entry.term.rows)
+    const { cols, rows } = entry.term
+    // Only resize the PTY when the character grid actually changed. A split/layout
+    // reflow can fire ResizeObserver without changing a pane's grid; resizing anyway
+    // would SIGWINCH the running program and make it redraw for nothing.
+    if (gridChanged(entry.lastGrid, cols, rows)) {
+      entry.lastGrid = { cols, rows }
+      ipc.ptyResize(id, cols, rows)
+    }
   } catch {
     // Container not measurable yet; a later fit() call will settle it.
   }
