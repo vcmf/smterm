@@ -55,8 +55,9 @@ const api = {
       release: string
     }>,
 
-  gitStatus: (cwd: string) => ipcRenderer.invoke("git:status", cwd),
-  gitDiff: (cwd: string, file: string) => ipcRenderer.invoke("git:diff", cwd, file),
+  gitStatus: (cwd: string, wsl?: { distro?: string }) => ipcRenderer.invoke("git:status", cwd, wsl),
+  gitDiff: (cwd: string, file: string, wsl?: { distro?: string }) =>
+    ipcRenderer.invoke("git:diff", cwd, file, wsl),
 
   readWorkspace: () => ipcRenderer.invoke("workspace:read") as Promise<string>,
   writeWorkspace: (contents: string) => ipcRenderer.invoke("workspace:write", contents),

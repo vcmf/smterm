@@ -48,7 +48,7 @@ describe("DiffPanel", () => {
     ])
     render(<DiffPanel />)
     expect(await screen.findByText("the added line")).toBeInTheDocument()
-    expect(ipc.gitDiff).toHaveBeenCalledWith("/repo", "src/a.ts") // first file auto-selected
+    expect(ipc.gitDiff).toHaveBeenCalledWith("/repo", "src/a.ts", undefined) // first file auto-selected; no WSL ctx
   })
 
   it("shows a clean state when the repo has no changes", () => {

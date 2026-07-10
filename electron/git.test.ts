@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseBranchLine, statusOf, parseNumstat, parseDiff } from "./git"
+import { parseBranchLine, statusOf, parseNumstat, parseDiff, wslGitArgs } from "./git"
 
 describe("parseBranchLine", () => {
   it("reads branch + ahead/behind", () => {
@@ -57,5 +57,35 @@ describe("parseDiff", () => {
     expect(lines[2]).toMatchObject({ type: "del", text: "old", oldNo: 2 })
     expect(lines[3]).toMatchObject({ type: "add", text: "new1", newNo: 2 })
     expect(lines[4]).toMatchObject({ type: "add", text: "new2", newNo: 3 })
+  })
+})
+
+describe("wslGitArgs", () => {
+  it("runs git in the given distro at the Linux cwd via --cd", () => {
+    expect(wslGitArgs("Ubuntu", "/home/me/repo", ["status", "--porcelain=v1"])).toEqual([
+      "-d",
+      "Ubuntu",
+      "--cd",
+      "/home/me/repo",
+      "--",
+      "git",
+      "-c",
+      "core.quotepath=false",
+      "status",
+      "--porcelain=v1",
+    ])
+  })
+
+  it("omits -d for the default distro", () => {
+    expect(wslGitArgs(undefined, "/home/me/repo", ["diff", "HEAD"])).toEqual([
+      "--cd",
+      "/home/me/repo",
+      "--",
+      "git",
+      "-c",
+      "core.quotepath=false",
+      "diff",
+      "HEAD",
+    ])
   })
 })

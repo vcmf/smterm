@@ -130,6 +130,14 @@ spawns. Parser is pure + tested; the shell probe is best-effort (returns `{}` on
 
 The app spawns `wsl.exe` as a shell — it never runs _inside_ WSL.
 
+**Git for a WSL session runs _inside_ the distro, not on the host.** A WSL pane's cwd
+(from OSC 7) is a Linux path (`/home/you/repo`) the Windows host can't see, so host `git`
+reports "not a git repo" and the diff panel is empty. Fix: the renderer passes the session's
+WSL context (`lib/wsl.ts` `wslContext` → `{ distro }`, parsed from the `wsl.exe -d <distro>`
+command) with `git:status`/`git:diff`; `electron/git.ts` then runs `wsl.exe [-d <distro>]
+--cd <cwd> -- git …` (see `wslGitArgs`). The untracked-file line-count fallback (`countLines`,
+host fs) and the diff null-device (`NUL` vs `/dev/null`) are also WSL-aware.
+
 ## Clickable file links {#file-links}
 
 Path-like tokens in output are made clickable (Cmd/Ctrl-click → open in editor). Detection is

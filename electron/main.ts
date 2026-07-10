@@ -264,8 +264,12 @@ function registerIpc() {
   ipcMain.handle("window:is-maximized", async () => mainWindow?.isMaximized() ?? false)
 
   // Git — working-tree status + per-file diff for the changes panel.
-  ipcMain.handle("git:status", async (_e, cwd: string) => gitStatus(cwd))
-  ipcMain.handle("git:diff", async (_e, cwd: string, file: string) => gitDiff(cwd, file))
+  ipcMain.handle("git:status", async (_e, cwd: string, wsl?: { distro?: string }) =>
+    gitStatus(cwd, wsl),
+  )
+  ipcMain.handle("git:diff", async (_e, cwd: string, file: string, wsl?: { distro?: string }) =>
+    gitDiff(cwd, file, wsl),
+  )
 
   // Perf: process CPU/memory metrics + whether we're in load-test mode.
   ipcMain.handle("app:metrics", async () =>

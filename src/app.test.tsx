@@ -39,6 +39,6 @@ describe("App (integration)", () => {
     await waitFor(() => expect(useStore.getState().tabs).toHaveLength(1))
     const id = Object.keys(useStore.getState().sessions)[0]!
     useStore.getState().setSessionCwd(id, "/repo")
-    await waitFor(() => expect(ipc.gitStatus).toHaveBeenCalledWith("/repo"))
+    await waitFor(() => expect(ipc.gitStatus).toHaveBeenCalledWith("/repo", undefined)) // no WSL ctx for a native shell
   })
 })
