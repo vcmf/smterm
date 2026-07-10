@@ -28,7 +28,7 @@ import { OutputCoalescer } from "./coalescer"
 import { OutputBuffer } from "./output-buffer"
 import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
-import { buildEditorCommand } from "./editor-command"
+import { buildEditorCommand, winQuote } from "./editor-command"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -362,11 +362,15 @@ function openFile(cwd: string, file: string, line?: number, col?: number): void 
   }
   try {
     // `process.env` carries the login-shell PATH imported at startup (shell-env),
-    // so a GUI-launched app can still find `code`/etc.
-    const child = spawn(built.cmd, built.args, {
+    // so a GUI-launched app can still find `code`/etc. On Windows, editors are `.cmd`
+    // shims that `spawn` can't exec directly — use the shell and quote args (winQuote).
+    const isWin = process.platform === "win32"
+    const child = spawn(built.cmd, isWin ? built.args.map(winQuote) : built.args, {
       detached: true,
       stdio: "ignore",
       env: process.env,
+      shell: isWin,
+      windowsHide: true,
     })
     child.on("error", () => void shell.openPath(abs)) // editor not on PATH → OS default
     child.unref()

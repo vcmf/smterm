@@ -31,3 +31,11 @@ export function buildEditorCommand(
   if (!cmd) return null
   return { cmd, args }
 }
+
+/** Quote an argument for the Windows `cmd.exe` shell — needed because editors are
+ *  `.cmd` shims there and `spawn` can't exec them without `shell: true`. Windows
+ *  paths can't contain `"`, and `& | < > ( ) ^` are literal inside double quotes,
+ *  so wrapping is safe (only stray `%VAR%` could expand — harmless). Pure — tested. */
+export function winQuote(arg: string): string {
+  return `"${arg.replace(/"/g, '""')}"`
+}

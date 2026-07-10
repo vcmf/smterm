@@ -47,6 +47,7 @@ const entries = new Map<string, Entry>()
 // paths briefly to avoid re-stat'ing the same line via IPC on every mouse move.
 const pathExistsCache = new Map<string, { ok: boolean; ts: number }>()
 const PATH_CACHE_TTL_MS = 5000
+const PATH_CACHE_MAX = 1000 // bound memory over long sessions (many distinct paths)
 function validatePath(cwd: string, p: string): Promise<boolean> {
   const key = `${cwd} ${p}`
   const hit = pathExistsCache.get(key)
@@ -54,6 +55,12 @@ function validatePath(cwd: string, p: string): Promise<boolean> {
   if (hit && now - hit.ts < PATH_CACHE_TTL_MS) return Promise.resolve(hit.ok)
   return ipc.pathExists(cwd, p).then((ok) => {
     pathExistsCache.set(key, { ok, ts: now })
+    // Evict the oldest entry once over the cap (Map keeps insertion order) so the
+    // cache can't grow unbounded as an agent prints thousands of distinct paths.
+    if (pathExistsCache.size > PATH_CACHE_MAX) {
+      const oldest = pathExistsCache.keys().next().value
+      if (oldest !== undefined) pathExistsCache.delete(oldest)
+    }
     return ok
   })
 }

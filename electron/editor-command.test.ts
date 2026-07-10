@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildEditorCommand } from "./editor-command"
+import { buildEditorCommand, winQuote } from "./editor-command"
 
 describe("buildEditorCommand", () => {
   it("builds the default VS Code -g invocation with line:col", () => {
@@ -36,5 +36,17 @@ describe("buildEditorCommand", () => {
   it("returns null for an empty template (→ OS default)", () => {
     expect(buildEditorCommand("", { file: "/a/b.ts" })).toBeNull()
     expect(buildEditorCommand("   ", { file: "/a/b.ts" })).toBeNull()
+  })
+})
+
+describe("winQuote", () => {
+  it("wraps an arg in double quotes so cmd.exe keeps it one token", () => {
+    expect(winQuote("C:\\my repo\\a.ts:1:1")).toBe('"C:\\my repo\\a.ts:1:1"')
+    expect(winQuote("-g")).toBe('"-g"')
+  })
+
+  it("neutralizes cmd metacharacters inside the quotes", () => {
+    // & | < > ( ) ^ are literal inside double quotes — no command injection.
+    expect(winQuote("a&whoami.txt")).toBe('"a&whoami.txt"')
   })
 })
