@@ -41,6 +41,13 @@ attention cue must avoid animating the terminal's container (use the sidebar dot
 or a non-compositing indicator). Renderer stays WebGL (VS Code's choice; xterm's canvas
 addon is deprecated).
 
+**The atlas/framebuffer can also go stale on its own** — after the app is backgrounded,
+a display-scale/monitor (DPR) change, or a resize — showing garble until a scroll forces a
+repaint. `terminal-manager.repairRenderers(rebuildAtlas?)` automates that scroll: `app.tsx`
+calls it on window focus and `visibilitychange` (cheap repaint), and on a DPR change or a
+debounced resize (`rebuildAtlas=true` → `clearTextureAtlas()`, since glyph metrics moved).
+True _context loss_ is separate (see `acquireWebgl`): it disposes and stays on the DOM.
+
 ## Self-heal a crashed TUI's mouse mode {#mouse-reset}
 
 A full-screen TUI killed abnormally (classic case: an agent dying on lid-close/sleep)

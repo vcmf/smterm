@@ -111,6 +111,24 @@ function reconcileRenderers() {
   }
 }
 
+/** Repaint on-screen WebGL panes — mirrors what a manual scroll does, forcing
+ *  xterm to re-emit rows the GPU may be showing stale. Pass `rebuildAtlas` when
+ *  render metrics changed (DPR / monitor / display-scale / resize) so the glyph
+ *  atlas is rebuilt at the new size, not just repainted. Cures the rare WebGL
+ *  atlas/framebuffer garble after backgrounding or a display change — the "it
+ *  fixes itself when I scroll" symptom. See GOTCHAS #renderer. */
+function repairRenderers(rebuildAtlas = false) {
+  for (const entry of entries.values()) {
+    if (!entry.webgl || !entry.opened) continue
+    try {
+      if (rebuildAtlas) entry.webgl.clearTextureAtlas()
+      entry.term.refresh(0, entry.term.rows - 1)
+    } catch {
+      // addon disposed meanwhile — ignore
+    }
+  }
+}
+
 function build(): Entry {
   const s = useStore.getState().settings
   const host = document.createElement("div")
@@ -298,6 +316,7 @@ export const TerminalManager = {
   },
 
   reconcileRenderers,
+  repairRenderers,
 
   fit(id: string) {
     const entry = entries.get(id)

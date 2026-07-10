@@ -125,6 +125,46 @@ function App() {
     }
   }, [])
 
+  // WebGL repair: the GPU glyph atlas / framebuffer can go stale after the app is
+  // backgrounded, the display scale / monitor (DPR) changes, or a resize — showing
+  // garbled glyphs until a scroll forces a repaint. Automate that repaint on exactly
+  // those events; rebuild the atlas when render metrics changed. See GOTCHAS #renderer.
+  useEffect(() => {
+    const repaint = () => TerminalManager.repairRenderers(false)
+    const rebuild = () => TerminalManager.repairRenderers(true)
+    const onVisible = () => {
+      if (document.visibilityState === "visible") repaint()
+    }
+    let resizeTimer: ReturnType<typeof setTimeout>
+    const onResize = () => {
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(rebuild, 200) // debounce: rebuild once the drag settles
+    }
+    // DPR change (monitor swap / OS display scaling / browser zoom) — the media
+    // query is pinned to the current devicePixelRatio, so re-arm after each change.
+    let dprMq: MediaQueryList | null = null
+    const onDpr = () => {
+      rebuild()
+      armDpr()
+    }
+    const armDpr = () => {
+      if (typeof window.matchMedia !== "function") return // absent in jsdom/tests
+      dprMq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+      dprMq.addEventListener?.("change", onDpr, { once: true })
+    }
+    window.addEventListener("focus", repaint)
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("resize", onResize)
+    armDpr()
+    return () => {
+      window.removeEventListener("focus", repaint)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("resize", onResize)
+      dprMq?.removeEventListener?.("change", onDpr)
+      clearTimeout(resizeTimer)
+    }
+  }, [])
+
   // Dispose terminals whose sessions have left the store (pane/tab closed).
   useEffect(() => {
     return useStore.subscribe((state, prev) => {
