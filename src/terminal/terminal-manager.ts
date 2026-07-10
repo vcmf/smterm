@@ -86,10 +86,21 @@ function acquireWebgl(entry: Entry) {
   try {
     const webgl = new WebglAddon()
     webgl.onContextLoss(() => {
-      // Context lost (GPU pressure / suspend) — drop to DOM and don't retry it.
+      // Context lost — GPU pressure, another pane creating a context on split (browsers
+      // cap live WebGL contexts and evict the oldest), or the host being reparented.
+      // Drop to DOM and don't retry. CRUCIAL: repaint. Disposing WebGL stops it drawing
+      // and the DOM renderer starts empty, so without this the pane goes BLANK (the
+      // buffer is intact — it just isn't painted). Repaint next frame, once DOM is live.
       webgl.dispose()
       entry.webgl = undefined
       entry.webglFailed = true
+      requestAnimationFrame(() => {
+        try {
+          entry.term.refresh(0, entry.term.rows - 1)
+        } catch {
+          // terminal disposed meanwhile
+        }
+      })
     })
     entry.term.loadAddon(webgl)
     entry.webgl = webgl
