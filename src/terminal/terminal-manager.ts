@@ -12,7 +12,7 @@ import type { Settings } from "../settings/schema"
 import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
 import { allSessionIds } from "../lib/pane-tree"
-import { webglPanes } from "../lib/renderer-policy"
+import { webglPanes, shouldRebuildAtlas } from "../lib/renderer-policy"
 import { keyAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
@@ -165,9 +165,8 @@ function reconcileRenderers() {
   // Creating a WebGL context can disturb the sibling contexts that share xterm's
   // glyph atlas (garble on split with several panes — xterm.js #4379). Once the new
   // context has settled, rebuild the atlas on ALL live WebGL panes so any corrupted
-  // glyphs re-rasterize. Only when >1 context coexists; a lone context can't corrupt
-  // itself. Deferred a frame so the new context is fully initialised before the rebuild.
-  if (created && webgl.size > 1) {
+  // glyphs re-rasterize. Deferred a frame so the new context is fully initialised.
+  if (shouldRebuildAtlas(created, webgl.size)) {
     requestAnimationFrame(() => repairRenderers(true))
   }
 }

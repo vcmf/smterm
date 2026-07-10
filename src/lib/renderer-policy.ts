@@ -16,3 +16,11 @@ export type RendererMode = "webgl" | "dom"
 export function webglPanes(mode: RendererMode, visible: string[]): Set<string> {
   return mode === "dom" ? new Set() : new Set(visible)
 }
+
+/** After reconciling, whether to rebuild the shared glyph atlas across panes. Only
+ *  when a context was **newly created** AND more than one now coexists: creating a
+ *  context disturbs the atlas its siblings share (the split garble), but a lone
+ *  context can't corrupt itself, and if nothing was created nothing was disturbed. */
+export function shouldRebuildAtlas(createdContext: boolean, webglPaneCount: number): boolean {
+  return createdContext && webglPaneCount > 1
+}
