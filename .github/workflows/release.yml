@@ -1,30 +1,75 @@
 name: Release
 
-# Cut a release by pushing a SemVer tag, e.g.  git push origin v0.1.0
-# (see `make release`). Builds per-OS, then publishes ONE GitHub Release.
-# A tag with a prerelease part (e.g. v0.1.0-rc.1) publishes as a pre-release.
+# Two ways to cut a release — both end in test → per-OS build → ONE GitHub Release
+# (a tag with a prerelease part, e.g. v0.1.0-rc.1, publishes as a pre-release):
 #
-# workflow_dispatch runs the SAME test + per-OS build as a smoke test (artifacts
-# are uploaded for download), but SKIPS publishing a Release — so you can exercise
-# the pipeline from the Actions UI without cutting a version. See the publish job.
+#   1. UI (preferred): Actions → Release → "Run workflow" → pick patch/minor/major.
+#      The `bump` job bumps package.json, commits + tags on main, and pushes; the
+#      rest of the run builds and publishes that version. No local step, no hand-typed tag.
+#   2. Tag push: `make release` (or `git push origin v0.1.2`) → skips `bump` and just
+#      builds + publishes the pushed tag.
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version bump to apply
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
-  contents: write # create the release + upload assets
+  contents: write # bump commit + tag, create the release, upload assets
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # Gate: don't ship from red code.
+  # UI dispatch only: bump package.json, commit + tag on main, push. Outputs the new
+  # tag so the downstream jobs check out and publish it. (A GITHUB_TOKEN push does not
+  # re-trigger the tag-push path, so everything must flow within this one run.)
+  bump:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Bump version, commit + tag, push
+        id: bump
+        run: |
+          npm version "${{ inputs.bump }}" -m "release: v%s"
+          TAG="v$(node -p "require('./package.json').version")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          git push origin HEAD:main
+          git push origin "$TAG"
+
+  # Gate: don't ship from red code. Runs for both paths; on dispatch it waits for the
+  # bump and checks out the newly-created tag.
   test:
+    needs: [bump]
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.tag || github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -38,7 +83,8 @@ jobs:
   # Build installers per OS (no publish here — a single publish job avoids the
   # electron-builder race where parallel jobs each create a duplicate draft).
   build:
-    needs: test
+    needs: [test, bump]
+    if: ${{ !failure() && !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +92,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.tag || github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -71,12 +119,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 5
 
-  # Collect every OS's artifacts and publish a single release for the tag.
-  # Tag pushes only — a manual workflow_dispatch stops after build (no ref_name
-  # tag to release, and we don't want a UI smoke test to publish).
+  # Collect every OS's artifacts and publish a single release for the tag — the newly
+  # bumped tag (dispatch) or the pushed tag (tag push).
   publish:
-    needs: build
-    if: github.event_name == 'push'
+    needs: [build, bump]
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Download all build artifacts
@@ -87,9 +134,9 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ needs.bump.outputs.tag || github.ref_name }}
+          name: ${{ needs.bump.outputs.tag || github.ref_name }}
+          prerelease: ${{ contains(needs.bump.outputs.tag || github.ref_name, '-') }}
           generate_release_notes: true
           files: dist/**
           fail_on_unmatched_files: false
