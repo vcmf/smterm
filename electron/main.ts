@@ -192,12 +192,17 @@ function registerIpc() {
       const inj = wsl ? buildWslInjection(opts.args ?? []) : buildInjection(shellCmd)
       const wslArgs = wsl ? wslCdArgs(opts.cwd) : []
       const startCwd = !wsl && opts.cwd && fs.existsSync(opts.cwd) ? opts.cwd : os.homedir()
+      // Shared-history opt-out: the injected scripts default SHARE_HISTORY on; pass
+      // SMTERM_SHARE_HISTORY=0 to disable. (For WSL, wslInjection lists it in $WSLENV
+      // so it crosses the boundary.)
+      const spawnEnv = { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>
+      if (!shareHistoryEnabled()) spawnEnv.SMTERM_SHARE_HISTORY = "0"
       const proc = pty.spawn(shellCmd, [...(opts.args ?? []), ...wslArgs, ...(inj?.args ?? [])], {
         name: "xterm-256color",
         cols: opts.cols || 80,
         rows: opts.rows || 24,
         cwd: startCwd,
-        env: { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>,
+        env: spawnEnv,
       })
       const coalesce = process.env.SMTERM_NO_COALESCE !== "1"
       const rec: PtySession = {
@@ -359,6 +364,15 @@ function killAllPtys() {
 function confirmQuitEnabled(): boolean {
   try {
     return (JSON.parse(readSettings() || "{}") as { confirmQuit?: boolean }).confirmQuit !== false
+  } catch {
+    return true
+  }
+}
+
+// Is cmux-like shared history enabled? (reads settings.json live; default on)
+function shareHistoryEnabled(): boolean {
+  try {
+    return (JSON.parse(readSettings() || "{}") as { shareHistory?: boolean }).shareHistory !== false
   } catch {
     return true
   }

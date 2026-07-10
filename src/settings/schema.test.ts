@@ -17,6 +17,12 @@ describe("mergeSettings", () => {
     expect(s.cursorBlink).toBe(defaultSettings.cursorBlink)
   })
 
+  it("shareHistory defaults on and accepts an explicit opt-out", () => {
+    expect(mergeSettings({}).shareHistory).toBe(true)
+    expect(mergeSettings({ shareHistory: false }).shareHistory).toBe(false)
+    expect(mergeSettings({ shareHistory: "no" }).shareHistory).toBe(true) // wrong type → default
+  })
+
   it("falls back per-field on wrong types", () => {
     const s = mergeSettings({ font: { size: "big", ligatures: "yes" }, scrollback: "lots" })
     expect(s.font.size).toBe(defaultSettings.font.size)

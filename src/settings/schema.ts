@@ -9,6 +9,7 @@ export interface Settings {
   cursorBlink: boolean
   scrollback: number
   confirmQuit: boolean
+  shareHistory: boolean // cmux-like shared, incrementally-written zsh/bash history across panes
   defaultShell: string // command path of the preferred shell; "" = system $SHELL
 }
 
@@ -24,6 +25,7 @@ export const defaultSettings: Settings = {
   cursorBlink: true,
   scrollback: 5000,
   confirmQuit: true,
+  shareHistory: true,
   defaultShell: "",
 }
 
@@ -54,6 +56,7 @@ export function mergeSettings(input: unknown): Settings {
     cursorBlink: bool(o.cursorBlink, d.cursorBlink),
     scrollback: num(o.scrollback, d.scrollback, 0, 1_000_000),
     confirmQuit: bool(o.confirmQuit, d.confirmQuit),
+    shareHistory: bool(o.shareHistory, d.shareHistory),
     defaultShell: typeof o.defaultShell === "string" ? o.defaultShell : d.defaultShell,
   }
 }
