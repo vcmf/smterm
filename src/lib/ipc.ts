@@ -1,4 +1,5 @@
 import type { ShellOption } from "../types"
+import type { WslContext } from "./wsl"
 
 // The typed surface the preload exposes on window.smterm. Every renderer→main
 // call goes through this one seam (keeps components portable + is the insulation
@@ -41,8 +42,8 @@ export interface Ipc {
   isMaximized: () => Promise<boolean>
   onMaximizeChange: (cb: (max: boolean) => void) => () => void
   platformInfo: () => Promise<PlatformInfo>
-  gitStatus: (cwd: string) => Promise<GitStatus>
-  gitDiff: (cwd: string, file: string) => Promise<DiffLine[]>
+  gitStatus: (cwd: string, wsl?: WslContext) => Promise<GitStatus>
+  gitDiff: (cwd: string, file: string, wsl?: WslContext) => Promise<DiffLine[]>
   readWorkspace: () => Promise<string>
   writeWorkspace: (contents: string) => void
   appMetrics: () => Promise<ProcMetric[]>

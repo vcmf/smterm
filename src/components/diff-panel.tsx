@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { FileText, FilePlus, FileX, X } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
-import { useActiveCwd } from "../lib/use-active-cwd"
+import { useActiveCwd, getActiveWsl } from "../lib/use-active-cwd"
 import type { ChangeStatus, DiffLine } from "../lib/ipc"
 
 const fileIcon = (status: ChangeStatus) => {
@@ -34,7 +34,7 @@ export function DiffPanel() {
       return
     }
     let cancelled = false
-    void ipc.gitDiff(cwd, selected).then((d) => {
+    void ipc.gitDiff(cwd, selected, getActiveWsl()).then((d) => {
       if (!cancelled) setDiff(d)
     })
     return () => {

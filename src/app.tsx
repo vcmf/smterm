@@ -8,7 +8,7 @@ import { SearchBar } from "./components/search-bar"
 import { DiffPanel } from "./components/diff-panel"
 import { PaneLayout } from "./components/pane-layout"
 import { SettingsPanel } from "./components/settings-panel"
-import { useActiveCwd } from "./lib/use-active-cwd"
+import { useActiveCwd, getActiveWsl } from "./lib/use-active-cwd"
 import { TerminalManager } from "./terminal/terminal-manager"
 import { useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
@@ -193,7 +193,7 @@ function App() {
     }
     let cancelled = false
     const poll = () =>
-      void ipc.gitStatus(activeCwd).then((g) => {
+      void ipc.gitStatus(activeCwd, getActiveWsl()).then((g) => {
         if (!cancelled) useStore.getState().setGit(g)
       })
     poll()

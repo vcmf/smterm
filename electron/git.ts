@@ -105,22 +105,46 @@ export function parseDiff(out: string): DiffLine[] {
   return lines
 }
 
-async function run(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await exec("git", ["-c", "core.quotepath=false", ...args], {
+/** Run git inside a WSL distro instead of on the Windows host. A WSL session's
+ *  cwd is a Linux path the host can't see, so host git reports "not a git repo". */
+export interface WslCtx {
+  distro?: string // undefined = the default distro
+}
+
+/** `wsl.exe` args to run `git <gitArgs>` in <distro> at Linux <cwd>. Pure — tested.
+ *  Uses `--cd` (the same mechanism we spawn WSL shells with). */
+export function wslGitArgs(distro: string | undefined, cwd: string, gitArgs: string[]): string[] {
+  return [
+    ...(distro ? ["-d", distro] : []),
+    "--cd",
     cwd,
-    maxBuffer: 20 * 1024 * 1024,
-  })
+    "--",
+    "git",
+    "-c",
+    "core.quotepath=false",
+    ...gitArgs,
+  ]
+}
+
+async function run(cwd: string, args: string[], wsl?: WslCtx): Promise<string> {
+  const maxBuffer = 20 * 1024 * 1024
+  if (wsl) {
+    // cwd is a Linux path valid only inside WSL — run git there, not on the host.
+    const { stdout } = await exec("wsl.exe", wslGitArgs(wsl.distro, cwd, args), { maxBuffer })
+    return stdout
+  }
+  const { stdout } = await exec("git", ["-c", "core.quotepath=false", ...args], { cwd, maxBuffer })
   return stdout
 }
 
 const NULL_DEVICE = process.platform === "win32" ? "NUL" : "/dev/null"
 
 /** Working-tree status for a directory: branch, ahead/behind, changed files. */
-export async function gitStatus(cwd: string): Promise<GitStatus> {
+export async function gitStatus(cwd: string, wsl?: WslCtx): Promise<GitStatus> {
   if (!cwd) return empty
   let porcelain: string
   try {
-    porcelain = await run(cwd, ["status", "--porcelain=v1", "-b", "--untracked-files=all"])
+    porcelain = await run(cwd, ["status", "--porcelain=v1", "-b", "--untracked-files=all"], wsl)
   } catch {
     return empty // not a git repo (or git missing)
   }
@@ -131,7 +155,7 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 
   let numstat = new Map<string, { add: number; del: number }>()
   try {
-    numstat = parseNumstat(await run(cwd, ["diff", "--numstat", "HEAD"]))
+    numstat = parseNumstat(await run(cwd, ["diff", "--numstat", "HEAD"], wsl))
   } catch {
     // no HEAD yet (empty repo) — counts come from file reads below
   }
@@ -143,7 +167,10 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
     const p = line.slice(3)
     const status = statusOf(xy)
     let counts = numstat.get(p)
-    if (!counts) counts = { add: status === "?" ? countLines(path.join(cwd, p)) : 0, del: 0 }
+    // The untracked-file fallback reads the file off the host fs; a WSL Linux path
+    // isn't host-accessible, so skip it there (untracked +count shows 0 on WSL).
+    if (!counts)
+      counts = { add: status === "?" && !wsl ? countLines(path.join(cwd, p)) : 0, del: 0 }
     files.push({ path: p, name: path.basename(p), dir: path.dirname(p), status, ...counts })
   }
 
@@ -153,14 +180,15 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 }
 
 /** Unified diff for one file (handles untracked via --no-index). */
-export async function gitDiff(cwd: string, file: string): Promise<DiffLine[]> {
+export async function gitDiff(cwd: string, file: string, wsl?: WslCtx): Promise<DiffLine[]> {
   if (!cwd || !file) return []
+  const nul = wsl ? "/dev/null" : NULL_DEVICE // git runs inside Linux when wsl is set
   try {
-    let out = await run(cwd, ["diff", "HEAD", "--", file])
+    let out = await run(cwd, ["diff", "HEAD", "--", file], wsl)
     if (!out.trim()) {
       // untracked / new file — diff against the null device
       try {
-        out = await run(cwd, ["diff", "--no-index", "--", NULL_DEVICE, file])
+        out = await run(cwd, ["diff", "--no-index", "--", nul, file], wsl)
       } catch (e) {
         // --no-index exits 1 when files differ but still prints the diff
         out = (e as { stdout?: string }).stdout ?? ""
