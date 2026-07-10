@@ -81,6 +81,33 @@ daemon) is still **ROADMAP M5** — a full quit kills PTYs (they're children of 
 `app.quit()` too. The dialog's "don't warn again" writes `confirmQuit:false` to
 settings.json.
 
+## zsh/bash history is shared across panes (cmux-like) {#history}
+
+**Fixed 2026-07-10.** Symptom was: unlike cmux, smterm panes didn't share command history
+live (type in pane A, reuse in pane B) and history often didn't survive closing the app —
+even with the user's `HISTFILE`/`HISTSIZE`/`SAVEHIST` set (so `.zshrc` **was** loading;
+never an rc-loading problem). Root cause: our injected integration didn't enable shared
+history, while cmux does (confirmed — `setopt | grep -i sharehistory` returns `sharehistory`
+in a cmux pane with the user's `.zshrc` having it off, so cmux enables it itself).
+
+**Fix (in `electron/shell-integration.ts`):**
+
+- **zsh:** after sourcing the user's `.zshrc` (so it wins), `setopt SHARE_HISTORY` + sane
+  `HISTFILE`/`SAVEHIST`/`HISTSIZE` fallbacks **only when unset**.
+- **bash:** `shopt -s histappend` + `history -a; history -n` in `__smterm_precmd` (after
+  `local ret=$?` so it can't clobber the reported exit code).
+- **Why it also fixes persistence:** `SHARE_HISTORY`/`histappend` write each command to
+  `HISTFILE` **immediately**, so history survives even the hard `proc.kill()` on close — we
+  did **not** need to touch the PTY kill/reattach lifecycle (which session-survival depends
+  on). Graceful shutdown would be a nice-to-have but is unnecessary for history.
+- **Opt-out:** it's an opinionated semantics change (cross-pane chronological interleave vs
+  per-session order), so it's gated on `SMTERM_SHARE_HISTORY` (default on). The
+  `shareHistory` setting (schema, default `true`) → `main.ts` sets `SMTERM_SHARE_HISTORY=0`
+  in the spawn env when off; `wslInjection` lists the var in `$WSLENV` so the opt-out
+  crosses into WSL.
+- **Invariant:** all panes must keep the **same `HISTFILE`** — the injection must never set
+  a per-pane histfile, or sharing breaks.
+
 ## node-pty is a native module {#node-pty}
 
 After install / Electron upgrades run `npx electron-rebuild -o node-pty` (in

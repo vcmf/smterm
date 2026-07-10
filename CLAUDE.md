@@ -67,6 +67,8 @@ rules also in `electron/CLAUDE.md` (loaded on demand). Design detail in `ARCHITE
   survive a renderer reload** via attach-or-spawn reattach. Full-quit survival = ROADMAP M5. → GOTCHAS #session-survival
 - **Quit is guarded** (`before-quit` confirm dialog when PTYs live). → GOTCHAS #session-survival
 - **A crashed TUI's mouse mode self-heals** via the zsh/bash `precmd` reset. → GOTCHAS #mouse-reset
+- **zsh/bash history is shared across panes** — integration sets `SHARE_HISTORY`/`histappend`
+  (incremental write → also survives close); opt-out via `shareHistory` setting. → GOTCHAS #history
 - **`node-pty` is a native module** — `npx electron-rebuild -o node-pty`; not unit-testable in Vitest. → GOTCHAS #node-pty
 - **On Windows the app spawns `wsl.exe`** — never runs _inside_ WSL. → GOTCHAS #windows
 - **Agent-status reducer has a known flaw** — don't quick-patch (needs a test matrix). → GOTCHAS #agent-status, ARCHITECTURE §9a

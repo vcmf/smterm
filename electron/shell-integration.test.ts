@@ -62,7 +62,7 @@ describe("wslInjection", () => {
   it("bash → --rcfile with the WSL-translated path", () => {
     const r = wslInjection("/bin/bash", base)
     expect(r?.args).toEqual(["--", "bash", "--rcfile", `${base}/bash/bashrc`, "-i"])
-    expect(r?.wslenv).toEqual([])
+    expect(r?.wslenv).toEqual(["SMTERM_SHARE_HISTORY"]) // opt-out crosses the boundary
   })
 
   it("zsh → ZDOTDIR forwarded across the WSL boundary", () => {
@@ -111,5 +111,24 @@ describe("precmd mouse-mode reset", () => {
   it("bash precmd emits every mouse-tracking disable", () => {
     for (const d of disables) expect(BASH_RC).toContain(`\\033[?${d}`)
     expect(BASH_RC.indexOf("local ret=$?")).toBeLessThan(BASH_RC.indexOf("\\033[?1003l"))
+  })
+})
+
+describe("shared history (cmux-like)", () => {
+  it("zsh enables SHARE_HISTORY, gated by the opt-out env, after the user's rc", () => {
+    expect(ZSH_ZSHRC).toContain("setopt SHARE_HISTORY")
+    expect(ZSH_ZSHRC).toContain('"${SMTERM_SHARE_HISTORY:-1}" != "0"')
+    // Must run after sourcing the user's .zshrc so our setopt wins.
+    expect(ZSH_ZSHRC.indexOf('source "$ZDOTDIR/.zshrc"')).toBeLessThan(
+      ZSH_ZSHRC.indexOf("setopt SHARE_HISTORY"),
+    )
+  })
+
+  it("bash appends + re-reads history each prompt, gated by the opt-out env", () => {
+    expect(BASH_RC).toContain("shopt -s histappend")
+    expect(BASH_RC).toContain("history -a; history -n")
+    expect(BASH_RC).toContain('"${SMTERM_SHARE_HISTORY:-1}" != "0"')
+    // The sync runs after `local ret=$?` so it can't clobber the reported exit code.
+    expect(BASH_RC.indexOf("local ret=$?")).toBeLessThan(BASH_RC.indexOf("history -a; history -n"))
   })
 })

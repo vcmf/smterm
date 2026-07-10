@@ -31,6 +31,17 @@ export const ZSH_ZSHRC = [
   '  source "$ZDOTDIR/.zshrc"',
   "fi",
   "",
+  "# Shared, incrementally-written history across panes (cmux-like) unless opted out",
+  "# (SMTERM_SHARE_HISTORY=0). After the user's rc so our setopt wins; fills sane",
+  "# HISTFILE/SAVEHIST/HISTSIZE only when unset. SHARE_HISTORY writes each command",
+  "# immediately, so history also survives an abrupt close (not just a clean exit).",
+  'if [[ -o interactive && "${SMTERM_SHARE_HISTORY:-1}" != "0" ]]; then',
+  '  [[ -z "$HISTFILE" ]] && HISTFILE="$HOME/.zsh_history"',
+  "  (( ${SAVEHIST:-0} < 1 )) && SAVEHIST=10000",
+  "  (( ${HISTSIZE:-0} < 1 )) && HISTSIZE=10000",
+  "  setopt SHARE_HISTORY",
+  "fi",
+  "",
   "# Emit OSC 133 marks so smterm can track command start/finish.",
   'if [[ -o interactive && -z "$__SMTERM_ZSH_HOOKS" ]]; then',
   "  __SMTERM_ZSH_HOOKS=1",
@@ -74,6 +85,10 @@ export const BASH_RC = [
   '[[ -n "$__SMTERM_BASH_HOOKS" ]] && return',
   "__SMTERM_BASH_HOOKS=1",
   "",
+  "# Shared history across panes (cmux-like) unless opted out (SMTERM_SHARE_HISTORY=0):",
+  "# append this session's new lines to HISTFILE and re-read others' before each prompt.",
+  'if [[ "${SMTERM_SHARE_HISTORY:-1}" != "0" ]]; then shopt -s histappend; __smterm_share_hist=1; else __smterm_share_hist=0; fi',
+  "",
   "__smterm_armed=0",
   "",
   "__smterm_preexec() {",
@@ -85,6 +100,7 @@ export const BASH_RC = [
   "",
   "__smterm_precmd() {",
   "  local ret=$?",
+  "  [[ $__smterm_share_hist == 1 ]] && { history -a; history -n; }",
   "  printf '\\033]133;D;%s\\007' \"$ret\"",
   '  printf \'\\033]7;file://%s%s\\007\' "${HOSTNAME:-localhost}" "$PWD"',
   "  printf '" + MOUSE_RESET + "' # heal a crashed TUI's leftover mouse mode",
@@ -186,7 +202,12 @@ export function wslInjection(
   const name = loginShell.split("/").pop() ?? ""
   if (name === "bash") {
     // --rcfile takes a literal path (already WSL-translated); it sources ~/.bashrc.
-    return { args: ["--", "bash", "--rcfile", `${wslBase}/bash/bashrc`, "-i"], env: {}, wslenv: [] }
+    // Forward SMTERM_SHARE_HISTORY so the shared-history opt-out crosses into WSL.
+    return {
+      args: ["--", "bash", "--rcfile", `${wslBase}/bash/bashrc`, "-i"],
+      env: {},
+      wslenv: ["SMTERM_SHARE_HISTORY"],
+    }
   }
   if (name === "zsh") {
     // zsh finds our .zshrc via $ZDOTDIR; it restores ZDOTDIR to $HOME + sources ~/.zshrc.
@@ -194,7 +215,7 @@ export function wslInjection(
     return {
       args: ["--", "zsh", "-i"],
       env: { ZDOTDIR: zdir, SMTERM_SHELL_INTEGRATION: "1" },
-      wslenv: ["ZDOTDIR", "SMTERM_SHELL_INTEGRATION"],
+      wslenv: ["ZDOTDIR", "SMTERM_SHELL_INTEGRATION", "SMTERM_SHARE_HISTORY"],
     }
   }
   return null
