@@ -15,6 +15,7 @@ import { allSessionIds } from "../lib/pane-tree"
 import { shouldUseWebgl } from "../lib/renderer-policy"
 import { keyAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
+import { findFilePaths } from "../lib/file-links"
 
 const isMac = /mac/i.test(navigator.userAgent)
 
@@ -41,6 +42,28 @@ const OUTPUT_SIGNAL_THROTTLE_MS = 150
 // xterm.js lives here, keyed by session id — OUTSIDE the React tree, so splitting
 // a pane or switching tabs re-attaches instead of respawning the shell.
 const entries = new Map<string, Entry>()
+
+// File-link existence cache: the link provider fires on hover, so cache validated
+// paths briefly to avoid re-stat'ing the same line via IPC on every mouse move.
+const pathExistsCache = new Map<string, { ok: boolean; ts: number }>()
+const PATH_CACHE_TTL_MS = 5000
+const PATH_CACHE_MAX = 1000 // bound memory over long sessions (many distinct paths)
+function validatePath(cwd: string, p: string): Promise<boolean> {
+  const key = `${cwd} ${p}`
+  const hit = pathExistsCache.get(key)
+  const now = performance.now()
+  if (hit && now - hit.ts < PATH_CACHE_TTL_MS) return Promise.resolve(hit.ok)
+  return ipc.pathExists(cwd, p).then((ok) => {
+    pathExistsCache.set(key, { ok, ts: now })
+    // Evict the oldest entry once over the cap (Map keeps insertion order) so the
+    // cache can't grow unbounded as an agent prints thousands of distinct paths.
+    if (pathExistsCache.size > PATH_CACHE_MAX) {
+      const oldest = pathExistsCache.keys().next().value
+      if (oldest !== undefined) pathExistsCache.delete(oldest)
+    }
+    return ok
+  })
+}
 
 // Bundled FiraCode Nerd Font Mono carries text + ligatures + Nerd/Powerline icons.
 const fontStack = (family: string) =>
@@ -273,6 +296,36 @@ function spawn(session: Session, entry: Entry) {
     }
     return true
   })
+
+  // Clickable file links: detect path-like tokens on the hovered row, validate they
+  // exist against the session cwd (kills false positives — versions, domains, etc.
+  // that don't resolve to a file), and open on Cmd/Ctrl-click. Single-row for now.
+  if (useStore.getState().settings.fileLinks) {
+    term.registerLinkProvider({
+      provideLinks(y, cb) {
+        const text = term.buffer.active.getLine(y - 1)?.translateToString(true) ?? ""
+        const cwd = useStore.getState().sessions[session.id]?.cwd
+        const matches = cwd ? findFilePaths(text) : []
+        if (!cwd || matches.length === 0) return cb(undefined)
+        void Promise.all(matches.map((m) => validatePath(cwd, m.path)))
+          .then((oks) => {
+            const links = matches
+              .filter((_, i) => oks[i])
+              .map((m) => ({
+                text: text.slice(m.start, m.start + m.length),
+                range: { start: { x: m.start + 1, y }, end: { x: m.start + m.length, y } },
+                decorations: { pointerCursor: true, underline: true },
+                activate: (e: MouseEvent) => {
+                  if (!e.metaKey && !e.ctrlKey) return // Cmd/Ctrl-click only (reduces noise)
+                  ipc.openFile(cwd, m.path, m.line, m.col)
+                },
+              }))
+            cb(links.length ? links : undefined)
+          })
+          .catch(() => cb(undefined))
+      },
+    })
+  }
 }
 
 function syncSize(id: string, entry: Entry) {

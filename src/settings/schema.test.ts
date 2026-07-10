@@ -28,6 +28,16 @@ describe("mergeSettings", () => {
     expect(mergeSettings({ shiftEnterNewline: false }).shiftEnterNewline).toBe(false)
   })
 
+  it("fileLinks defaults on; openPath defaults to the VS Code template and allows empty", () => {
+    expect(mergeSettings({}).fileLinks).toBe(true)
+    expect(mergeSettings({}).openPath).toBe("code -g {file}:{line}:{col}")
+    expect(mergeSettings({ fileLinks: false }).fileLinks).toBe(false)
+    expect(mergeSettings({ openPath: "" }).openPath).toBe("") // "" = OS default, not rejected
+    expect(mergeSettings({ openPath: "cursor -g {file}:{line}" }).openPath).toBe(
+      "cursor -g {file}:{line}",
+    )
+  })
+
   it("falls back per-field on wrong types", () => {
     const s = mergeSettings({ font: { size: "big", ligatures: "yes" }, scrollback: "lots" })
     expect(s.font.size).toBe(defaultSettings.font.size)
