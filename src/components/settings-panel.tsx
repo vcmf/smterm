@@ -92,10 +92,16 @@ export function SettingsPanel() {
           <select
             value={settings.renderer}
             onChange={(e) =>
-              update({ ...settings, renderer: e.target.value === "dom" ? "dom" : "auto" })
+              update({
+                ...settings,
+                renderer: mergeSettings({ renderer: e.target.value }).renderer,
+              })
             }
           >
             <option value="auto">Auto (GPU on the focused pane — recommended)</option>
+            <option value="webgl">
+              WebGL on all panes (crisp everywhere; may garble on split)
+            </option>
             <option value="dom">Off (DOM — no GPU, always correct)</option>
           </select>
         </label>

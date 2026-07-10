@@ -30,15 +30,24 @@ can leave paint remnants (xterm.js #3303), worse with multiple panes.
 Many simultaneous WebGL contexts **corrupt the glyph atlas** (garbled text — xterm.js
 #4379/#3303, still unsolved upstream; browsers also cap live contexts and evict the
 oldest). Splitting a tab full of agent TUIs is exactly that regime — the untouched panes
-garbled. The cure is **at most one live context**: the default `auto` mode gives WebGL to
-**only the focused pane** (one context can't corrupt itself), DOM for the rest, and the
-context follows focus (`reconcileRenderers` re-runs when `activeSessionId` changes — a new
-`tabs` array). This mirrors VS Code (`gpuAcceleration`), which stays out of trouble mainly
-because it rarely renders many terminals at once; we force the same one-context regime
-explicitly. Policy is the pure, tested `lib/renderer-policy.ts` (`webglPanes`); called on
-tab-switch / split / close (app.tsx) + attach + settings change. The `renderer` setting is
-`auto` (default) or `dom` (no GPU); there is **deliberately no "WebGL on every pane" mode**
-— that's the unsupported many-contexts footgun.
+garbled. The `renderer` setting (`lib/renderer-policy.ts` `webglPanes`, pure + tested) picks
+which panes get a context:
+
+- **`auto`** (default) — WebGL on **only the focused pane**, DOM for the rest. One context
+  can't corrupt itself → garble-free by construction. The context follows focus
+  (`reconcileRenderers` re-runs when `activeSessionId` changes — a new `tabs` array).
+- **`webgl`** — WebGL on **every visible pane** (crisp everywhere, like VS Code). Multiple
+  contexts share xterm's glyph atlas, and creating one can disturb the others; so when
+  `reconcileRenderers` creates a context **and** >1 will coexist, it schedules
+  `repairRenderers(true)` next frame (`clearTextureAtlas()` + repaint on **all** live WebGL
+  panes) to re-rasterize any corrupted glyphs. Works on GPUs/drivers that hold multiple
+  contexts cleanly; if it still garbles on split, that machine can't — fall back to `auto`.
+- **`dom`** — no GPU anywhere; always correct, a bit slower.
+
+`reconcileRenderers` runs on tab-switch / split / close (app.tsx) + attach + settings change.
+VS Code (`gpuAcceleration`) runs WebGL on all terminals via the same shared atlas and _still_
+ships multi-terminal glitches (vscode#237688) — so `webgl` mode isn't guaranteed, which is why
+`auto` is the safe default.
 
 **Mixed-renderer glyph difference (accepted).** Because `auto` runs the focused pane on WebGL and
 the rest on DOM, box-drawing/Powerline glyphs render slightly differently between them: xterm's

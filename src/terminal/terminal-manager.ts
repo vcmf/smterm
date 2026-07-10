@@ -81,8 +81,10 @@ function ensureFontLoaded(family: string, size: number): Promise<unknown> {
 }
 
 /** Start rendering this terminal via WebGL (GPU-fast, ligature-capable). */
-function acquireWebgl(entry: Entry) {
-  if (entry.webgl || entry.webglFailed || !entry.opened) return
+/** Give this pane a WebGL context if it doesn't have one. Returns true if a context
+ *  was newly created (so the caller can rebuild the shared atlas across panes). */
+function acquireWebgl(entry: Entry): boolean {
+  if (entry.webgl || entry.webglFailed || !entry.opened) return false
   try {
     const webgl = new WebglAddon()
     webgl.onContextLoss(() => {
@@ -116,8 +118,10 @@ function acquireWebgl(entry: Entry) {
         // addon disposed meanwhile
       }
     })
+    return true
   } catch {
     entry.webglFailed = true // no WebGL2 — stay on the DOM renderer
+    return false
   }
 }
 
@@ -152,10 +156,20 @@ function reconcileRenderers() {
   // one context can't corrupt itself, so the multi-pane split garble is impossible
   // by construction (see GOTCHAS #renderer). `webgl` = all visible; `dom` = none.
   const webgl = webglPanes(state.settings.renderer, visible, tab?.activeSessionId)
+  let created = false
   for (const [id, entry] of entries) {
     if (!entry.opened) continue
-    if (webgl.has(id)) acquireWebgl(entry)
+    if (webgl.has(id)) created = acquireWebgl(entry) || created
     else releaseWebgl(entry)
+  }
+  // Creating a WebGL context can disturb the sibling contexts that share xterm's
+  // glyph atlas (garble on split with several panes — xterm.js #4379). Once the new
+  // context has settled, rebuild the atlas on ALL live WebGL panes so any corrupted
+  // glyphs re-rasterize. Only when >1 context coexists (the `webgl` all-panes mode);
+  // a lone `auto` context can't corrupt itself. Deferred a frame so the new context
+  // is fully initialised before the rebuild.
+  if (created && webgl.size > 1) {
+    requestAnimationFrame(() => repairRenderers(true))
   }
 }
 

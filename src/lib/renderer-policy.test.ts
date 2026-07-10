@@ -21,7 +21,15 @@ describe("webglPanes", () => {
     expect(webglPanes("auto", [], "a").size).toBe(0)
   })
 
-  it("never grants more than one context", () => {
+  it("auto mode never grants more than one context", () => {
     expect(webglPanes("auto", three, "a").size).toBe(1)
+  })
+
+  it("webgl mode: every visible pane gets a context", () => {
+    expect([...webglPanes("webgl", three, "b")].sort()).toEqual(["a", "b", "c"])
+  })
+
+  it("webgl mode: nothing visible → no context", () => {
+    expect(webglPanes("webgl", [], "a").size).toBe(0)
   })
 })

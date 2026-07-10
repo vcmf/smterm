@@ -7,8 +7,9 @@ export interface Settings {
   }
   theme: string
   // GPU acceleration (like VS Code's gpuAcceleration): "auto" = WebGL on the focused
-  // pane only (default; garble-free — one context can't corrupt itself); "dom" = no GPU.
-  renderer: "auto" | "dom"
+  // pane only (default; garble-free — one context can't corrupt itself); "webgl" = WebGL
+  // on every visible pane (crisp everywhere, but multiple contexts can garble); "dom" = none.
+  renderer: "auto" | "webgl" | "dom"
   cursorBlink: boolean
   scrollback: number
   confirmQuit: boolean
@@ -63,7 +64,7 @@ export function mergeSettings(input: unknown): Settings {
       lineHeight: num(f.lineHeight, d.font.lineHeight, 1, 3),
     },
     theme: str(o.theme, d.theme),
-    renderer: o.renderer === "dom" ? "dom" : "auto",
+    renderer: o.renderer === "dom" || o.renderer === "webgl" ? o.renderer : "auto",
     cursorBlink: bool(o.cursorBlink, d.cursorBlink),
     scrollback: num(o.scrollback, d.scrollback, 0, 1_000_000),
     confirmQuit: bool(o.confirmQuit, d.confirmQuit),
