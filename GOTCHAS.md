@@ -130,6 +130,20 @@ spawns. Parser is pure + tested; the shell probe is best-effort (returns `{}` on
 
 The app spawns `wsl.exe` as a shell — it never runs _inside_ WSL.
 
+## Clickable file links {#file-links}
+
+Path-like tokens in output are made clickable (Cmd/Ctrl-click → open in editor). Detection is
+a **permissive regex on purpose** (`lib/file-links.ts`, pure + tested) — the real false-positive
+filter is **existence validation** (`fs:path-exists`, `main`) against the session cwd, so a version
+string like `1.2.3` or a domain that doesn't resolve to a file never underlines. Validation is
+cached in `terminal-manager` (the link provider fires on hover, not per render). Clicking runs the
+`openPath` template (default `code -g {file}:{line}:{col}`, found via the login-shell PATH from
+`shell-env` so a packaged app can locate `code`); it falls back to the OS default (`shell.openPath`)
+when the template is empty or the editor binary isn't found. **Known limits (follow-ups):** single
+row only (a path wrapped across rows isn't matched); forward-slash paths (no Windows-native
+backslash); extensionless files (`Makefile`) unless they contain a slash; **WSL** panes don't open
+links yet (needs the WSL cwd context — see `#windows` / the WSL git PR).
+
 ## Agent-status reducer has a known flaw {#agent-status}
 
 `lib/session-status.ts`: `running` = OSC-133 C..D (process alive) ≠ actively working, so

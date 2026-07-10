@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
 import os from "node:os"
+import { spawn } from "node:child_process"
 import * as pty from "node-pty"
 import type { IPty } from "node-pty"
 import { watch } from "chokidar"
@@ -27,6 +28,7 @@ import { OutputCoalescer } from "./coalescer"
 import { OutputBuffer } from "./output-buffer"
 import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
+import { buildEditorCommand } from "./editor-command"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -315,6 +317,62 @@ function registerIpc() {
   ipcMain.on("notify", (_e, title: string, body: string) => {
     if (Notification.isSupported()) new Notification({ title, body }).show()
   })
+
+  // Clickable file links: validate a detected path exists, and open a clicked one.
+  ipcMain.handle("fs:path-exists", async (_e, cwd: string, p: string) => pathExists(cwd, p))
+  ipcMain.on("file:open", (_e, cwd: string, file: string, line?: number, col?: number) =>
+    openFile(cwd, file, line, col),
+  )
+}
+
+// Expand a leading ~ and resolve relative to cwd → absolute host path.
+function resolveHostPath(cwd: string, p: string): string {
+  const expanded = p.startsWith("~/") || p === "~" ? path.join(os.homedir(), p.slice(1)) : p
+  return path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded)
+}
+
+// Does a detected path exist on the host fs? (The false-positive filter for links.)
+async function pathExists(cwd: string, p: string): Promise<boolean> {
+  try {
+    await fs.promises.stat(resolveHostPath(cwd, p))
+    return true
+  } catch {
+    return false
+  }
+}
+
+// The editor-command template for clicked links (reads settings.json live).
+function openPathTemplate(): string {
+  try {
+    const s = JSON.parse(readSettings() || "{}") as { openPath?: string }
+    return typeof s.openPath === "string" ? s.openPath : "code -g {file}:{line}:{col}"
+  } catch {
+    return "code -g {file}:{line}:{col}"
+  }
+}
+
+// Open a clicked file link in the configured editor; fall back to the OS default
+// app if there's no editor command or the editor binary isn't found.
+function openFile(cwd: string, file: string, line?: number, col?: number): void {
+  const abs = resolveHostPath(cwd, file)
+  const built = buildEditorCommand(openPathTemplate(), { file: abs, line, col })
+  if (!built) {
+    void shell.openPath(abs)
+    return
+  }
+  try {
+    // `process.env` carries the login-shell PATH imported at startup (shell-env),
+    // so a GUI-launched app can still find `code`/etc.
+    const child = spawn(built.cmd, built.args, {
+      detached: true,
+      stdio: "ignore",
+      env: process.env,
+    })
+    child.on("error", () => void shell.openPath(abs)) // editor not on PATH → OS default
+    child.unref()
+  } catch {
+    void shell.openPath(abs)
+  }
 }
 
 app.whenReady().then(() => {

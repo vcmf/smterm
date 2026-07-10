@@ -27,6 +27,10 @@ export interface Ipc {
   onSettingsChanged: (cb: () => void) => () => void
   openExternal: (url: string) => void
   openPath: (p: string) => void
+  // Does `path` (relative to `cwd`, or absolute) exist? Validates a detected file link.
+  pathExists: (cwd: string, path: string) => Promise<boolean>
+  // Open a clicked file link in the configured editor (falls back to the OS default).
+  openFile: (cwd: string, file: string, line?: number, col?: number) => void
   notify: (title: string, body: string) => void
   clipboardWrite: (text: string) => void
   clipboardRead: () => Promise<string>

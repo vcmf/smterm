@@ -12,6 +12,8 @@ export interface Settings {
   shareHistory: boolean // cmux-like shared, incrementally-written zsh/bash history across panes
   shiftEnterNewline: boolean // Shift+Enter sends CSI-u (newline in Claude Code etc.); off = normal submit
   defaultShell: string // command path of the preferred shell; "" = system $SHELL
+  fileLinks: boolean // Cmd/Ctrl-click file paths in output to open them
+  openPath: string // editor command for clicked paths; "" = OS default. {file}/{line}/{col}
 }
 
 export const defaultSettings: Settings = {
@@ -29,6 +31,8 @@ export const defaultSettings: Settings = {
   shareHistory: true,
   shiftEnterNewline: true,
   defaultShell: "",
+  fileLinks: true,
+  openPath: "code -g {file}:{line}:{col}",
 }
 
 const num = (v: unknown, fallback: number, min: number, max: number): number =>
@@ -61,6 +65,9 @@ export function mergeSettings(input: unknown): Settings {
     shareHistory: bool(o.shareHistory, d.shareHistory),
     shiftEnterNewline: bool(o.shiftEnterNewline, d.shiftEnterNewline),
     defaultShell: typeof o.defaultShell === "string" ? o.defaultShell : d.defaultShell,
+    fileLinks: bool(o.fileLinks, d.fileLinks),
+    // Allow "" (OS default), so don't use str() which rejects empty strings.
+    openPath: typeof o.openPath === "string" ? o.openPath : d.openPath,
   }
 }
 

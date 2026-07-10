@@ -29,6 +29,10 @@ const api = {
 
   openExternal: (url: string) => ipcRenderer.send("open-external", url),
   openPath: (p: string) => ipcRenderer.send("open-path", p),
+  pathExists: (cwd: string, path: string) =>
+    ipcRenderer.invoke("fs:path-exists", cwd, path) as Promise<boolean>,
+  openFile: (cwd: string, file: string, line?: number, col?: number) =>
+    ipcRenderer.send("file:open", cwd, file, line, col),
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),
 
   clipboardWrite: (text: string) => ipcRenderer.send("clipboard:write", text),
