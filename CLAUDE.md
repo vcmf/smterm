@@ -46,7 +46,14 @@ src/
 - **Filenames: kebab-case** (`terminal-manager.ts`); component _exports_ stay PascalCase.
 - **No semicolons** (Prettier `semi: false`).
 - **Docstrings**: one short line on non-obvious functions/types — scannable, not verbose.
-- **Commits**: semantic (`feat:`, `fix:`, `chore:`, `docs:`), imperative.
+- **Commits**: Commitizen / Conventional Commits — `type(scope): subject`, imperative,
+  lowercase subject, no trailing period. Types: `feat` `fix` `docs` `refactor` `perf` `test`
+  `chore` `style` `ci` `build` `revert` (breaking → `!` or `BREAKING CHANGE:`). **No emoji in
+  commit messages.**
+- **PR titles**: the **same** Conventional-Commit format **with a leading emoji** (HuggingFace
+  style) — `<emoji> type(scope): subject`. Emoji per type: ✨ `feat` · 🐛 `fix` · 📝 `docs` ·
+  ♻️ `refactor` · ⚡ `perf` · ✅ `test` · 🔧 `chore` · 🎨 `style` · 👷 `ci` · 📦 `build` ·
+  ⏪ `revert` · 🚨 breaking. Example: `✨ feat(diff-panel): syntax-highlight the changed file`.
 - **Tests with the feature**: push logic into pure functions (pane-tree, session-status,
   shell-integration parsers) and test those; the risky code earns real tests.
 - **Lint is a gate** (pre-commit hook): `tsc` (renderer + electron), eslint, prettier. Run `make fmt` first.
