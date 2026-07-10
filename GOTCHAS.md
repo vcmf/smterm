@@ -34,12 +34,19 @@ Background tabs release their context (PTY keeps running) and re-acquire on retu
 Policy is the pure, tested `lib/renderer-policy.ts`; called on tab-switch/split/close
 (app.tsx) + attach. There is **no renderer setting** — it's automatic.
 
-**Don't animate compositing properties** (`box-shadow`/`transform`/opacity) on a pane
-that holds the WebGL canvas (`.terminal-pane`): it can leave the child xterm WebGL
-canvas showing **stale/garbled glyphs** — only the animated pane corrupts. Any per-pane
-attention cue must avoid animating the terminal's container (use the sidebar dot/bell,
-or a non-compositing indicator). Renderer stays WebGL (VS Code's choice; xterm's canvas
-addon is deprecated).
+**Compositing changes on the `.terminal-pane` container can garble the child WebGL canvas**
+(`box-shadow`/`transform`/opacity, animated _or_ just toggled). The focus/attention rail
+toggles `box-shadow` on `.terminal-pane` (`App.css` `.focused`/`.waiting`) — including on
+split and on every agent status flip — so we **isolate the canvas into its own layer** via
+`contain: paint; isolation: isolate;` on `.terminal-mount`, which stops the parent recomposite
+from touching it. If you add new per-pane cues, still prefer a non-compositing indicator over
+new effects on `.terminal-pane`. Renderer stays WebGL (VS Code's choice; xterm's canvas addon
+is deprecated).
+
+**Reparenting the canvas needs a repaint.** Splitting a pane remounts its `TerminalPane`, so
+`attach()` moves the live WebGL host into the new container — which shows stale pixels until the
+next draw. `attach()` ends with `requestAnimationFrame(() => repairRenderers())` to repaint the
+moved canvas.
 
 **The atlas/framebuffer can also go stale on its own** — after the app is backgrounded,
 a display-scale/monitor (DPR) change, or a resize — showing garble until a scroll forces a

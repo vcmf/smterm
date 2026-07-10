@@ -382,6 +382,10 @@ export const TerminalManager = {
     }
     reconcileRenderers() // this pane is now on-screen — (re)acquire WebGL if apt
     entry.term.focus()
+    // Reparenting the host (e.g. on split) moves the live WebGL canvas, which then
+    // shows stale/garbled pixels until the next draw. Repaint on the next frame,
+    // once the moved canvas has laid out. (This is the trigger PR #3's repair missed.)
+    requestAnimationFrame(() => repairRenderers())
   },
 
   reconcileRenderers,

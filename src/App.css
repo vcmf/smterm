@@ -592,6 +592,11 @@ body {
   /* Match the terminal background so the fixed-cell remainder + scrollbar gutter
      blend in instead of showing a lighter --panel strip on the right/bottom. */
   background: var(--bg);
+  /* Isolate the WebGL canvas into its own paint/compositing layer so toggling the
+     `.terminal-pane` box-shadow (focus/attention rail, flips on split + on every
+     agent status change) can't recomposite over it and garble glyphs. GOTCHAS #renderer. */
+  contain: paint;
+  isolation: isolate;
 }
 .terminal-host,
 .terminal-host .xterm,
