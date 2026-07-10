@@ -88,6 +88,22 @@ export function SettingsPanel() {
         </label>
 
         <label className="settings-row">
+          <span>GPU acceleration</span>
+          <select
+            value={settings.renderer}
+            onChange={(e) =>
+              update({
+                ...settings,
+                renderer: mergeSettings({ renderer: e.target.value }).renderer,
+              })
+            }
+          >
+            <option value="webgl">WebGL (GPU-accelerated — recommended)</option>
+            <option value="dom">Off (DOM — no GPU, always correct)</option>
+          </select>
+        </label>
+
+        <label className="settings-row">
           <span>Default shell</span>
           <select
             value={settings.defaultShell}

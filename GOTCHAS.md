@@ -28,18 +28,42 @@ can leave paint remnants (xterm.js #3303), worse with multiple panes.
 ## Renderer policy: WebGL only for on-screen panes {#renderer}
 
 Many simultaneous WebGL contexts **corrupt the glyph atlas** (garbled text — xterm.js
-#4379/#3303). `terminal-manager.reconcileRenderers()` gives WebGL only to the active
-tab's panes, and only when ≤ `MAX_WEBGL_PANES` (4) are visible; otherwise DOM.
-Background tabs release their context (PTY keeps running) and re-acquire on return.
-Policy is the pure, tested `lib/renderer-policy.ts`; called on tab-switch/split/close
-(app.tsx) + attach. There is **no renderer setting** — it's automatic.
+#4379/#3303, still unsolved upstream; browsers also cap live contexts and evict the oldest).
+Creating a context disturbs the siblings that share xterm's atlas — that's the garble that hit
+the untouched panes when you split a tab full of agent TUIs. **The cure is an atlas rebuild after
+the pane set changes:** when `reconcileRenderers` creates a context **and** >1 will coexist, it
+schedules `repairRenderers(true)` on the next frame (`clearTextureAtlas()` + repaint on **all**
+live WebGL panes), so any glyphs the new context disturbed re-rasterize cleanly. With that in
+place, every visible pane can run WebGL crisply — the same shared-atlas approach VS Code uses.
+`acquireWebgl` returns whether it created a context so the reconcile knows when to rebuild.
 
-**Don't animate compositing properties** (`box-shadow`/`transform`/opacity) on a pane
-that holds the WebGL canvas (`.terminal-pane`): it can leave the child xterm WebGL
-canvas showing **stale/garbled glyphs** — only the animated pane corrupts. Any per-pane
-attention cue must avoid animating the terminal's container (use the sidebar dot/bell,
-or a non-compositing indicator). Renderer stays WebGL (VS Code's choice; xterm's canvas
-addon is deprecated).
+The `renderer` setting (`lib/renderer-policy.ts` `webglPanes`, pure + tested):
+
+- **`webgl`** (default) — WebGL on every visible pane.
+- **`dom`** — no GPU anywhere; always correct, a bit slower. The fallback for GPUs/drivers that
+  can't hold multiple contexts cleanly (VS Code keeps `gpuAcceleration: off` for the same reason;
+  it still ships occasional multi-terminal glitches — vscode#237688).
+
+`reconcileRenderers` runs on tab-switch / split / close (app.tsx) + attach + settings change.
+
+**Keep `customGlyphs` on (the default).** It makes the WebGL renderer draw box-drawing/Powerline
+glyphs with its own crisp, grid-aligned geometry rather than from the font. Turning it off makes
+those glyphs look plainer (that's all the DOM renderer can ever do — it has no custom-glyph path,
+which is why `dom` mode looks less sharp).
+
+**Compositing changes on the `.terminal-pane` container can garble the child WebGL canvas**
+(`box-shadow`/`transform`/opacity, animated _or_ just toggled). The focus/attention rail
+toggles `box-shadow` on `.terminal-pane` (`App.css` `.focused`/`.waiting`) — including on
+split and on every agent status flip — so we **isolate the canvas into its own layer** via
+`contain: paint; isolation: isolate;` on `.terminal-mount`, which stops the parent recomposite
+from touching it. If you add new per-pane cues, still prefer a non-compositing indicator over
+new effects on `.terminal-pane`. Renderer stays WebGL (VS Code's choice; xterm's canvas addon
+is deprecated).
+
+**Reparenting the canvas needs a repaint.** Splitting a pane remounts its `TerminalPane`, so
+`attach()` moves the live WebGL host into the new container — which shows stale pixels until the
+next draw. `attach()` ends with `requestAnimationFrame(() => repairRenderers())` to repaint the
+moved canvas.
 
 **The atlas/framebuffer can also go stale on its own** — after the app is backgrounded,
 a display-scale/monitor (DPR) change, or a resize — showing garble until a scroll forces a

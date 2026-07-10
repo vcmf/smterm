@@ -67,8 +67,8 @@ rules also in `electron/CLAUDE.md` (loaded on demand). Design detail in `ARCHITE
   Terminals live in `terminal-manager.ts`, outside React (re-attach, don't respawn). → GOTCHAS #seam
 - **Terminal fonts must be bundled `@font-face`**; load explicitly before the WebGL atlas builds.
   Ligatures (WebGL-only) default **off**. → GOTCHAS #fonts
-- **WebGL only for on-screen panes** (≤ `MAX_WEBGL_PANES`); many contexts garble the atlas. No
-  setting — automatic (`lib/renderer-policy.ts`). **Don't animate compositing on a WebGL pane.** → GOTCHAS #renderer
+- **WebGL on every visible pane** (`webgl`, default); rebuild the shared atlas after the pane set
+  changes or splits garble. `renderer` = `webgl`|`dom` (`lib/renderer-policy.ts`). **Don't animate compositing on a WebGL pane.** → GOTCHAS #renderer
 - **cwd is OSC-7-based** (drives diff panel + split/new-tab inheritance); no OSC 7 → `$HOME`. → GOTCHAS #session-survival
 - **Layout persisted, processes not across a full quit** (workspace.json restore). **But PTYs
   survive a renderer reload** via attach-or-spawn reattach. Full-quit survival = ROADMAP M5. → GOTCHAS #session-survival

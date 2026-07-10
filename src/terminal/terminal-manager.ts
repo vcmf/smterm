@@ -12,7 +12,7 @@ import type { Settings } from "../settings/schema"
 import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
 import { allSessionIds } from "../lib/pane-tree"
-import { shouldUseWebgl } from "../lib/renderer-policy"
+import { webglPanes, shouldRebuildAtlas } from "../lib/renderer-policy"
 import { keyAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
@@ -81,15 +81,28 @@ function ensureFontLoaded(family: string, size: number): Promise<unknown> {
 }
 
 /** Start rendering this terminal via WebGL (GPU-fast, ligature-capable). */
-function acquireWebgl(entry: Entry) {
-  if (entry.webgl || entry.webglFailed || !entry.opened) return
+/** Give this pane a WebGL context if it doesn't have one. Returns true if a context
+ *  was newly created (so the caller can rebuild the shared atlas across panes). */
+function acquireWebgl(entry: Entry): boolean {
+  if (entry.webgl || entry.webglFailed || !entry.opened) return false
   try {
     const webgl = new WebglAddon()
     webgl.onContextLoss(() => {
-      // Context lost (GPU pressure / suspend) — drop to DOM and don't retry it.
+      // Context lost — GPU pressure, another pane creating a context on split (browsers
+      // cap live WebGL contexts and evict the oldest), or the host being reparented.
+      // Drop to DOM and don't retry. CRUCIAL: repaint. Disposing WebGL stops it drawing
+      // and the DOM renderer starts empty, so without this the pane goes BLANK (the
+      // buffer is intact — it just isn't painted). Repaint next frame, once DOM is live.
       webgl.dispose()
       entry.webgl = undefined
       entry.webglFailed = true
+      requestAnimationFrame(() => {
+        try {
+          entry.term.refresh(0, entry.term.rows - 1)
+        } catch {
+          // terminal disposed meanwhile
+        }
+      })
     })
     entry.term.loadAddon(webgl)
     entry.webgl = webgl
@@ -105,8 +118,10 @@ function acquireWebgl(entry: Entry) {
         // addon disposed meanwhile
       }
     })
+    return true
   } catch {
     entry.webglFailed = true // no WebGL2 — stay on the DOM renderer
+    return false
   }
 }
 
@@ -119,6 +134,15 @@ function releaseWebgl(entry: Entry) {
     // already gone
   }
   entry.webgl = undefined
+  // Reverting to the DOM renderer stops the WebGL canvas painting; repaint so the
+  // pane isn't left blank (next frame, once DOM has taken over).
+  requestAnimationFrame(() => {
+    try {
+      entry.term.refresh(0, entry.term.rows - 1)
+    } catch {
+      // disposed meanwhile
+    }
+  })
 }
 
 /** WebGL only for the panes currently on-screen (active tab), and only when few
@@ -127,12 +151,23 @@ function releaseWebgl(entry: Entry) {
 function reconcileRenderers() {
   const state = useStore.getState()
   const tab = state.tabs.find((t) => t.id === state.activeTabId)
-  const visible = new Set(tab ? allSessionIds(tab.root) : [])
-  const useWebgl = shouldUseWebgl(visible.size)
+  const visible = tab ? allSessionIds(tab.root) : []
+  // Which panes get a live GPU context. Default (`auto`) is the focused pane only —
+  // one context can't corrupt itself, so the multi-pane split garble is impossible
+  // by construction (see GOTCHAS #renderer). `webgl` = all visible; `dom` = none.
+  const webgl = webglPanes(state.settings.renderer, visible)
+  let created = false
   for (const [id, entry] of entries) {
     if (!entry.opened) continue
-    if (useWebgl && visible.has(id)) acquireWebgl(entry)
+    if (webgl.has(id)) created = acquireWebgl(entry) || created
     else releaseWebgl(entry)
+  }
+  // Creating a WebGL context can disturb the sibling contexts that share xterm's
+  // glyph atlas (garble on split with several panes — xterm.js #4379). Once the new
+  // context has settled, rebuild the atlas on ALL live WebGL panes so any corrupted
+  // glyphs re-rasterize. Deferred a frame so the new context is fully initialised.
+  if (shouldRebuildAtlas(created, webgl.size)) {
+    requestAnimationFrame(() => repairRenderers(true))
   }
 }
 
@@ -382,6 +417,10 @@ export const TerminalManager = {
     }
     reconcileRenderers() // this pane is now on-screen — (re)acquire WebGL if apt
     entry.term.focus()
+    // Reparenting the host (e.g. on split) moves the live WebGL canvas, which then
+    // shows stale/garbled pixels until the next draw. Repaint on the next frame,
+    // once the moved canvas has laid out. (This is the trigger PR #3's repair missed.)
+    requestAnimationFrame(() => repairRenderers())
   },
 
   reconcileRenderers,
@@ -445,6 +484,9 @@ export const TerminalManager = {
       applyLigatures(entry, settings.font.ligatures)
       if (entry.opened) syncSize(id, entry)
     }
+    // A `renderer` change (webgl ↔ dom) takes effect live: acquire/release WebGL to
+    // match, on the current visible panes.
+    reconcileRenderers()
   },
 
   dispose(id: string) {
