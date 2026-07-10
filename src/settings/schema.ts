@@ -10,6 +10,7 @@ export interface Settings {
   scrollback: number
   confirmQuit: boolean
   shareHistory: boolean // cmux-like shared, incrementally-written zsh/bash history across panes
+  shiftEnterNewline: boolean // Shift+Enter sends CSI-u (newline in Claude Code etc.); off = normal submit
   defaultShell: string // command path of the preferred shell; "" = system $SHELL
 }
 
@@ -26,6 +27,7 @@ export const defaultSettings: Settings = {
   scrollback: 5000,
   confirmQuit: true,
   shareHistory: true,
+  shiftEnterNewline: true,
   defaultShell: "",
 }
 
@@ -57,6 +59,7 @@ export function mergeSettings(input: unknown): Settings {
     scrollback: num(o.scrollback, d.scrollback, 0, 1_000_000),
     confirmQuit: bool(o.confirmQuit, d.confirmQuit),
     shareHistory: bool(o.shareHistory, d.shareHistory),
+    shiftEnterNewline: bool(o.shiftEnterNewline, d.shiftEnterNewline),
     defaultShell: typeof o.defaultShell === "string" ? o.defaultShell : d.defaultShell,
   }
 }
