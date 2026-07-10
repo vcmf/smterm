@@ -40,13 +40,15 @@ tab-switch / split / close (app.tsx) + attach + settings change. The `renderer` 
 `auto` (default) or `dom` (no GPU); there is **deliberately no "WebGL on every pane" mode**
 — that's the unsupported many-contexts footgun.
 
-**Mixed-renderer parity.** Because `auto` runs the focused pane on WebGL and the rest on DOM,
-the two renderers must draw glyphs the same way — else the same prompt looks different in the
-focused vs unfocused pane. The trap is xterm's `customGlyphs` (default **on**), which makes only
-the **WebGL** renderer draw box-drawing/Powerline glyphs with its own geometry (the DOM renderer
-always uses the font). We set `customGlyphs: false` so both render Powerline/box glyphs from the
-font and match. (The cursor going solid↔hollow between panes is unrelated — normal focused-vs-blur
-cursor behaviour.)
+**Mixed-renderer glyph difference (accepted).** Because `auto` runs the focused pane on WebGL and
+the rest on DOM, box-drawing/Powerline glyphs render slightly differently between them: xterm's
+`customGlyphs` (default **on**, which we keep) makes the **WebGL** renderer draw them with its own
+crisp geometry, while the **DOM** renderer always uses the font (it has no custom-glyph path). We
+keep `customGlyphs` on so the **focused** pane — the one you're working in — gets the nicer
+rendering; unfocused panes fall back to the font. We can't converge the other way (DOM can't
+custom-draw), and converging down (`customGlyphs: false`) makes every pane look plainer, so we
+accept the minor difference on the pane you're not looking at. (The cursor going solid↔hollow
+between panes is unrelated — normal focused-vs-blur cursor behaviour.)
 
 **Compositing changes on the `.terminal-pane` container can garble the child WebGL canvas**
 (`box-shadow`/`transform`/opacity, animated _or_ just toggled). The focus/attention rail

@@ -183,11 +183,6 @@ function build(): Entry {
   host.className = "terminal-host"
   const term = new Terminal({
     allowProposedApi: true, // for registerCharacterJoiner (ligatures)
-    // Draw box-drawing/Powerline glyphs from the font, not xterm's own geometry.
-    // customGlyphs only affects the WebGL renderer (the DOM renderer always uses the
-    // font); leaving it on made the focused WebGL pane render Powerline separators
-    // differently from the DOM panes (see GOTCHAS #renderer — mixed-renderer parity).
-    customGlyphs: false,
     fontFamily: fontStack(s.font.family),
     fontSize: s.font.size,
     lineHeight: s.font.lineHeight,
