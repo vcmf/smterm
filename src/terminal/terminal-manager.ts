@@ -147,6 +147,13 @@ function build(): Entry {
       if (!isMac && e.ctrlKey && !e.shiftKey) term.clearSelection()
     } else if (action === "paste") {
       void ipc.clipboardRead().then((text) => text && term.paste(text))
+    } else if (action === "newline") {
+      // Gated so it can be turned off if a plain shell doesn't decode CSI-u; default
+      // on (works with Claude Code & other agent CLIs). Off → let xterm submit normally.
+      if (!useStore.getState().settings.shiftEnterNewline) return true
+      // CSI-u encoding of Shift+Enter — apps that speak it insert a newline instead of
+      // submitting. `input()` routes through onData → the PTY.
+      term.input("\x1b[13;2u")
     } else {
       term.selectAll()
     }

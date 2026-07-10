@@ -7,7 +7,7 @@
 // selection, else sends SIGINT**; ⌃⇧C / ⌃⇧V / ⌃⇧A are the explicit forms. (The caller
 // clears the selection after a ⌃C copy so a second ⌃C interrupts.)
 
-export type TermKeyAction = "copy" | "paste" | "select-all" | null
+export type TermKeyAction = "copy" | "paste" | "select-all" | "newline" | null
 
 export interface TermKeyEvent {
   key: string
@@ -22,6 +22,9 @@ export function keyAction(
   opts: { isMac: boolean; hasSelection: boolean },
 ): TermKeyAction {
   const key = e.key.toLowerCase()
+  // Shift+Enter → insert a newline (multi-line input for agents like Claude Code)
+  // instead of submitting. The caller sends the CSI-u encoding. Platform-independent.
+  if (key === "enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) return "newline"
   if (e.altKey) return null
 
   if (opts.isMac) {

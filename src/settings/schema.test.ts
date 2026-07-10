@@ -23,6 +23,11 @@ describe("mergeSettings", () => {
     expect(mergeSettings({ shareHistory: "no" }).shareHistory).toBe(true) // wrong type → default
   })
 
+  it("shiftEnterNewline defaults on and accepts an opt-out", () => {
+    expect(mergeSettings({}).shiftEnterNewline).toBe(true)
+    expect(mergeSettings({ shiftEnterNewline: false }).shiftEnterNewline).toBe(false)
+  })
+
   it("falls back per-field on wrong types", () => {
     const s = mergeSettings({ font: { size: "big", ligatures: "yes" }, scrollback: "lots" })
     expect(s.font.size).toBe(defaultSettings.font.size)

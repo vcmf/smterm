@@ -59,3 +59,19 @@ describe("keyAction — Linux/Windows", () => {
     expect(pc(ev({ key: "v", metaKey: true }))).toBeNull()
   })
 })
+
+describe("keyAction — Shift+Enter newline", () => {
+  const run = (e: TermKeyEvent, isMac = true) => keyAction(e, { isMac, hasSelection: false })
+
+  it("maps Shift+Enter to a newline (both platforms)", () => {
+    expect(run(ev({ key: "Enter", shiftKey: true }), true)).toBe("newline")
+    expect(run(ev({ key: "Enter", shiftKey: true }), false)).toBe("newline")
+  })
+
+  it("plain Enter and modified Enter are left alone (normal submit)", () => {
+    expect(run(ev({ key: "Enter" }))).toBeNull()
+    expect(run(ev({ key: "Enter", shiftKey: true, ctrlKey: true }))).toBeNull()
+    expect(run(ev({ key: "Enter", shiftKey: true, metaKey: true }))).toBeNull()
+    expect(run(ev({ key: "Enter", shiftKey: true, altKey: true }))).toBeNull()
+  })
+})
