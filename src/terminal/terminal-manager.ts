@@ -130,6 +130,15 @@ function releaseWebgl(entry: Entry) {
     // already gone
   }
   entry.webgl = undefined
+  // Reverting to the DOM renderer stops the WebGL canvas painting; repaint so the
+  // pane isn't left blank (next frame, once DOM has taken over).
+  requestAnimationFrame(() => {
+    try {
+      entry.term.refresh(0, entry.term.rows - 1)
+    } catch {
+      // disposed meanwhile
+    }
+  })
 }
 
 /** WebGL only for the panes currently on-screen (active tab), and only when few
@@ -139,7 +148,10 @@ function reconcileRenderers() {
   const state = useStore.getState()
   const tab = state.tabs.find((t) => t.id === state.activeTabId)
   const visible = new Set(tab ? allSessionIds(tab.root) : [])
-  const useWebgl = shouldUseWebgl(visible.size)
+  // WebGL is opt-in: multiple live GPU contexts corrupt each other's glyph atlas
+  // (garble on split with several agent panes — see GOTCHAS #renderer). Default is the
+  // DOM renderer, which is always correct. `renderer: "webgl"` opts back in.
+  const useWebgl = state.settings.renderer === "webgl" && shouldUseWebgl(visible.size)
   for (const [id, entry] of entries) {
     if (!entry.opened) continue
     if (useWebgl && visible.has(id)) acquireWebgl(entry)
@@ -460,6 +472,9 @@ export const TerminalManager = {
       applyLigatures(entry, settings.font.ligatures)
       if (entry.opened) syncSize(id, entry)
     }
+    // A `renderer` change (webgl ↔ dom) takes effect live: acquire/release WebGL to
+    // match, on the current visible panes.
+    reconcileRenderers()
   },
 
   dispose(id: string) {

@@ -28,6 +28,13 @@ describe("mergeSettings", () => {
     expect(mergeSettings({ shiftEnterNewline: false }).shiftEnterNewline).toBe(false)
   })
 
+  it("renderer defaults to dom and only 'webgl' opts in", () => {
+    expect(mergeSettings({}).renderer).toBe("dom")
+    expect(mergeSettings({ renderer: "webgl" }).renderer).toBe("webgl")
+    expect(mergeSettings({ renderer: "canvas" }).renderer).toBe("dom") // unknown value → default
+    expect(mergeSettings({ renderer: true }).renderer).toBe("dom") // wrong type → default
+  })
+
   it("fileLinks defaults on; openPath defaults to the VS Code template and allows empty", () => {
     expect(mergeSettings({}).fileLinks).toBe(true)
     expect(mergeSettings({}).openPath).toBe("code -g {file}:{line}:{col}")

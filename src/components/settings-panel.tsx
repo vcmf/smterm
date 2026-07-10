@@ -88,6 +88,19 @@ export function SettingsPanel() {
         </label>
 
         <label className="settings-row">
+          <span>Renderer</span>
+          <select
+            value={settings.renderer}
+            onChange={(e) =>
+              update({ ...settings, renderer: e.target.value === "webgl" ? "webgl" : "dom" })
+            }
+          >
+            <option value="dom">DOM (always correct)</option>
+            <option value="webgl">WebGL (faster, can garble split panes)</option>
+          </select>
+        </label>
+
+        <label className="settings-row">
           <span>Default shell</span>
           <select
             value={settings.defaultShell}

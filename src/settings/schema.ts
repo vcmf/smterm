@@ -6,6 +6,7 @@ export interface Settings {
     lineHeight: number
   }
   theme: string
+  renderer: "dom" | "webgl" // "dom" = correct always (default); "webgl" = GPU speed/ligatures but multiple panes can corrupt the glyph atlas
   cursorBlink: boolean
   scrollback: number
   confirmQuit: boolean
@@ -25,6 +26,7 @@ export const defaultSettings: Settings = {
   // don't hit it. See ARCHITECTURE §9a / the rendering notes.
   font: { family: "FiraCode Nerd Font Mono", size: 13, ligatures: false, lineHeight: 1.2 },
   theme: "minimal-dark",
+  renderer: "dom",
   cursorBlink: true,
   scrollback: 5000,
   confirmQuit: true,
@@ -59,6 +61,7 @@ export function mergeSettings(input: unknown): Settings {
       lineHeight: num(f.lineHeight, d.font.lineHeight, 1, 3),
     },
     theme: str(o.theme, d.theme),
+    renderer: o.renderer === "webgl" ? "webgl" : "dom",
     cursorBlink: bool(o.cursorBlink, d.cursorBlink),
     scrollback: num(o.scrollback, d.scrollback, 0, 1_000_000),
     confirmQuit: bool(o.confirmQuit, d.confirmQuit),
