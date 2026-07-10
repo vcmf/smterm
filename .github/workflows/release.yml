@@ -3,9 +3,14 @@ name: Release
 # Cut a release by pushing a SemVer tag, e.g.  git push origin v0.1.0
 # (see `make release`). Builds per-OS, then publishes ONE GitHub Release.
 # A tag with a prerelease part (e.g. v0.1.0-rc.1) publishes as a pre-release.
+#
+# workflow_dispatch runs the SAME test + per-OS build as a smoke test (artifacts
+# are uploaded for download), but SKIPS publishing a Release — so you can exercise
+# the pipeline from the Actions UI without cutting a version. See the publish job.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch: {}
 
 permissions:
   contents: write # create the release + upload assets
@@ -67,8 +72,11 @@ jobs:
           retention-days: 5
 
   # Collect every OS's artifacts and publish a single release for the tag.
+  # Tag pushes only — a manual workflow_dispatch stops after build (no ref_name
+  # tag to release, and we don't want a UI smoke test to publish).
   publish:
     needs: build
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Download all build artifacts
