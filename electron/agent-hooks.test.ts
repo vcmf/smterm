@@ -219,9 +219,10 @@ describe("hook receiver — load test", () => {
         last_assistant_message: "done",
       })
       raws.push({ hook_event_name: "Stop", session_id })
-      raws.push({ hook_event_name: "SessionEnd", session_id })
+      // (no SessionEnd — keep the sessions "live" so the shape assertions below hold;
+      //  SessionEnd eviction + turn pruning are covered in agent-graph's unit tests.)
     }
-    const N = raws.length // ~5175
+    const N = raws.length // ~5150
 
     const batches: AgentEvent[][] = []
     receiver = await startHookReceiver({
@@ -254,16 +255,14 @@ describe("hook receiver — load test", () => {
     expect(delivered).toHaveLength(N)
     expect(batches.length).toBeLessThan(N / 10)
 
-    // 3) Reducing the delivered stream yields the right SHAPE, and is cheap. (A
-    //    fully-concurrent blast doesn't preserve per-session order, so we assert
-    //    order-independent facts here; ordered status is covered below + in the
-    //    reducer's own unit tests.)
+    // 3) Reducing the delivered stream is cheap and yields one live root per session.
+    //    (A fully-concurrent blast doesn't preserve per-session order, and turn-pruning
+    //    is order-sensitive, so we assert only order-independent facts here; ordered
+    //    status + pruning/eviction are covered in the reducer's own unit tests.)
     const rt0 = performance.now()
     const g = reduceAgentEvents(delivered)
     const reduceMs = performance.now() - rt0
-    expect(g.rootIds).toHaveLength(SESSIONS)
-    expect(Object.keys(g.nodes)).toHaveLength(SESSIONS * 2) // root + sub-agent each
-    expect(g.nodes["a0"]!.recentFiles).toHaveLength(10) // 100 distinct files → capped
+    expect(g.rootIds).toHaveLength(SESSIONS) // roots aren't pruned/evicted in this stream
 
     // 4) Perf: everything well under generous CI bounds.
     const maxAck = Math.max(...stats.map((s) => s.ms))
@@ -312,7 +311,6 @@ describe("hook receiver — load test", () => {
         last_assistant_message: "done",
       },
       { hook_event_name: "Stop", session_id: "s1" },
-      { hook_event_name: "SessionEnd", session_id: "s1" },
     ]
     for (const ev of stream) expect((await post(receiver.port, ev)).status).toBe(200)
     await sleep(60)
@@ -320,7 +318,7 @@ describe("hook receiver — load test", () => {
     const g = reduceAgentEvents(batches.flat())
     expect(g.nodes["a1"]!.status).toBe("done")
     expect(g.nodes["a1"]!.lastMessage).toBe("done")
-    expect(g.nodes["root:s1"]!.status).toBe("done")
+    expect(g.nodes["root:s1"]!.status).toBe("idle") // Stop → idle (session still live)
     expect(g.nodes["root:s1"]!.childIds).toEqual(["a1"])
   })
 })

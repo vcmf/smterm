@@ -7,6 +7,10 @@
 //   - root agent  = events with NO agent_id (the session itself)
 //   - sub-agent   = events carrying an agent_id (attach to their session's root)
 // Two levels (root → sub-agents); deeper nesting needs OTEL's parent_agent_id (6c).
+//
+// Lifecycle (keeps the board "live", not a growing history): a new turn
+// (UserPromptSubmit) drops the previous turn's finished sub-agents, and SessionEnd
+// evicts the whole session. So finished agents disappear rather than piling up.
 
 export type AgentStatus = "working" | "waiting" | "idle" | "done"
 
@@ -100,9 +104,16 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
     case "SessionStart":
       set(rid, { status: "idle", cwd: ev.cwd ?? at(rid).cwd })
       break
-    case "UserPromptSubmit":
-      set(rid, { status: "working" })
+    case "UserPromptSubmit": {
+      // New turn: drop the previous turn's FINISHED sub-agents (they're per-turn), so
+      // the board shows the current turn, not a growing pile of done ones. Keep any
+      // still-active sub-agent. Then mark the session working.
+      const root = at(rid)
+      const keep = root.childIds.filter((cid) => nodes[cid]?.status !== "done")
+      for (const cid of root.childIds) if (nodes[cid]?.status === "done") delete nodes[cid]
+      nodes[rid] = { ...root, childIds: keep, status: "working" }
       break
+    }
     case "SubagentStart":
       if (ev.agentId)
         set(ev.agentId, {
@@ -148,9 +159,17 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
     case "FileChanged":
       set(targetId, { recentFiles: withFile(at(targetId).recentFiles, ev.filePath) })
       break
-    case "SessionEnd":
-      set(rid, { status: "done", currentTool: undefined })
+    case "SessionEnd": {
+      // Session closed → evict it from the live board (root + its sub-agents). Also
+      // clears "opened-then-closed" sessions that never ran anything.
+      const root = nodes[rid]
+      if (root) {
+        for (const cid of root.childIds) delete nodes[cid]
+        delete nodes[rid]
+        rootIds = rootIds.filter((id) => id !== rid)
+      }
       break
+    }
     default:
       break // unknown / uninteresting event — leave state untouched
   }

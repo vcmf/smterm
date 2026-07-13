@@ -48,9 +48,13 @@ const EXPLORE_RUN: AgentEvent[] = [
   { event: "SessionEnd", sessionId: S },
 ]
 
+// The live session (everything up to SessionEnd) — what the board shows while the
+// session is open. SessionEnd evicts it (tested separately in "lifecycle").
+const EXPLORE_LIVE = EXPLORE_RUN.slice(0, -1)
+
 describe("agent-graph — the interactive Explore run", () => {
   it("reconstructs one root with one Explore sub-agent", () => {
-    const g = reduceAgentEvents(EXPLORE_RUN)
+    const g = reduceAgentEvents(EXPLORE_LIVE)
     expect(g.rootIds).toEqual(["root:sess-1"])
     const root = g.nodes["root:sess-1"]!
     expect(root.agentType).toBe("root")
@@ -61,21 +65,16 @@ describe("agent-graph — the interactive Explore run", () => {
   })
 
   it("attributes the sub-agent's file reads to the sub-agent (most-recent-first)", () => {
-    const g = reduceAgentEvents(EXPLORE_RUN)
+    const g = reduceAgentEvents(EXPLORE_LIVE)
     expect(g.nodes[A]!.recentFiles).toEqual(["/repo/docs/ROADMAP.md", "/repo/docs/ARCHITECTURE.md"])
     expect(g.nodes["root:sess-1"]!.recentFiles).toEqual([]) // root read nothing itself
   })
 
   it("marks the sub-agent done with its final message; clears its current tool", () => {
-    const g = reduceAgentEvents(EXPLORE_RUN)
+    const g = reduceAgentEvents(EXPLORE_LIVE)
     expect(g.nodes[A]!.status).toBe("done")
     expect(g.nodes[A]!.currentTool).toBeUndefined()
     expect(g.nodes[A]!.lastMessage).toBe("Summary: this is smterm.")
-  })
-
-  it("ends the root as done after SessionEnd", () => {
-    const g = reduceAgentEvents(EXPLORE_RUN)
-    expect(g.nodes["root:sess-1"]!.status).toBe("done")
   })
 })
 
@@ -98,6 +97,54 @@ describe("agent-graph — status transitions", () => {
 
   it("Stop leaves the root idle", () => {
     expect(upto("Stop").nodes["root:sess-1"]!.status).toBe("idle")
+  })
+})
+
+describe("agent-graph — lifecycle (prune finished + evict sessions)", () => {
+  const finishedTurn = (): AgentEvent[] => [
+    { event: "SessionStart", sessionId: S },
+    { event: "UserPromptSubmit", sessionId: S },
+    { event: "SubagentStart", sessionId: S, agentId: A, agentType: "Explore" },
+    { event: "SubagentStop", sessionId: S, agentId: A, message: "done" },
+    { event: "Stop", sessionId: S },
+  ]
+
+  it("a new turn prunes the previous turn's finished sub-agents", () => {
+    const g1 = reduceAgentEvents(finishedTurn())
+    expect(g1.nodes[A]!.status).toBe("done")
+    expect(g1.nodes["root:sess-1"]!.childIds).toEqual([A])
+
+    // New question → the finished Explore is dropped, session goes back to working.
+    const g2 = reduceAgentEvent(g1, { event: "UserPromptSubmit", sessionId: S })
+    expect(g2.nodes[A]).toBeUndefined()
+    expect(g2.nodes["root:sess-1"]!.childIds).toEqual([])
+    expect(g2.nodes["root:sess-1"]!.status).toBe("working")
+
+    // The new turn's sub-agent stands alone.
+    const g3 = reduceAgentEvent(g2, {
+      event: "SubagentStart",
+      sessionId: S,
+      agentId: "b2",
+      agentType: "general-purpose",
+    })
+    expect(g3.nodes["root:sess-1"]!.childIds).toEqual(["b2"])
+  })
+
+  it("keeps a still-active sub-agent across a new turn", () => {
+    const g = reduceAgentEvents([
+      { event: "SessionStart", sessionId: S },
+      { event: "SubagentStart", sessionId: S, agentId: A, agentType: "Explore" }, // still working
+      { event: "UserPromptSubmit", sessionId: S },
+    ])
+    expect(g.nodes[A]!.status).toBe("working")
+    expect(g.nodes["root:sess-1"]!.childIds).toEqual([A])
+  })
+
+  it("SessionEnd evicts the whole session (root + sub-agents) and drops it from rootIds", () => {
+    const g = reduceAgentEvents([...finishedTurn(), { event: "SessionEnd", sessionId: S }])
+    expect(g.rootIds).toEqual([])
+    expect(g.nodes["root:sess-1"]).toBeUndefined()
+    expect(g.nodes[A]).toBeUndefined()
   })
 })
 
@@ -132,16 +179,15 @@ describe("agent-graph — attribution & edges", () => {
 })
 
 describe("agent-graph — sessions & edge cases", () => {
-  it("tracks multiple sessions independently; an aborted session ends done with no children", () => {
+  it("evicts an opened-then-closed session; live sessions remain", () => {
     const g = reduceAgentEvents([
       { event: "SessionStart", sessionId: "s-a" },
-      { event: "SessionEnd", sessionId: "s-a" }, // opened then closed, no prompt
+      { event: "SessionEnd", sessionId: "s-a" }, // opened then closed, no prompt → evicted
       { event: "SessionStart", sessionId: "s-b" },
       { event: "UserPromptSubmit", sessionId: "s-b" },
     ])
-    expect(g.rootIds).toEqual(["root:s-a", "root:s-b"])
-    expect(g.nodes["root:s-a"]!.status).toBe("done")
-    expect(g.nodes["root:s-a"]!.childIds).toEqual([])
+    expect(g.rootIds).toEqual(["root:s-b"])
+    expect(g.nodes["root:s-a"]).toBeUndefined()
     expect(g.nodes["root:s-b"]!.status).toBe("working")
   })
 
