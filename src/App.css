@@ -694,6 +694,12 @@ body {
   padding: 12px;
   font-size: 11.5px;
 }
+/* Agents board reuses .diff-files, but has no diff body below — so let it fill. */
+.agents-files {
+  flex: 1 1 auto;
+  max-height: none;
+  border-bottom: none;
+}
 /* Agents board: the pane-name header above each session's agents. */
 .agents-pane-label {
   display: flex;

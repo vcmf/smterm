@@ -80,7 +80,7 @@ export function AgentsPanel() {
         </button>
       </div>
 
-      <div className="diff-files">
+      <div className="diff-files agents-files">
         {agents.rootIds.length === 0 && (
           <div className="diff-empty status-faint">
             <TreeStructure size={16} /> No agents yet — run <code>claude</code> in a pane.
