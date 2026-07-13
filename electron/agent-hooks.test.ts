@@ -18,7 +18,11 @@ afterEach(async () => {
 function post(
   port: number,
   body: unknown,
-  { token = TOKEN, method = "POST" as string } = {},
+  {
+    token = TOKEN,
+    method = "POST" as string,
+    pane,
+  }: { token?: string; method?: string; pane?: string } = {},
 ): Promise<{ status: number; ms: number }> {
   return new Promise((resolve) => {
     const data = typeof body === "string" ? body : JSON.stringify(body)
@@ -34,6 +38,7 @@ function post(
           "content-type": "application/json",
           "content-length": Buffer.byteLength(data),
           "x-smterm-token": token,
+          ...(pane ? { "x-smterm-pane": pane } : {}),
         },
       },
       (res) => {
@@ -51,18 +56,22 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 describe("normalizeHookEvent", () => {
   it("normalises a sub-agent tool event", () => {
-    const ev = normalizeHookEvent({
-      hook_event_name: "PreToolUse",
-      session_id: "s1",
-      agent_id: "a1",
-      agent_type: "Explore",
-      cwd: "/repo",
-      tool_name: "Read",
-      tool_input: { file_path: "/repo/x.ts" },
-    })
+    const ev = normalizeHookEvent(
+      {
+        hook_event_name: "PreToolUse",
+        session_id: "s1",
+        agent_id: "a1",
+        agent_type: "Explore",
+        cwd: "/repo",
+        tool_name: "Read",
+        tool_input: { file_path: "/repo/x.ts" },
+      },
+      "pane-7",
+    )
     expect(ev).toEqual({
       event: "PreToolUse",
       sessionId: "s1",
+      paneId: "pane-7",
       agentId: "a1",
       agentType: "Explore",
       cwd: "/repo",
@@ -105,6 +114,7 @@ describe("hook receiver — behaviour", () => {
       {
         event: "SessionStart",
         sessionId: "s1",
+        paneId: undefined,
         cwd: "/repo",
         agentId: undefined,
         agentType: undefined,
@@ -113,6 +123,22 @@ describe("hook receiver — behaviour", () => {
         message: undefined,
       },
     ])
+  })
+
+  it("tags events with the pane id from the x-smterm-pane header", async () => {
+    const batches: AgentEvent[][] = []
+    receiver = await startHookReceiver({
+      token: TOKEN,
+      coalesceMs: 20,
+      onBatch: (b) => batches.push(b),
+    })
+    await post(
+      receiver.port,
+      { hook_event_name: "SessionStart", session_id: "s1" },
+      { pane: "pane-42" },
+    )
+    await sleep(60)
+    expect(batches.flat()[0]?.paneId).toBe("pane-42")
   })
 
   it("ACKs BEFORE any processing/emit (ack never waits on the reducer or IPC)", async () => {

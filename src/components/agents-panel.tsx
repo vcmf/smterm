@@ -1,6 +1,8 @@
 import { Fragment } from "react"
 import { X, TreeStructure } from "@phosphor-icons/react"
 import { useStore } from "../store"
+import { TerminalManager } from "../terminal/terminal-manager"
+import { displaySessionTitle } from "../lib/session-label"
 import type { AgentNode, AgentStatus } from "../lib/agent-graph"
 
 // AgentStatus → dot class (reusing App.css .dot.*) + a short word.
@@ -13,7 +15,15 @@ const DOT: Record<AgentStatus, { cls: string; word: string }> = {
 
 const base = (p?: string) => (p ? (p.replace(/\/+$/, "").split(/[\\/]/).pop() ?? p) : "")
 
-function AgentRow({ node, depth }: { node: AgentNode; depth: number }) {
+function AgentRow({
+  node,
+  depth,
+  onFocusPane,
+}: {
+  node: AgentNode
+  depth: number
+  onFocusPane?: () => void
+}) {
   const d = DOT[node.status]
   const isRoot = node.agentType === "root"
   const primary = isRoot ? "session" : node.agentType
@@ -21,7 +31,12 @@ function AgentRow({ node, depth }: { node: AgentNode; depth: number }) {
     ? base(node.cwd) || "—"
     : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—"
   return (
-    <div className="diff-file" style={{ paddingLeft: 10 + depth * 16 }}>
+    <div
+      className="diff-file"
+      style={{ paddingLeft: 10 + depth * 16, cursor: onFocusPane ? "pointer" : undefined }}
+      onMouseDown={onFocusPane}
+      title={onFocusPane ? "Go to this pane" : undefined}
+    >
       <span className={`dot ${d.cls}`} />
       <div className="tree-labels">
         <span className="tree-primary">
@@ -35,10 +50,19 @@ function AgentRow({ node, depth }: { node: AgentNode; depth: number }) {
   )
 }
 
-/** Right-side board of live Claude agents/sub-agents (M6), fed by hook events. */
+/** Right-side board of live Claude agents/sub-agents across all tabs & panes (M6). */
 export function AgentsPanel() {
   const agents = useStore((s) => s.agents)
+  const sessions = useStore((s) => s.sessions)
+  const home = useStore((s) => s.home)
   const close = () => useStore.getState().setAgentsPanelOpen(false)
+
+  // Bring the pane that owns this session to the front (switch tab + focus terminal).
+  const focusPane = (paneId?: string) => {
+    if (!paneId || !sessions[paneId]) return
+    useStore.getState().focusSession(paneId)
+    TerminalManager.focus(paneId)
+  }
 
   const nodes = Object.values(agents.nodes)
   const working = nodes.filter((n) => n.status === "working").length
@@ -65,12 +89,23 @@ export function AgentsPanel() {
         {agents.rootIds.map((rid) => {
           const root = agents.nodes[rid]
           if (!root) return null
+          // Header line naming the pane this session runs in (click → jump there).
+          const paneSession = root.paneId ? sessions[root.paneId] : undefined
+          const paneLabel = paneSession ? displaySessionTitle(paneSession, home) : "external"
+          const go = paneSession ? () => focusPane(root.paneId) : undefined
           return (
             <Fragment key={rid}>
-              <AgentRow node={root} depth={0} />
+              <div
+                className="agents-pane-label status-faint"
+                onMouseDown={go}
+                style={{ cursor: go ? "pointer" : undefined }}
+              >
+                <TreeStructure size={12} /> {paneLabel}
+              </div>
+              <AgentRow node={root} depth={0} onFocusPane={go} />
               {root.childIds.map((cid) => {
                 const child = agents.nodes[cid]
-                return child ? <AgentRow key={cid} node={child} depth={1} /> : null
+                return child ? <AgentRow key={cid} node={child} depth={1} onFocusPane={go} /> : null
               })}
             </Fragment>
           )

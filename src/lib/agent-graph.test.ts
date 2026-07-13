@@ -161,6 +161,11 @@ describe("agent-graph — attribution & edges", () => {
     expect(g.nodes[A]!.recentFiles).toEqual([])
   })
 
+  it("records the pane id on the session root (for grouping + click-to-focus)", () => {
+    const g = reduceAgentEvents([{ event: "SessionStart", sessionId: S, paneId: "pane-9" }])
+    expect(g.nodes["root:sess-1"]!.paneId).toBe("pane-9")
+  })
+
   it("lazily creates a sub-agent node if a tool event precedes its SubagentStart", () => {
     const g = reduceAgentEvents([
       { event: "SessionStart", sessionId: S },

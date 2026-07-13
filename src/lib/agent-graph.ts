@@ -18,6 +18,7 @@ export type AgentStatus = "working" | "waiting" | "idle" | "done"
 export interface AgentEvent {
   event: string // hook_event_name (SessionStart, PreToolUse, SubagentStart, …)
   sessionId: string
+  paneId?: string // the smterm pane (session id) this claude session runs in
   agentId?: string // absent ⇒ the session root; present ⇒ a sub-agent
   agentType?: string // e.g. "Explore", "general-purpose" (sub-agents only)
   cwd?: string
@@ -29,6 +30,7 @@ export interface AgentEvent {
 export interface AgentNode {
   id: string // agent_id, or `root:<sessionId>` for a session root
   sessionId: string
+  paneId?: string // the smterm pane this session runs in (roots) — for focus/grouping
   agentType: string // "root" for the session root, else the sub-agent type
   status: AgentStatus
   currentTool?: string // in-flight tool (set on PreToolUse, cleared on PostToolUse)
@@ -67,6 +69,7 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
     nodes[rid] = {
       id: rid,
       sessionId: ev.sessionId,
+      paneId: ev.paneId,
       agentType: "root",
       status: "idle",
       cwd: ev.cwd,

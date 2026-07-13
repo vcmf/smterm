@@ -11,9 +11,9 @@ import type { AgentEvent } from "../src/lib/agent-graph"
 // tool_input keys that carry a file path, across the file-touching tools.
 const FILE_TOOL_KEYS = ["file_path", "path", "notebook_path"] as const
 
-/** Raw hook JSON → the normalised AgentEvent the graph consumes; null if the
- *  payload lacks the minimum (event name + session id). Pure + tested. */
-export function normalizeHookEvent(raw: unknown): AgentEvent | null {
+/** Raw hook JSON (+ the pane id from the x-smterm-pane header) → the normalised
+ *  AgentEvent; null if the payload lacks the minimum (event name + session id). */
+export function normalizeHookEvent(raw: unknown, paneId?: string): AgentEvent | null {
   if (typeof raw !== "object" || raw === null) return null
   const r = raw as Record<string, unknown>
   if (typeof r.hook_event_name !== "string" || typeof r.session_id !== "string") return null
@@ -27,6 +27,7 @@ export function normalizeHookEvent(raw: unknown): AgentEvent | null {
   return {
     event: r.hook_event_name,
     sessionId: r.session_id,
+    paneId: paneId || undefined,
     agentId: str(r.agent_id),
     agentType: str(r.agent_type),
     cwd: str(r.cwd),
@@ -81,6 +82,8 @@ export async function startHookReceiver(opts: HookReceiverOptions): Promise<Hook
       res.end()
       return
     }
+    const paneHeader = req.headers["x-smterm-pane"]
+    const paneId = Array.isArray(paneHeader) ? paneHeader[0] : paneHeader
     let body = ""
     let tooBig = false
     req.on("data", (c) => {
@@ -102,7 +105,7 @@ export async function startHookReceiver(opts: HookReceiverOptions): Promise<Hook
         } catch {
           return
         }
-        const ev = normalizeHookEvent(raw)
+        const ev = normalizeHookEvent(raw, paneId)
         if (ev) {
           pending.push(ev)
           schedule()

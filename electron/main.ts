@@ -133,7 +133,11 @@ function agentHookSettings(port: number, token: string): string {
   const hook = {
     type: "http",
     url: `http://127.0.0.1:${port}/`,
-    headers: { "x-smterm-token": token },
+    // x-smterm-pane is interpolated per pane from SMTERM_PANE_ID (set in the spawn env)
+    // so the receiver can tag each event with the pane it came from (board grouping +
+    // click-to-focus). Env interpolation via allowedEnvVars is confirmed to work.
+    headers: { "x-smterm-token": token, "x-smterm-pane": "$SMTERM_PANE_ID" },
+    allowedEnvVars: ["SMTERM_PANE_ID"],
     timeout: 3,
   }
   const toolEvents = new Set(["PreToolUse", "PostToolUse"])
@@ -255,8 +259,12 @@ function registerIpc() {
       // so it crosses the boundary.)
       const spawnEnv = { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>
       if (!shareHistoryEnabled()) spawnEnv.SMTERM_SHARE_HISTORY = "0"
-      // Let the injected `claude` wrapper route through our scoped hook settings (M6).
-      if (hookSettingsPath && !wsl) spawnEnv.SMTERM_CLAUDE_SETTINGS = hookSettingsPath
+      // Let the injected `claude` wrapper route through our scoped hook settings, and
+      // tag this pane so the agents board knows which pane each session runs in (M6).
+      if (hookSettingsPath && !wsl) {
+        spawnEnv.SMTERM_CLAUDE_SETTINGS = hookSettingsPath
+        spawnEnv.SMTERM_PANE_ID = opts.id
+      }
       const proc = pty.spawn(shellCmd, [...(opts.args ?? []), ...wslArgs, ...(inj?.args ?? [])], {
         name: "xterm-256color",
         cols: opts.cols || 80,
