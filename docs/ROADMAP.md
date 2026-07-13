@@ -19,6 +19,7 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 | **M3.6**   | Session identity (OSC-title/branch/cwd) + performance & load tests        | 🚧 A ✅ · B: harness+coalescing ✅ |
 | **v0**     | **First public OSS release — free dev-channel install (curl/brew/scoop)** | 🚧 **current** (branch `v0`)       |
 | **M4**     | Notarized double-click installers (Apple $99/yr)                          | ⬜ → v0.1                          |
+| **M6**     | **Agent observability — live agents & worktrees board** (hooks → OTEL)    | ⬜ next feature                    |
 | **M5**     | Later (approvals, orchestration, persistence daemon, auto-update)         | 🧊                                 |
 
 > **Direction (2026-07-07):**
@@ -385,6 +386,34 @@ via `curl | sh` / Homebrew tap / Scoop with ad-hoc/OSS signing (see the **v0** s
 delivers a notification (proving app identity is set up correctly).
 
 **Reality check:** signing/notarization is the most tedious part of the project — budget for it.
+
+---
+
+## M6 — Agent observability: live agents & worktrees board ⬜ _(next feature)_
+
+**Theme.** The agent-runner payoff: a board that shows, live, **which agents are running, what each
+is doing, in which worktree, and who spawned whom** — plus the file/worktree view that falls out of
+the same data. Fed by Claude Code's **official** extension points, wired only for shells smterm
+launches (zero user setup, no global-config footprint). Full design: **`design/AGENT_OBSERVABILITY.md`**.
+
+**Why it fits now:** we already have the hard parts — per-session status, OSC-7 cwd, and the
+main-process git diff engine. This milestone is mostly (a) ingesting events and (b) a new panel; the
+risky logic is a **pure, tested reducer** (`lib/agent-graph.ts`), matching our conventions.
+
+**The reframe:** a terminal can't see an agent's in-process `Task` sub-agents from the PTY — but
+Claude **emits** its own structure via hooks + OpenTelemetry. Ingesting those is a supported
+integration, not private-state scraping (this refines `design/AGENT_TEAMS.md` §11).
+
+| Phase     | What                                                                                                                                                                                                | Data source                | Risk                                             |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------ |
+| **6a** ✅ | Spike **done** (2026-07-13): interactive `claude` fires the full tree — `SubagentStart/Stop`, `agent_id` on every sub-agent event, `Notification`; scoped via `--settings`. Traces (6c) unverified. | —                          | resolved                                         |
+| **6b**    | **Agents & worktrees board** — loopback hook receiver, scoped hook injection, `agent-graph` reducer, panel (agents/sub-agents + worktree + live diff + recent files + status)                       | hooks → `http://localhost` | low — official, stable, real-time                |
+| **6c**    | **Trace overlay** — exact multi-level parent→child lineage + token/cost/latency                                                                                                                     | OTEL traces → local OTLP   | medium — **beta** schema; opt-in; degrades to 6b |
+| **6d**    | Cross-agent generalisation (agent-agnostic reducer)                                                                                                                                                 | —                          | future                                           |
+
+**Definition of done additions:** `agent-graph` reducer has a real test matrix (event streams →
+tree/worktree/file state, incl. inferred lineage); hook receiver is loopback-only + per-launch token;
+no prompt/file **content** logged by default; missing hooks → empty board, never an error.
 
 ---
 

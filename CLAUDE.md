@@ -1,8 +1,9 @@
 # smterm
 
 Cross-platform terminal app (agent-runner focus). Multiple shell sessions in tabs + split panes;
-links open the OS browser; native notifications; per-session status. See `ARCHITECTURE.md` (design),
-`ROADMAP.md` (progress), `TESTING.md` (quality bar).
+links open the OS browser; native notifications; per-session status. Docs live in `docs/` — see
+`docs/ARCHITECTURE.md` (design), `docs/ROADMAP.md` (progress), `docs/TESTING.md` (quality bar);
+design docs/RFCs in `docs/design/`.
 
 ## Stack
 
@@ -54,14 +55,19 @@ src/
   style) — `<emoji> type(scope): subject`. Emoji per type: ✨ `feat` · 🐛 `fix` · 📝 `docs` ·
   ♻️ `refactor` · ⚡ `perf` · ✅ `test` · 🔧 `chore` · 🎨 `style` · 👷 `ci` · 📦 `build` ·
   ⏪ `revert` · 🚨 breaking. Example: `✨ feat(diff-panel): syntax-highlight the changed file`.
+- **Performance is a first-class design criterion.** Every new feature must stay **off the terminal
+  hot path** (PTY → renderer → xterm). New background / IPC / hook / integration work must be async
+  and must never block keystrokes, rendering, or (for agent integrations) the agent's own loop; keep
+  it on a channel separate from terminal data and throttle it. When in doubt, measure with the
+  `SMTERM_PERF=1` harness (`docs/PERF.md`). Weigh this in every design, not as an afterthought.
 - **Tests with the feature**: push logic into pure functions (pane-tree, session-status,
   shell-integration parsers) and test those; the risky code earns real tests.
 - **Lint is a gate** (pre-commit hook): `tsc` (renderer + electron), eslint, prettier. Run `make fmt` first.
 
 ## Gotchas
 
-One-line landmine flags; full _why_ + fixes in **`GOTCHAS.md`** (anchors below). Main-process
-rules also in `electron/CLAUDE.md` (loaded on demand). Design detail in `ARCHITECTURE.md`.
+One-line landmine flags; full _why_ + fixes in **`docs/GOTCHAS.md`** (anchors below). Main-process
+rules also in `electron/CLAUDE.md` (loaded on demand). Design detail in `docs/ARCHITECTURE.md`.
 
 - **Renderer ↔ main only via `src/lib/ipc.ts`** (preload `window.smterm`); no Electron in React.
   Terminals live in `terminal-manager.ts`, outside React (re-attach, don't respawn). → GOTCHAS #seam

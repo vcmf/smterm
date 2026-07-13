@@ -1,6 +1,6 @@
 // Batches high-frequency PTY output into fewer IPC messages. node-pty emits many
 // tiny chunks under load; forwarding each as its own main→renderer message halves
-// throughput (see PERF.md). Buffer and flush as ONE message on a short timer or a
+// throughput (see docs/PERF.md). Buffer and flush as ONE message on a short timer or a
 // size cap — order-preserving (chunks are joined, never split).
 
 export class OutputCoalescer {
