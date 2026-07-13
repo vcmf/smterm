@@ -204,7 +204,22 @@ one `general-purpose` sub-agent in a sandbox dir. **18 hook events fired**, full
 **Conclusion:** Phase 1 (hooks board) is de-risked — the data is present, attributable, and scopeable.
 Proceed to build `agent-graph` against the shapes captured here.
 
-## 8. Out of scope
+## 8. Performance & safety (hard requirements for 6b)
+
+Hooks run in the `claude` process over a **separate loopback socket** — they never touch smterm's
+PTY→xterm render path, so **no terminal lag**. But hooks are **synchronous to Claude's agent loop**
+(it waits, bounded by the hook `timeout`), so the receiver must not slow the agent either:
+
+- **Ack instantly.** Return `200 {}` immediately; do all reduce/IPC work on the next tick — never
+  block the HTTP response on git/disk/IPC.
+- **`http` hooks** (no per-event subprocess) + the **leanest event set** that feeds the board (drop
+  per-tool `PreToolUse`/`PostToolUse` if "current tool" isn't worth a round-trip each).
+- **Cap the hook `timeout` (~2–3 s)** as a backstop: a slow/down receiver must let Claude proceed,
+  never hang it. Receiver down / smterm not running → connection refused instantly → no delay.
+- Reduce in **main**; push to the board over an IPC channel **separate** from terminal data, and
+  throttle board updates. Nothing agent-observability-related may sit on the render hot path.
+
+## 9. Out of scope
 
 - Reading undocumented private state files (the control-plane road we still reject).
 - Driving/orchestrating agents from smterm (this is _observe_, not _control_).

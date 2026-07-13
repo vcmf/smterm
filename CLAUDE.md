@@ -55,6 +55,11 @@ src/
   style) — `<emoji> type(scope): subject`. Emoji per type: ✨ `feat` · 🐛 `fix` · 📝 `docs` ·
   ♻️ `refactor` · ⚡ `perf` · ✅ `test` · 🔧 `chore` · 🎨 `style` · 👷 `ci` · 📦 `build` ·
   ⏪ `revert` · 🚨 breaking. Example: `✨ feat(diff-panel): syntax-highlight the changed file`.
+- **Performance is a first-class design criterion.** Every new feature must stay **off the terminal
+  hot path** (PTY → renderer → xterm). New background / IPC / hook / integration work must be async
+  and must never block keystrokes, rendering, or (for agent integrations) the agent's own loop; keep
+  it on a channel separate from terminal data and throttle it. When in doubt, measure with the
+  `SMTERM_PERF=1` harness (`docs/PERF.md`). Weigh this in every design, not as an afterthought.
 - **Tests with the feature**: push logic into pure functions (pane-tree, session-status,
   shell-integration parsers) and test those; the risky code earns real tests.
 - **Lint is a gate** (pre-commit hook): `tsc` (renderer + electron), eslint, prettier. Run `make fmt` first.
