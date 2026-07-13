@@ -52,10 +52,34 @@ tiny loopback receiver and gets every event **as it happens** (no batching). Com
 event: `session_id`, `transcript_path`, `cwd`, `permission_mode`, `hook_event_name`.
 
 **Known gap:** hook input does **not** include an explicit `parent_agent_id`. Lineage within a
-session is _inferred_ (shared `session_id` + start/stop ordering + `agent_id` presence). Good enough
-for a flat "root → sub-agents" grouping; exact multi-level parenting comes from OTEL (2b).
+session is _inferred_ (see the correlation model in §2b, validated by the spike). Good enough for a
+flat "root → sub-agents" grouping; exact multi-level (sub-agent-of-a-sub-agent) parenting comes from
+OTEL (2c).
 
-### 2b. OpenTelemetry traces → local OTLP receiver (Phase 2 — richer, beta)
+### 2b. Correlation model (validated by the spike — §7)
+
+The real event stream (a headless `claude` that launched one sub-agent) gives a clean two-level
+reconstruction with **no** `parent_agent_id` needed:
+
+- **Root agent** = events with **no `agent_id`** (SessionStart, the launching `PreToolUse`, Stop,
+  SessionEnd). The session _is_ the root agent.
+- **Sub-agent** = events carrying an `agent_id` (+ `agent_type` like `general-purpose`). **Every**
+  tool call the sub-agent makes carries its `agent_id`, so all its activity is directly attributable.
+- **The parent→child edge:** the root fires `PreToolUse` with `tool_name: "Agent"` (the Task tool is
+  surfaced as `Agent`), immediately followed by `SubagentStart{agent_id}` — **same `session_id` and
+  same `prompt_id`**. So `(session_id, prompt_id)` ties the launching turn to the sub-agent it spawned.
+- **`prompt_id`** groups one turn end-to-end (the sub-agent's whole lifecycle shares the launching
+  turn's `prompt_id`); **`agent_id`** identifies which agent. Together they rebuild the per-turn tree.
+- **Lifecycle + payload:** `SubagentStart` → sub-agent's `PreToolUse`/`PostToolUse` (with
+  `tool_name`, `tool_input`, `tool_response`, `duration_ms`) → `SubagentStop` (with
+  `agent_transcript_path` + `last_assistant_message`). `cwd` and `transcript_path` are on every event.
+
+So the `agent-graph` reducer keys agents by `agent_id` (root = the sessionless bucket), attributes
+each tool event by `agent_id`, and draws the root→sub edge from the `Agent` `PreToolUse` +
+`SubagentStart` pair sharing `(session_id, prompt_id)`. Deeper nesting is the only thing this can't
+resolve — that's OTEL's `parent_agent_id` (2c).
+
+### 2c. OpenTelemetry traces → local OTLP receiver (Phase 2 — richer, beta)
 
 With [`CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_TRACES_EXPORTER=otlp`,
 `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`](https://code.claude.com/docs/en/agent-sdk/observability)
@@ -80,11 +104,19 @@ fire interactively; traces need empirical confirmation before we depend on them.
 ## 3. The zero-setup lever
 
 smterm already injects env + shell integration into the shells it spawns
-(`electron/shell-integration.ts`, `pty:spawn`). We extend that injection to:
+(`electron/shell-integration.ts`, `pty:spawn`). The user _types_ `claude` themselves, so we can't add
+`--settings` to its argv directly — but the injection gives us two clean, scoped hooks:
 
-1. Register our hook config **scoped to launched panes** (via a temp settings dir / `CLAUDE_*`
-   config pointer we control) so we never mutate the user's global `~/.claude/settings.json`.
-2. Set the telemetry env (Phase 2) pointing at our loopback receiver.
+1. **A `claude` shell wrapper** injected into the interactive shell: a function
+   `claude() { command claude --settings <smterm-hooks.json> "$@"; }`. Any `claude` a user runs in an
+   smterm pane transparently loads our scoped hook file — **without** touching their global
+   `~/.claude/settings.json`. (`--settings` is confirmed working in the spike, §7.)
+2. **Telemetry env** (Phase 2) — set `CLAUDE_CODE_ENABLE_TELEMETRY` + OTLP vars pointing at our
+   loopback receiver, per the same injection.
+
+The hook file uses `type: "http"` pointing at `http://127.0.0.1:<port>` with a per-launch token
+(the spike used `type: "command"` + `curl` to prove the payloads; `http` is the lighter production
+form — no per-event subprocess).
 
 Result: the board **just works** for agents started inside smterm, with **no user setup** and no
 global config footprint. Agents started outside smterm simply don't appear (acceptable; opt-in).
@@ -149,7 +181,30 @@ Design rule (matches repo conventions): **the parsing/folding is a pure reducer*
 
 ---
 
-## 7. Out of scope
+## 7. Spike results (2026-07-13) — validated ✅
+
+Wired a throwaway `type: command` + `curl` hook (all lifecycle events) into a **scoped**
+`--settings` file and ran a headless `claude -p` (v2.1.207, `--model claude-haiku-4-5`) that launched
+one `general-purpose` sub-agent in a sandbox dir. **18 hook events fired**, full lifecycle. Findings:
+
+- ✅ **Hooks fire reliably**, scoped via `--settings` — **no global config touched**. Confirms §3.
+- ✅ **`SubagentStart` / `SubagentStop` fire** with `agent_id` + `agent_type` (`general-purpose`),
+  and `SubagentStop` carries `agent_transcript_path` + `last_assistant_message` (1 KB final summary).
+- ✅ **Every sub-agent tool call carries the `agent_id`** → activity is directly attributable per agent.
+- ✅ **Root→sub edge is reconstructable** without `parent_agent_id`: root `PreToolUse{tool_name:"Agent"}`
+  → `SubagentStart` share `(session_id, prompt_id)`; the sub-agent's whole lifecycle shares that
+  `prompt_id`. (The correlation model in §2b is taken straight from this run.)
+- ✅ **Rich payloads**: `tool_name`, `tool_input`, `tool_response`, `duration_ms`, `cwd`,
+  `transcript_path` on the relevant events — enough for the board without enabling any content logging.
+- ⚠️ **No `parent_agent_id`** in hook input (as predicted) → deeper-than-one-level nesting needs OTEL.
+- ⚠️ Ran **headless** (`claude -p`); the interactive TUI uses the same hook engine so emission is
+  near-certain — cheap to confirm by running interactive `claude --settings <hooks>` once (6a).
+- Note: the Task tool surfaces as **`tool_name: "Agent"`** (not `"Task"`) in `PreToolUse`.
+
+**Conclusion:** Phase 1 (hooks board) is de-risked — the data is present, attributable, and scopeable.
+Proceed to build `agent-graph` against the shapes captured here.
+
+## 8. Out of scope
 
 - Reading undocumented private state files (the control-plane road we still reject).
 - Driving/orchestrating agents from smterm (this is _observe_, not _control_).
