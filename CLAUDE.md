@@ -1,8 +1,9 @@
 # smterm
 
 Cross-platform terminal app (agent-runner focus). Multiple shell sessions in tabs + split panes;
-links open the OS browser; native notifications; per-session status. See `ARCHITECTURE.md` (design),
-`ROADMAP.md` (progress), `TESTING.md` (quality bar).
+links open the OS browser; native notifications; per-session status. Docs live in `docs/` — see
+`docs/ARCHITECTURE.md` (design), `docs/ROADMAP.md` (progress), `docs/TESTING.md` (quality bar);
+design docs/RFCs in `docs/design/`.
 
 ## Stack
 
@@ -60,8 +61,8 @@ src/
 
 ## Gotchas
 
-One-line landmine flags; full _why_ + fixes in **`GOTCHAS.md`** (anchors below). Main-process
-rules also in `electron/CLAUDE.md` (loaded on demand). Design detail in `ARCHITECTURE.md`.
+One-line landmine flags; full _why_ + fixes in **`docs/GOTCHAS.md`** (anchors below). Main-process
+rules also in `electron/CLAUDE.md` (loaded on demand). Design detail in `docs/ARCHITECTURE.md`.
 
 - **Renderer ↔ main only via `src/lib/ipc.ts`** (preload `window.smterm`); no Electron in React.
   Terminals live in `terminal-manager.ts`, outside React (re-attach, don't respawn). → GOTCHAS #seam

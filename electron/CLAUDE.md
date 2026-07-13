@@ -15,7 +15,7 @@ ownership, native modules. No DOM, no React here. (Renderer rules: root `CLAUDE.
 - `coalescer.ts` / `output-buffer.ts` — PTY output batching (IPC) + replay buffer (reattach).
 - `diagnostics.ts` — temporary always-on event log (`~/.config/smterm/diagnostics.log`).
 - `shell-env.ts` — import the login-shell PATH/env at startup (packaged GUI launches get
-  a bare launchd PATH). → `../GOTCHAS.md#shell-env`
+  a bare launchd PATH). → `../docs/GOTCHAS.md#shell-env`
 
 ## Rules
 
@@ -24,7 +24,7 @@ ownership, native modules. No DOM, no React here. (Renderer rules: root `CLAUDE.
   rebound on reattach. Output flows `proc.onData → buffer.push + coalescer.push → emit(rec)`.
 - **`pty:spawn` is attach-or-spawn**: an id that's already live **reattaches** (rebind sender,
   `coalescer.reset()`, resize, replay `buffer.dump()`) — it does **not** spawn a second shell.
-  Only `pty:kill` (pane/tab close) truly terminates + frees the buffer. → `../GOTCHAS.md#session-survival`
+  Only `pty:kill` (pane/tab close) truly terminates + frees the buffer. → `../docs/GOTCHAS.md#session-survival`
 - **Keep logic in pure, testable modules** (`coalescer`, `output-buffer`, shell-integration &
   git parsers). Vitest **cannot load node-pty** (Electron ABI) — never write a test that spawns
   a PTY; verify the PTY path manually / via the diagnostics log.

@@ -54,7 +54,7 @@ const sessions = new Map<string, PtySession>()
 let mainWindow: BrowserWindow | null = null
 let quitConfirmed = false
 
-// PTY output batching (see electron/coalescer.ts + PERF.md).
+// PTY output batching (see electron/coalescer.ts + docs/PERF.md).
 const PTY_FLUSH_MS = 4
 const PTY_MAX_FLUSH_BYTES = 256 * 1024
 // Recent output kept per session for replay when a reloaded renderer reattaches.
