@@ -112,9 +112,10 @@ function App() {
       useStore.getState().applyAgentEvents(events)
       if (import.meta.env.DEV) {
         const g = useStore.getState().agents
-
-        console.debug(
-          `[agents] +${events.length} → ${g.rootIds.length} session(s), ${Object.keys(g.nodes).length} node(s)`,
+        const names = events.map((e) => e.event).join(", ")
+        // console.log (Info level) so it isn't hidden by the devtools "Verbose" filter.
+        console.log(
+          `[agents] +${events.length} [${names}] → ${g.rootIds.length} session(s), ${Object.keys(g.nodes).length} node(s)`,
         )
       }
     })

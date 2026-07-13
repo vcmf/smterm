@@ -441,16 +441,19 @@ function openFile(cwd: string, file: string, line?: number, col?: number): void 
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // GUI-launched apps (Finder/Dock) inherit a bare launchd PATH, so shells can't find
   // Homebrew/cargo tools (starship, etc.). Import the login shell's real env before any
   // PTY spawns. Only when packaged — in dev the app is launched from a terminal that
   // already has the full env, so this cost (~one shell invocation) is skipped.
   if (process.platform !== "win32" && app.isPackaged) applyLoginShellEnv(defaultShell())
   registerIpc()
+  // Start the hook receiver BEFORE the window so hookSettingsPath is set before the
+  // renderer can request the first pty:spawn — otherwise the initial pane launches
+  // without SMTERM_CLAUDE_SETTINGS and the `claude` wrapper never arms (M6).
+  await startAgentObservability()
   createWindow()
   startSettingsWatcher()
-  void startAgentObservability() // loopback hook receiver for the agents board (M6)
   diag("boot", { pid: process.pid, version: app.getVersion() })
   // Power events tell us whether a lid-close SUSPENDS the app (suspend→resume with
   // PTYs intact) or the OS TERMINATES it (suspend, then a fresh boot with no quit).
