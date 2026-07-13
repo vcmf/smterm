@@ -57,6 +57,13 @@ export const ZSH_ZSHRC = [
   "  add-zsh-hook precmd __smterm_precmd 2>/dev/null",
   "fi",
   "",
+  "# Route `claude` through smterm's scoped hook settings so the agents board can",
+  "# observe its sessions/sub-agents. Only when smterm provides the file; the user's",
+  "# global ~/.claude config is untouched. (M6 — docs/design/AGENT_OBSERVABILITY.md)",
+  'if [[ -o interactive && -n "$SMTERM_CLAUDE_SETTINGS" ]]; then',
+  '  claude() { command claude --settings "$SMTERM_CLAUDE_SETTINGS" "$@" }',
+  "fi",
+  "",
 ].join("\n")
 
 const ZSH_ZPROFILE = [
@@ -109,6 +116,11 @@ export const BASH_RC = [
   "",
   'PROMPT_COMMAND="__smterm_precmd${PROMPT_COMMAND:+; $PROMPT_COMMAND}"',
   "trap '__smterm_preexec' DEBUG",
+  "",
+  "# Route `claude` through smterm's scoped hook settings (agents board — M6).",
+  'if [[ -n "$SMTERM_CLAUDE_SETTINGS" ]]; then',
+  '  claude() { command claude --settings "$SMTERM_CLAUDE_SETTINGS" "$@"; }',
+  "fi",
   "",
 ].join("\n")
 

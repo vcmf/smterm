@@ -106,6 +106,21 @@ function App() {
     return () => unlisten()
   }, [])
 
+  // Agents board (M6): fold coalesced hook-event batches into the store's agent tree.
+  useEffect(() => {
+    const unlisten = ipc.onAgentEvents((events) => {
+      useStore.getState().applyAgentEvents(events)
+      if (import.meta.env.DEV) {
+        const g = useStore.getState().agents
+
+        console.debug(
+          `[agents] +${events.length} → ${g.rootIds.length} session(s), ${Object.keys(g.nodes).length} node(s)`,
+        )
+      }
+    })
+    return () => unlisten()
+  }, [])
+
   // Apply settings to CSS theme + all terminals whenever they change.
   useEffect(() => {
     applyThemeVars(getTheme(settings.theme))

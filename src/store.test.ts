@@ -216,6 +216,18 @@ describe("store — cwd & UI toggles", () => {
     expect(st().diffPanelOpen).toBe(true)
   })
 
+  it("applyAgentEvents folds hook batches into the agent tree", () => {
+    st().applyAgentEvents([
+      { event: "SessionStart", sessionId: "cs1" },
+      { event: "SubagentStart", sessionId: "cs1", agentId: "ca1", agentType: "Explore" },
+    ])
+    st().applyAgentEvents([{ event: "SubagentStop", sessionId: "cs1", agentId: "ca1" }])
+    const g = st().agents
+    expect(g.rootIds).toContain("root:cs1")
+    expect(g.nodes["root:cs1"]!.childIds).toEqual(["ca1"])
+    expect(g.nodes["ca1"]!.status).toBe("done")
+  })
+
   it("setGit stores the latest git status", () => {
     st().setGit({ isRepo: true, branch: "main", ahead: 1, behind: 0, files: [], add: 0, del: 0 })
     expect(st().git?.branch).toBe("main")

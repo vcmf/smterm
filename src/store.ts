@@ -4,6 +4,8 @@ import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "
 import { inheritShell } from "./lib/shells"
 import { reduceSignals } from "./lib/session-status"
 import type { SignalEvent } from "./lib/session-status"
+import { reduceAgentEvent, emptyGraph } from "./lib/agent-graph"
+import type { AgentEvent, AgentGraph } from "./lib/agent-graph"
 import { defaultSettings } from "./settings/schema"
 import type { Settings } from "./settings/schema"
 import type { GitStatus } from "./lib/ipc"
@@ -43,11 +45,13 @@ interface AppState {
   diffPanelOpen: boolean
   sidebarCollapsed: boolean
   git: GitStatus | null
+  agents: AgentGraph // live tree of Claude agents/sub-agents (M6, fed by hook events)
   home: string
 
   setHome: (home: string) => void
   setSessionOscTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
+  applyAgentEvents: (events: AgentEvent[]) => void
   setDiffPanelOpen: (open: boolean) => void
   setSessionCwd: (sessionId: string, cwd: string) => void
   setPaletteOpen: (open: boolean) => void
@@ -107,6 +111,7 @@ export const useStore = create<AppState>((set, get) => ({
   diffPanelOpen: false,
   sidebarCollapsed: false,
   git: null,
+  agents: emptyGraph,
   home: "",
 
   setHome: (home) => set({ home }),
@@ -118,6 +123,10 @@ export const useStore = create<AppState>((set, get) => ({
       return { sessions: { ...state.sessions, [sessionId]: { ...s, oscTitle: next } } }
     }),
   setGit: (git) => set({ git }),
+
+  // Fold a coalesced batch of hook events into the agent tree (one re-render per batch).
+  applyAgentEvents: (events) =>
+    set((state) => ({ agents: events.reduce(reduceAgentEvent, state.agents) })),
   setDiffPanelOpen: (diffPanelOpen) => set({ diffPanelOpen }),
   setSessionCwd: (sessionId, cwd) =>
     set((state) => {
