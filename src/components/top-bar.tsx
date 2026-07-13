@@ -6,6 +6,7 @@ import {
   MagnifyingGlass,
   GearSix,
   GitDiff,
+  TreeStructure,
   Bell,
   Minus,
   Square,
@@ -30,6 +31,7 @@ export function TopBar() {
   const home = useStore((s) => s.home)
   const defaultShellPref = useStore((s) => s.settings.defaultShell)
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
+  const agentsPanelOpen = useStore((s) => s.agentsPanelOpen)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const [maximized, setMaximized] = useState(false)
   const [shellMenu, setShellMenu] = useState(false)
@@ -209,6 +211,13 @@ export function TopBar() {
           onClick={() => useStore.getState().setDiffPanelOpen(!diffPanelOpen)}
         >
           <GitDiff size={15} />
+        </button>
+        <button
+          className={`iconbtn${agentsPanelOpen ? " on" : ""}`}
+          title="Toggle agents panel"
+          onClick={() => useStore.getState().setAgentsPanelOpen(!agentsPanelOpen)}
+        >
+          <TreeStructure size={15} />
         </button>
         <button
           className="iconbtn"

@@ -6,6 +6,7 @@ import { StatusBar } from "./components/status-bar"
 import { CommandPalette } from "./components/command-palette"
 import { SearchBar } from "./components/search-bar"
 import { DiffPanel } from "./components/diff-panel"
+import { AgentsPanel } from "./components/agents-panel"
 import { PaneLayout } from "./components/pane-layout"
 import { SettingsPanel } from "./components/settings-panel"
 import { useActiveCwd, getActiveWsl } from "./lib/use-active-cwd"
@@ -27,6 +28,7 @@ function App() {
   const paletteOpen = useStore((s) => s.paletteOpen)
   const searchOpen = useStore((s) => s.searchOpen)
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
+  const agentsPanelOpen = useStore((s) => s.agentsPanelOpen)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const activeCwd = useActiveCwd()
 
@@ -267,6 +269,7 @@ function App() {
           {searchOpen && <SearchBar />}
         </div>
         {diffPanelOpen && <DiffPanel />}
+        {agentsPanelOpen && <AgentsPanel />}
       </div>
       <StatusBar />
       {paletteOpen && <CommandPalette />}
