@@ -188,6 +188,51 @@ describe("hook receiver — behaviour", () => {
     expect(batches.flat()).toHaveLength(0)
   })
 
+  it("reassembles a multi-byte UTF-8 body split across chunks", async () => {
+    const batches: AgentEvent[][] = []
+    receiver = await startHookReceiver({
+      token: TOKEN,
+      coalesceMs: 20,
+      onBatch: (b) => batches.push(b),
+    })
+    const msg = "café 🎉 日本語"
+    const buf = Buffer.from(
+      JSON.stringify({
+        hook_event_name: "SubagentStop",
+        session_id: "s1",
+        agent_id: "a1",
+        last_assistant_message: msg,
+      }),
+      "utf8",
+    )
+    const cut = buf.indexOf(Buffer.from("🎉", "utf8")) + 2 // mid-emoji (4-byte char)
+    await new Promise<void>((resolve) => {
+      const req = http.request(
+        {
+          host: "127.0.0.1",
+          port: receiver!.port,
+          method: "POST",
+          path: "/",
+          agent,
+          headers: {
+            "content-type": "application/json",
+            "content-length": buf.length,
+            "x-smterm-token": TOKEN,
+          },
+        },
+        (res) => {
+          res.resume()
+          res.on("end", () => resolve())
+        },
+      )
+      req.write(buf.subarray(0, cut)) // first half ends mid-multibyte-char
+      req.write(buf.subarray(cut))
+      req.end()
+    })
+    await sleep(60)
+    expect(batches.flat()[0]?.message).toBe(msg)
+  })
+
   it("acks but drops an oversized body", async () => {
     const batches: AgentEvent[][] = []
     receiver = await startHookReceiver({

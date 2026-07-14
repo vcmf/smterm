@@ -84,19 +84,28 @@ export async function startHookReceiver(opts: HookReceiverOptions): Promise<Hook
     }
     const paneHeader = req.headers["x-smterm-pane"]
     const paneId = Array.isArray(paneHeader) ? paneHeader[0] : paneHeader
-    let body = ""
+    // Accumulate raw Buffer chunks and decode ONCE at the end — decoding each chunk
+    // independently corrupts a multi-byte UTF-8 sequence split across a chunk boundary
+    // (e.g. CJK/emoji in last_assistant_message). `size` counts exact bytes for the cap.
+    const chunks: Buffer[] = []
+    let size = 0
     let tooBig = false
-    req.on("data", (c) => {
+    req.on("data", (c: Buffer) => {
       if (tooBig) return
-      if (body.length + c.length > maxBody)
-        tooBig = true // don't append a chunk that overflows
-      else body += c
+      size += c.length
+      if (size > maxBody) {
+        tooBig = true
+        chunks.length = 0 // over the cap — drop it; we won't process this event
+      } else {
+        chunks.push(c)
+      }
     })
     req.on("end", () => {
       // ACK FIRST — the response never waits on parsing, reduction, or IPC.
       res.writeHead(200, { "content-type": "application/json" })
       res.end("{}")
       if (tooBig) return
+      const body = Buffer.concat(chunks).toString("utf8")
       // Defer everything else off the response so acks stay sub-millisecond.
       queueMicrotask(() => {
         let raw: unknown

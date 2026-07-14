@@ -118,7 +118,7 @@ export const BASH_RC = [
   "trap '__smterm_preexec' DEBUG",
   "",
   "# Route `claude` through smterm's scoped hook settings (agents board — M6).",
-  'if [[ -n "$SMTERM_CLAUDE_SETTINGS" ]]; then',
+  'if [[ $- == *i* && -n "$SMTERM_CLAUDE_SETTINGS" ]]; then',
   '  claude() { command claude --settings "$SMTERM_CLAUDE_SETTINGS" "$@"; }',
   "fi",
   "",
