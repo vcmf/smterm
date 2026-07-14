@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron"
+import type { AgentEvent } from "../src/lib/agent-graph"
 
 const api = {
   ptySpawn: (opts: { id: string; cols: number; rows: number; shell: string; args: string[] }) =>
@@ -25,6 +26,13 @@ const api = {
     const listener = () => cb()
     ipcRenderer.on("settings-changed", listener)
     return () => ipcRenderer.removeListener("settings-changed", listener)
+  },
+
+  // Coalesced batches of agent hook events (M6 agents board).
+  onAgentEvents: (cb: (events: AgentEvent[]) => void) => {
+    const listener = (_e: unknown, events: AgentEvent[]) => cb(events)
+    ipcRenderer.on("agents:events", listener)
+    return () => ipcRenderer.removeListener("agents:events", listener)
   },
 
   openExternal: (url: string) => ipcRenderer.send("open-external", url),

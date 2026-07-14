@@ -20,6 +20,7 @@ const smtermStub = {
   writeSettings: vi.fn(async () => {}),
   settingsPath: vi.fn(async () => "/tmp/smterm/settings.json"),
   onSettingsChanged: vi.fn(unsub),
+  onAgentEvents: vi.fn(unsub),
   openExternal: vi.fn(),
   openPath: vi.fn(),
   notify: vi.fn(),

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
 import os from "node:os"
+import { randomUUID } from "node:crypto"
 import { spawn } from "node:child_process"
 import * as pty from "node-pty"
 import type { IPty } from "node-pty"
@@ -29,6 +30,8 @@ import { OutputBuffer } from "./output-buffer"
 import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
+import { startHookReceiver } from "./agent-hooks"
+import type { AgentEvent } from "../src/lib/agent-graph"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -52,6 +55,9 @@ interface PtySession {
 }
 const sessions = new Map<string, PtySession>()
 let mainWindow: BrowserWindow | null = null
+// Path to the scoped Claude Code hook-settings file the `claude` shell wrapper loads
+// (set once the loopback hook receiver is up). null ⇒ agents board stays empty.
+let hookSettingsPath: string | null = null
 let quitConfirmed = false
 
 // PTY output batching (see electron/coalescer.ts + docs/PERF.md).
@@ -117,6 +123,60 @@ function startSettingsWatcher() {
   watch(p, { ignoreInitial: true }).on("all", () => {
     mainWindow?.webContents.send("settings-changed")
   })
+}
+
+// ── agent observability (M6) ───────────────────────────────────────
+// Build the scoped Claude Code hook-settings JSON: every event of interest POSTs
+// to our loopback receiver with the shared token. `timeout: 3` is a backstop so a
+// slow/dead receiver can never hang the agent (design doc §8).
+function agentHookSettings(port: number, token: string): string {
+  const hook = {
+    type: "http",
+    url: `http://127.0.0.1:${port}/`,
+    // x-smterm-pane is interpolated per pane from SMTERM_PANE_ID (set in the spawn env)
+    // so the receiver can tag each event with the pane it came from (board grouping +
+    // click-to-focus). Env interpolation via allowedEnvVars is confirmed to work.
+    headers: { "x-smterm-token": token, "x-smterm-pane": "$SMTERM_PANE_ID" },
+    allowedEnvVars: ["SMTERM_PANE_ID"],
+    timeout: 3,
+  }
+  const toolEvents = new Set(["PreToolUse", "PostToolUse"])
+  const events = [
+    "SessionStart",
+    "SessionEnd",
+    "UserPromptSubmit",
+    "Stop",
+    "Notification",
+    "SubagentStart",
+    "SubagentStop",
+    "PreToolUse",
+    "PostToolUse",
+    "CwdChanged",
+    "FileChanged",
+  ]
+  const hooks: Record<string, unknown[]> = {}
+  for (const e of events)
+    hooks[e] = [toolEvents.has(e) ? { matcher: "", hooks: [hook] } : { hooks: [hook] }]
+  return `${JSON.stringify({ hooks }, null, 2)}\n`
+}
+
+// Start the loopback hook receiver + write the scoped settings file. Best-effort:
+// on any failure the board just stays empty (never blocks startup or the terminal).
+async function startAgentObservability(): Promise<void> {
+  try {
+    const token = randomUUID()
+    const receiver = await startHookReceiver({
+      token,
+      onBatch: (events: AgentEvent[]) => mainWindow?.webContents.send("agents:events", events),
+    })
+    const p = path.join(configDir(), "claude-hooks.json")
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, agentHookSettings(receiver.port, token))
+    hookSettingsPath = p
+    diag("agent-hooks-up", { port: receiver.port })
+  } catch (err) {
+    diag("agent-hooks-failed", { err: String(err) })
+  }
 }
 
 // ── settings.json (source of truth) ────────────────────────────────
@@ -199,6 +259,12 @@ function registerIpc() {
       // so it crosses the boundary.)
       const spawnEnv = { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>
       if (!shareHistoryEnabled()) spawnEnv.SMTERM_SHARE_HISTORY = "0"
+      // Let the injected `claude` wrapper route through our scoped hook settings, and
+      // tag this pane so the agents board knows which pane each session runs in (M6).
+      if (hookSettingsPath && !wsl) {
+        spawnEnv.SMTERM_CLAUDE_SETTINGS = hookSettingsPath
+        spawnEnv.SMTERM_PANE_ID = opts.id
+      }
       const proc = pty.spawn(shellCmd, [...(opts.args ?? []), ...wslArgs, ...(inj?.args ?? [])], {
         name: "xterm-256color",
         cols: opts.cols || 80,
@@ -383,13 +449,17 @@ function openFile(cwd: string, file: string, line?: number, col?: number): void 
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // GUI-launched apps (Finder/Dock) inherit a bare launchd PATH, so shells can't find
   // Homebrew/cargo tools (starship, etc.). Import the login shell's real env before any
   // PTY spawns. Only when packaged — in dev the app is launched from a terminal that
   // already has the full env, so this cost (~one shell invocation) is skipped.
   if (process.platform !== "win32" && app.isPackaged) applyLoginShellEnv(defaultShell())
   registerIpc()
+  // Start the hook receiver BEFORE the window so hookSettingsPath is set before the
+  // renderer can request the first pty:spawn — otherwise the initial pane launches
+  // without SMTERM_CLAUDE_SETTINGS and the `claude` wrapper never arms (M6).
+  await startAgentObservability()
   createWindow()
   startSettingsWatcher()
   diag("boot", { pid: process.pid, version: app.getVersion() })

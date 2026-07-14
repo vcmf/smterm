@@ -1,5 +1,6 @@
 import type { ShellOption } from "../types"
 import type { WslContext } from "./wsl"
+import type { AgentEvent } from "./agent-graph"
 
 // The typed surface the preload exposes on window.smterm. Every renderer→main
 // call goes through this one seam (keeps components portable + is the insulation
@@ -26,6 +27,7 @@ export interface Ipc {
   writeSettings: (contents: string) => Promise<void>
   settingsPath: () => Promise<string>
   onSettingsChanged: (cb: () => void) => () => void
+  onAgentEvents: (cb: (events: AgentEvent[]) => void) => () => void
   openExternal: (url: string) => void
   openPath: (p: string) => void
   // Does `path` (relative to `cwd`, or absolute) exist? Validates a detected file link.
