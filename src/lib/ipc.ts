@@ -91,6 +91,7 @@ export interface GitFile {
 
 export interface GitStatus {
   isRepo: boolean
+  root: string // repo toplevel (abs); "" when not a repo
   branch: string
   ahead: number
   behind: number

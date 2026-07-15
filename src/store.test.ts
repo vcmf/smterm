@@ -231,7 +231,16 @@ describe("store — cwd & UI toggles", () => {
   })
 
   it("setGit stores the latest git status", () => {
-    st().setGit({ isRepo: true, branch: "main", ahead: 1, behind: 0, files: [], add: 0, del: 0 })
+    st().setGit({
+      isRepo: true,
+      root: "",
+      branch: "main",
+      ahead: 1,
+      behind: 0,
+      files: [],
+      add: 0,
+      del: 0,
+    })
     expect(st().git?.branch).toBe("main")
   })
 

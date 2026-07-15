@@ -29,13 +29,31 @@ describe("StatusBar", () => {
   })
 
   it("shows the git branch when in a repo", () => {
-    st().setGit({ isRepo: true, branch: "main", ahead: 0, behind: 0, files: [], add: 0, del: 0 })
+    st().setGit({
+      isRepo: true,
+      root: "",
+      branch: "main",
+      ahead: 0,
+      behind: 0,
+      files: [],
+      add: 0,
+      del: 0,
+    })
     render(<StatusBar />)
     expect(screen.getByText("main")).toBeInTheDocument()
   })
 
   it("hides the branch when not a repo", () => {
-    st().setGit({ isRepo: false, branch: "", ahead: 0, behind: 0, files: [], add: 0, del: 0 })
+    st().setGit({
+      isRepo: false,
+      root: "",
+      branch: "",
+      ahead: 0,
+      behind: 0,
+      files: [],
+      add: 0,
+      del: 0,
+    })
     const { container } = render(<StatusBar />)
     expect(container.querySelectorAll(".status-item").length).toBeGreaterThan(0)
     expect(container.textContent).not.toContain("main")

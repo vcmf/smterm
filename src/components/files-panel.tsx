@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { CaretRight, CaretDown, Folder, File as FileIcon, X } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
@@ -13,6 +13,7 @@ import {
   baseName,
   type FileTreeState,
 } from "../lib/file-tree"
+import { buildGitDecorations, statusLetter, statusColor } from "../lib/git-decorations"
 
 // Per-cwd LRU cache so re-focusing a pane restores its tree instantly instead of
 // re-listing from scratch. Bounded to 16 folders (each listing itself capped by the
@@ -25,9 +26,14 @@ const cache = new FileTreeCache(16)
  *  freshness. All tree/cache logic is the pure, tested `lib/file-tree`. */
 export function FilesPanel() {
   const cwd = useActiveCwd()
+  const git = useStore((s) => s.git)
   const [tree, setTree] = useState<FileTreeState | null>(null)
   const cwdRef = useRef<string | undefined>(undefined)
   const close = () => useStore.getState().setRightView(null)
+
+  // Git decorations for the current repo (reuses the already-polled store.git; no
+  // extra git calls). Files get a status letter + colour, folders get a tinted name.
+  const deco = useMemo(() => (git?.isRepo ? buildGitDecorations(git.root, git.files) : null), [git])
 
   // Apply a state update to a specific cwd's cache entry; mirror to the UI only if
   // that cwd is still active — so a late background readdir for a pane you've since
@@ -94,6 +100,7 @@ export function FilesPanel() {
             )
           }
           if (r.kind === "dir") {
+            const st = deco?.dir.get(r.path)
             return (
               <div
                 key={r.path}
@@ -103,10 +110,14 @@ export function FilesPanel() {
               >
                 {r.expanded ? <CaretDown size={12} /> : <CaretRight size={12} />}
                 <Folder size={14} weight="fill" color="var(--blue)" />
-                <span className="tree-primary">{r.name}</span>
+                <span className="tree-primary" style={st ? { color: statusColor(st) } : undefined}>
+                  {r.name}
+                </span>
               </div>
             )
           }
+          const st = deco?.file.get(r.path)
+          const color = st ? statusColor(st) : undefined
           return (
             <div
               key={r.path}
@@ -116,8 +127,15 @@ export function FilesPanel() {
               onMouseDown={() => cwd && ipc.openFile(cwd, r.path)}
             >
               <span style={{ width: 12 }} />
-              <FileIcon size={14} color="var(--dim)" />
-              <span className="tree-primary">{r.name}</span>
+              <FileIcon size={14} color={color ?? "var(--dim)"} />
+              <span className="tree-primary" style={color ? { color } : undefined}>
+                {r.name}
+              </span>
+              {st && (
+                <span className="git-badge" style={{ color }}>
+                  {statusLetter(st)}
+                </span>
+              )}
             </div>
           )
         })}

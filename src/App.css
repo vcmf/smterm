@@ -704,6 +704,14 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Git status letter badge (M/A/D/U/R) pinned to the right of a file row. */
+.file-row .git-badge {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
 /* Agents board reuses .diff-files, but has no diff body below — so let it fill. */
 .agents-files {
   flex: 1 1 auto;

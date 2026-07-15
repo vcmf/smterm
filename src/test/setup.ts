@@ -39,6 +39,7 @@ const smtermStub = {
   })),
   gitStatus: vi.fn(async () => ({
     isRepo: false,
+    root: "",
     branch: "",
     ahead: 0,
     behind: 0,

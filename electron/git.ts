@@ -18,6 +18,7 @@ export interface GitFile {
 
 export interface GitStatus {
   isRepo: boolean
+  root: string // repo toplevel (abs); "" when not a repo. Resolves repo-relative file paths.
   branch: string
   ahead: number
   behind: number
@@ -37,6 +38,7 @@ export interface DiffLine {
 
 const empty: GitStatus = {
   isRepo: false,
+  root: "",
   branch: "",
   ahead: 0,
   behind: 0,
@@ -176,7 +178,15 @@ export async function gitStatus(cwd: string, wsl?: WslCtx): Promise<GitStatus> {
 
   const add = files.reduce((n, f) => n + f.add, 0)
   const del = files.reduce((n, f) => n + f.del, 0)
-  return { isRepo: true, branch, ahead, behind, files, add, del }
+  // Repo toplevel — resolves the repo-relative file paths to absolute (files browser
+  // decorations, worktree label). Best-effort: "" if it somehow fails.
+  let root = ""
+  try {
+    root = (await run(cwd, ["rev-parse", "--show-toplevel"], wsl)).trim()
+  } catch {
+    // leave root empty
+  }
+  return { isRepo: true, root, branch, ahead, behind, files, add, del }
 }
 
 /** Unified diff for one file (handles untracked via --no-index). */
