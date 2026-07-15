@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react"
 import {
-  TerminalWindow,
   Plus,
   CaretDown,
   MagnifyingGlass,
@@ -100,7 +99,7 @@ export function TopBar() {
         <SidebarSimple size={15} />
       </button>
       <div className="brand">
-        <TerminalWindow size={16} weight="fill" />
+        <img className="brand-icon" src="/icon.png" alt="" width={18} height={18} />
         <span className="brand-name">smterm</span>
       </div>
       <div className="vdivider" />

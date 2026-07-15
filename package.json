@@ -1,5 +1,6 @@
 {
   "name": "smterm",
+  "productName": "smterm",
   "private": true,
   "version": "0.1.7",
   "type": "module",
@@ -8,6 +9,7 @@
   "license": "MIT",
   "main": "./out/main/main.js",
   "scripts": {
+    "predev": "node scripts/dev-brand-electron.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

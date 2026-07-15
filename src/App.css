@@ -116,6 +116,12 @@ body {
 .brand svg {
   color: var(--accent);
 }
+.brand-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
 .brand-name {
   font-size: 13px;
   font-weight: 600;
