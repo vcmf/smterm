@@ -11,8 +11,8 @@ export interface GitDecorations {
 }
 
 // Folder aggregate severity, low → high. A folder shows the most severe change it
-// contains (a deleted file outranks a modified one, etc.).
-const SEVERITY: ChangeStatus[] = ["R", "?", "A", "M", "D"]
+// contains: deleted > modified > renamed > added > untracked.
+const SEVERITY: ChangeStatus[] = ["?", "A", "R", "M", "D"]
 const moreSevere = (a: ChangeStatus, b: ChangeStatus) =>
   SEVERITY.indexOf(a) >= SEVERITY.indexOf(b) ? a : b
 

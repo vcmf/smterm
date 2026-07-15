@@ -41,6 +41,17 @@ describe("buildGitDecorations", () => {
 
     const d3 = buildGitDecorations("/repo", [f("src/a.ts", "?"), f("src/b.ts", "A")])
     expect(d3.dir.get("/repo/src")).toBe("A") // added outranks untracked
+
+    // Severity order: deleted > modified > renamed > added > untracked.
+    expect(buildGitDecorations("/repo", [f("s/a", "R"), f("s/b", "A")]).dir.get("/repo/s")).toBe(
+      "R",
+    )
+    expect(buildGitDecorations("/repo", [f("s/a", "R"), f("s/b", "M")]).dir.get("/repo/s")).toBe(
+      "M",
+    )
+    expect(buildGitDecorations("/repo", [f("s/a", "R"), f("s/b", "?")]).dir.get("/repo/s")).toBe(
+      "R",
+    )
   })
 
   it("handles a repo root with subdirectories deeper than the browser cwd", () => {

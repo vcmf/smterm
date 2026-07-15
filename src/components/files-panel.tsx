@@ -39,6 +39,9 @@ export function FilesPanel() {
   // that cwd is still active — so a late background readdir for a pane you've since
   // left updates its cache but never flashes into the current view.
   const apply = (key: string, fn: (s: FileTreeState) => FileTreeState) => {
+    // Drop a late read for a cwd that's neither active nor still cached — otherwise it
+    // would rebuild a one-listing tree, re-insert it as MRU, and evict a live entry.
+    if (cwdRef.current !== key && !cache.has(key)) return
     const next = fn(cache.get(key) ?? emptyTree(key))
     cache.set(key, next)
     if (cwdRef.current === key) setTree(next)
@@ -66,14 +69,16 @@ export function FilesPanel() {
   }, [cwd])
 
   const toggle = (dir: string) => {
-    if (!tree || !cwd) return
-    const { state, needsLoad } = toggleDir(tree, dir)
+    if (!cwd) return
+    const cur = cache.get(cwd) ?? tree // cache is the source of truth (has the latest listings)
+    if (!cur) return
+    const { state, needsLoad } = toggleDir(cur, dir)
     cache.set(cwd, state)
     setTree(state)
     if (needsLoad) load(cwd, needsLoad)
   }
 
-  const rows = tree ? visibleRows(tree) : []
+  const rows = useMemo(() => (tree ? visibleRows(tree) : []), [tree])
 
   return (
     <div className="diffpanel">
