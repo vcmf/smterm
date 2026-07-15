@@ -32,12 +32,13 @@ export const ZSH_ZSHRC = [
   "fi",
   "",
   "# Repoint HISTFILE to the user's real location (correctness — runs even if shared",
-  "# history is opted out). We inject ZDOTDIR to load this rc, and the system /etc/zshrc",
-  "# runs BEFORE us with `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history`, so it points HISTFILE",
-  "# into our temp ZDOTDIR — siloing smterm history from every other terminal. Undo only",
-  "# that value (never a HISTFILE the user set deliberately).",
-  'if [[ -o interactive && "$HISTFILE" == "$SMTERM_ZDOTDIR/.zsh_history" ]]; then',
-  '  HISTFILE="${SMTERM_USER_ZDOTDIR:-$HOME}/.zsh_history"',
+  "# history is opted out). We inject ZDOTDIR to load this rc, and a system zshrc runs",
+  "# BEFORE us (e.g. macOS /etc/zshrc: `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history`), pointing",
+  "# HISTFILE INTO our temp ZDOTDIR — siloing smterm history from every other terminal.",
+  "# Undo it whenever HISTFILE landed inside our dir (any filename), preserving the",
+  "# basename so we match what other terminals use. Never touches a HISTFILE elsewhere.",
+  'if [[ -o interactive && -n "$SMTERM_ZDOTDIR" && "$HISTFILE" == "$SMTERM_ZDOTDIR"/* ]]; then',
+  '  HISTFILE="${SMTERM_USER_ZDOTDIR:-$HOME}/${HISTFILE:t}"',
   "fi",
   "",
   "# Shared, incrementally-written history across panes (cmux-like) unless opted out",
@@ -232,11 +233,13 @@ export function wslInjection(
   }
   if (name === "zsh") {
     // zsh finds our .zshrc via $ZDOTDIR; it restores ZDOTDIR to $HOME + sources ~/.zshrc.
+    // SMTERM_ZDOTDIR lets the rc detect + undo a HISTFILE a system zshrc pointed into our
+    // injected ZDOTDIR (same history-siloing fix as local shells — see ZSH_ZSHRC).
     const zdir = `${wslBase}/zsh`
     return {
       args: ["--", "zsh", "-i"],
-      env: { ZDOTDIR: zdir, SMTERM_SHELL_INTEGRATION: "1" },
-      wslenv: ["ZDOTDIR", "SMTERM_SHELL_INTEGRATION", "SMTERM_SHARE_HISTORY"],
+      env: { ZDOTDIR: zdir, SMTERM_ZDOTDIR: zdir, SMTERM_SHELL_INTEGRATION: "1" },
+      wslenv: ["ZDOTDIR", "SMTERM_ZDOTDIR", "SMTERM_SHELL_INTEGRATION", "SMTERM_SHARE_HISTORY"],
     }
   }
   return null
