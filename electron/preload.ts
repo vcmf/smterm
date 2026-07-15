@@ -35,6 +35,15 @@ const api = {
     return () => ipcRenderer.removeListener("agents:events", listener)
   },
 
+  // Authoritative platform (for isMac etc.) — synchronous, from the main process.
+  platform: process.platform,
+  // macOS Edit-menu clipboard actions, routed to the renderer (terminal-aware copy/paste).
+  onMenuEdit: (cb: (action: string) => void) => {
+    const listener = (_e: unknown, action: string) => cb(action)
+    ipcRenderer.on("menu:edit", listener)
+    return () => ipcRenderer.removeListener("menu:edit", listener)
+  },
+
   openExternal: (url: string) => ipcRenderer.send("open-external", url),
   openPath: (p: string) => ipcRenderer.send("open-path", p),
   pathExists: (cwd: string, path: string) =>

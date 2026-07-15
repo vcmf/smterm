@@ -124,6 +124,29 @@ function App() {
     return () => unlisten()
   }, [])
 
+  // macOS Edit menu (Cmd+C/V/A) → act on the focused terminal (the OS menu's roles
+  // can't see xterm's WebGL selection). If a settings text field is focused instead,
+  // let the browser handle it. Only fires on macOS (menu installed there).
+  useEffect(() => {
+    return ipc.onMenuEdit((action) => {
+      const el = document.activeElement as HTMLElement | null
+      const inField =
+        !!el &&
+        (el.tagName === "INPUT" ||
+          (el.tagName === "TEXTAREA" && !el.classList.contains("xterm-helper-textarea")))
+      if (inField) {
+        document.execCommand(action)
+        return
+      }
+      const s = useStore.getState()
+      const sid = s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId
+      if (!sid) return
+      if (action === "copy" || action === "cut") TerminalManager.copySelection(sid)
+      else if (action === "paste") TerminalManager.paste(sid)
+      else if (action === "selectAll") TerminalManager.selectAll(sid)
+    })
+  }, [])
+
   // Apply settings to CSS theme + all terminals whenever they change.
   useEffect(() => {
     applyThemeVars(getTheme(settings.theme))

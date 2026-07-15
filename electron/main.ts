@@ -32,6 +32,7 @@ import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
+import { installAppMenu } from "./menu"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -461,6 +462,9 @@ app.whenReady().then(async () => {
   // without SMTERM_CLAUDE_SETTINGS and the `claude` wrapper never arms (M6).
   await startAgentObservability()
   createWindow()
+  // macOS: route the Edit menu's Cmd+C/V/A to the renderer so they act on the terminal
+  // (the default menu's roles can't see xterm's WebGL selection). No-op off macOS.
+  installAppMenu((action) => mainWindow?.webContents.send("menu:edit", action))
   startSettingsWatcher()
   diag("boot", { pid: process.pid, version: app.getVersion() })
   // Power events tell us whether a lid-close SUSPENDS the app (suspend→resume with

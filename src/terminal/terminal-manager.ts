@@ -17,7 +17,9 @@ import { keyAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
 
-const isMac = /mac/i.test(navigator.userAgent)
+// Authoritative platform from the main process (process.platform); fall back to the
+// UA sniff only if it's somehow unavailable. navigator.userAgent alone was unreliable.
+const isMac = ipc.platform ? ipc.platform === "darwin" : /mac/i.test(navigator.userAgent)
 
 interface Entry {
   term: Terminal

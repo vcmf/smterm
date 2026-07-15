@@ -43,6 +43,8 @@ export interface Ipc {
   closeWindow: () => void
   isMaximized: () => Promise<boolean>
   onMaximizeChange: (cb: (max: boolean) => void) => () => void
+  platform: NodeJS.Platform // process.platform, exposed synchronously (authoritative isMac)
+  onMenuEdit: (cb: (action: MenuEditAction) => void) => () => void // macOS Edit-menu → renderer
   platformInfo: () => Promise<PlatformInfo>
   gitStatus: (cwd: string, wsl?: WslContext) => Promise<GitStatus>
   gitDiff: (cwd: string, file: string, wsl?: WslContext) => Promise<DiffLine[]>
@@ -51,6 +53,9 @@ export interface Ipc {
   appMetrics: () => Promise<ProcMetric[]>
   perfMode: () => Promise<boolean>
 }
+
+/** Clipboard actions the macOS Edit menu forwards to the renderer (terminal-aware). */
+export type MenuEditAction = "cut" | "copy" | "paste" | "selectAll"
 
 export interface ProcMetric {
   type: string
