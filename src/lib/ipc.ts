@@ -38,6 +38,7 @@ export interface Ipc {
   clipboardWrite: (text: string) => void
   clipboardRead: () => Promise<string>
   clipboardHasImage: () => Promise<boolean>
+  readdir: (dir: string) => Promise<DirListing> // lazy, one directory at a time (files browser)
 
   minimizeWindow: () => void
   maximizeWindow: () => void
@@ -51,6 +52,16 @@ export interface Ipc {
   writeWorkspace: (contents: string) => void
   appMetrics: () => Promise<ProcMetric[]>
   perfMode: () => Promise<boolean>
+}
+
+export interface DirEntry {
+  name: string
+  isDir: boolean
+}
+
+export interface DirListing {
+  entries: DirEntry[] // dirs first, then alphabetical
+  truncated: boolean // more entries existed than the cap (surface it, don't hide)
 }
 
 export interface ProcMetric {

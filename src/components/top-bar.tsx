@@ -7,6 +7,7 @@ import {
   GearSix,
   GitDiff,
   TreeStructure,
+  FolderOpen,
   Bell,
   Minus,
   Square,
@@ -32,6 +33,7 @@ export function TopBar() {
   const defaultShellPref = useStore((s) => s.settings.defaultShell)
   const diffPanelOpen = useStore((s) => s.diffPanelOpen)
   const agentsPanelOpen = useStore((s) => s.agentsPanelOpen)
+  const filesPanelOpen = useStore((s) => s.filesPanelOpen)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const [maximized, setMaximized] = useState(false)
   const [shellMenu, setShellMenu] = useState(false)
@@ -204,6 +206,13 @@ export function TopBar() {
           <MagnifyingGlass size={12} />
           <span>Search or run</span>
           <span className="kbd">⌘K</span>
+        </button>
+        <button
+          className={`iconbtn${filesPanelOpen ? " on" : ""}`}
+          title="Toggle files panel"
+          onClick={() => useStore.getState().setFilesPanelOpen(!filesPanelOpen)}
+        >
+          <FolderOpen size={15} />
         </button>
         <button
           className={`iconbtn${diffPanelOpen ? " on" : ""}`}

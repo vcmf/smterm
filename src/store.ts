@@ -44,6 +44,7 @@ interface AppState {
   searchOpen: boolean
   diffPanelOpen: boolean
   agentsPanelOpen: boolean
+  filesPanelOpen: boolean
   sidebarCollapsed: boolean
   git: GitStatus | null
   agents: AgentGraph // live tree of Claude agents/sub-agents (M6, fed by hook events)
@@ -55,6 +56,7 @@ interface AppState {
   applyAgentEvents: (events: AgentEvent[]) => void
   setDiffPanelOpen: (open: boolean) => void
   setAgentsPanelOpen: (open: boolean) => void
+  setFilesPanelOpen: (open: boolean) => void
   setSessionCwd: (sessionId: string, cwd: string) => void
   setPaletteOpen: (open: boolean) => void
   setSearchOpen: (open: boolean) => void
@@ -112,6 +114,7 @@ export const useStore = create<AppState>((set, get) => ({
   searchOpen: false,
   diffPanelOpen: false,
   agentsPanelOpen: false,
+  filesPanelOpen: false,
   sidebarCollapsed: false,
   git: null,
   agents: emptyGraph,
@@ -132,6 +135,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => ({ agents: events.reduce(reduceAgentEvent, state.agents) })),
   setDiffPanelOpen: (diffPanelOpen) => set({ diffPanelOpen }),
   setAgentsPanelOpen: (agentsPanelOpen) => set({ agentsPanelOpen }),
+  setFilesPanelOpen: (filesPanelOpen) => set({ filesPanelOpen }),
   setSessionCwd: (sessionId, cwd) =>
     set((state) => {
       const s = state.sessions[sessionId]

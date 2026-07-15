@@ -22,6 +22,7 @@ const smtermStub = {
   onSettingsChanged: vi.fn(unsub),
   onAgentEvents: vi.fn(unsub),
   clipboardHasImage: vi.fn(async () => false),
+  readdir: vi.fn(async () => ({ entries: [], truncated: false })),
   openExternal: vi.fn(),
   openPath: vi.fn(),
   notify: vi.fn(),

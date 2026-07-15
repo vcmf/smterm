@@ -384,6 +384,22 @@ function registerIpc() {
   // to route ⌘V to the running program's own image paste instead of a text paste.
   ipcMain.handle("clipboard:has-image", async () => !clipboard.readImage().isEmpty())
 
+  // Files browser: list ONE directory (lazy — never a recursive walk). Dirs first,
+  // then alphabetical; `.git` hidden; capped so a huge dir can't flood the renderer.
+  ipcMain.handle("fs:readdir", async (_e, dir: string) => {
+    const CAP = 500
+    try {
+      const ents = await fs.promises.readdir(dir, { withFileTypes: true })
+      const mapped = ents
+        .filter((e) => e.name !== ".git")
+        .map((e) => ({ name: e.name, isDir: e.isDirectory() }))
+        .sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1))
+      return { entries: mapped.slice(0, CAP), truncated: mapped.length > CAP }
+    } catch {
+      return { entries: [], truncated: false } // unreadable / not-a-dir / WSL path → empty
+    }
+  })
+
   // Links + notifications.
   ipcMain.on("open-external", (_e, url: string) => void shell.openExternal(url))
   ipcMain.on("open-path", (_e, p: string) => void shell.openPath(p))
