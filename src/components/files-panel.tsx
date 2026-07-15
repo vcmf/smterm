@@ -14,7 +14,7 @@ export function FilesPanel() {
   const cwd = useActiveCwd()
   const [tree, setTree] = useState<Record<string, DirListing>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const close = () => useStore.getState().setFilesPanelOpen(false)
+  const close = () => useStore.getState().setRightView(null)
 
   const load = (dir: string) => {
     void ipc.readdir(dir).then((res) => setTree((t) => ({ ...t, [dir]: res })))

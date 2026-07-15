@@ -32,6 +32,10 @@ function focusedCwd(state: AppState): string | undefined {
   return sid ? state.sessions[sid]?.cwd : undefined
 }
 
+/** The single right-side panel's active view (null = hidden). Files / Changes / Agents
+ *  share one panel — the top-bar icons switch it (click the active one to hide). */
+export type RightView = "files" | "changes" | "agents" | null
+
 interface AppState {
   sessions: Record<string, Session>
   tabs: Tab[]
@@ -42,9 +46,7 @@ interface AppState {
   settingsOpen: boolean
   paletteOpen: boolean
   searchOpen: boolean
-  diffPanelOpen: boolean
-  agentsPanelOpen: boolean
-  filesPanelOpen: boolean
+  rightView: RightView // which view the single right-side panel shows (null = hidden)
   sidebarCollapsed: boolean
   git: GitStatus | null
   agents: AgentGraph // live tree of Claude agents/sub-agents (M6, fed by hook events)
@@ -54,9 +56,7 @@ interface AppState {
   setSessionOscTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
   applyAgentEvents: (events: AgentEvent[]) => void
-  setDiffPanelOpen: (open: boolean) => void
-  setAgentsPanelOpen: (open: boolean) => void
-  setFilesPanelOpen: (open: boolean) => void
+  setRightView: (view: RightView) => void
   setSessionCwd: (sessionId: string, cwd: string) => void
   setPaletteOpen: (open: boolean) => void
   setSearchOpen: (open: boolean) => void
@@ -112,9 +112,7 @@ export const useStore = create<AppState>((set, get) => ({
   settingsOpen: false,
   paletteOpen: false,
   searchOpen: false,
-  diffPanelOpen: false,
-  agentsPanelOpen: false,
-  filesPanelOpen: false,
+  rightView: null,
   sidebarCollapsed: false,
   git: null,
   agents: emptyGraph,
@@ -133,9 +131,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Fold a coalesced batch of hook events into the agent tree (one re-render per batch).
   applyAgentEvents: (events) =>
     set((state) => ({ agents: events.reduce(reduceAgentEvent, state.agents) })),
-  setDiffPanelOpen: (diffPanelOpen) => set({ diffPanelOpen }),
-  setAgentsPanelOpen: (agentsPanelOpen) => set({ agentsPanelOpen }),
-  setFilesPanelOpen: (filesPanelOpen) => set({ filesPanelOpen }),
+  setRightView: (rightView) => set({ rightView }),
   setSessionCwd: (sessionId, cwd) =>
     set((state) => {
       const s = state.sessions[sessionId]

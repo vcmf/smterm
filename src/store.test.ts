@@ -207,13 +207,15 @@ describe("store — cwd & UI toggles", () => {
     expect(st().sessions.nope).toBeUndefined()
   })
 
-  it("toggles paletteOpen / settingsOpen / diffPanelOpen", () => {
+  it("toggles paletteOpen / settingsOpen / rightView", () => {
     st().setPaletteOpen(true)
     st().setSettingsOpen(true)
-    st().setDiffPanelOpen(true)
+    st().setRightView("changes")
     expect(st().paletteOpen).toBe(true)
     expect(st().settingsOpen).toBe(true)
-    expect(st().diffPanelOpen).toBe(true)
+    expect(st().rightView).toBe("changes")
+    st().setRightView(null) // one panel, hidden when null
+    expect(st().rightView).toBeNull()
   })
 
   it("applyAgentEvents folds hook batches into the agent tree", () => {

@@ -45,10 +45,14 @@ describe("TopBar", () => {
     expect(ipc.closeWindow).toHaveBeenCalledOnce()
   })
 
-  it("toggles the diff panel", () => {
+  it("the right-panel icons switch the shared view (click active → hide)", () => {
     render(<TopBar />)
-    fireEvent.click(screen.getByTitle("Toggle changes panel"))
-    expect(st().diffPanelOpen).toBe(true)
+    fireEvent.click(screen.getByTitle("Changes"))
+    expect(st().rightView).toBe("changes")
+    fireEvent.click(screen.getByTitle("Files")) // switch view, not stack
+    expect(st().rightView).toBe("files")
+    fireEvent.click(screen.getByTitle("Files")) // click active → hide
+    expect(st().rightView).toBeNull()
   })
 
   it("the bell shows a waiting count and jumps to that session", () => {

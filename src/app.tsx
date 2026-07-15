@@ -28,9 +28,7 @@ function App() {
   const settingsOpen = useStore((s) => s.settingsOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
   const searchOpen = useStore((s) => s.searchOpen)
-  const diffPanelOpen = useStore((s) => s.diffPanelOpen)
-  const agentsPanelOpen = useStore((s) => s.agentsPanelOpen)
-  const filesPanelOpen = useStore((s) => s.filesPanelOpen)
+  const rightView = useStore((s) => s.rightView)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const activeCwd = useActiveCwd()
 
@@ -270,9 +268,9 @@ function App() {
           )}
           {searchOpen && <SearchBar />}
         </div>
-        {filesPanelOpen && <FilesPanel />}
-        {diffPanelOpen && <DiffPanel />}
-        {agentsPanelOpen && <AgentsPanel />}
+        {rightView === "files" && <FilesPanel />}
+        {rightView === "changes" && <DiffPanel />}
+        {rightView === "agents" && <AgentsPanel />}
       </div>
       <StatusBar />
       {paletteOpen && <CommandPalette />}
