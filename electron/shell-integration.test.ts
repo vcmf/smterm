@@ -124,6 +124,17 @@ describe("shared history (cmux-like)", () => {
     )
   })
 
+  it("zsh repoints HISTFILE away from our temp ZDOTDIR (which /etc/zshrc poisons) to the real one", () => {
+    // /etc/zshrc runs before our rc with HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history, and our
+    // injected ZDOTDIR = $SMTERM_ZDOTDIR — so it lands in the temp dir, siloing history.
+    expect(ZSH_ZSHRC).toContain('"$HISTFILE" == "$SMTERM_ZDOTDIR/.zsh_history"')
+    expect(ZSH_ZSHRC).toContain('HISTFILE="${SMTERM_USER_ZDOTDIR:-$HOME}/.zsh_history"')
+    // The repoint must run before SHARE_HISTORY is enabled (so it reads/writes the right file).
+    expect(ZSH_ZSHRC.indexOf('== "$SMTERM_ZDOTDIR/.zsh_history"')).toBeLessThan(
+      ZSH_ZSHRC.indexOf("setopt SHARE_HISTORY"),
+    )
+  })
+
   it("bash appends + re-reads history each prompt, gated by the opt-out env", () => {
     expect(BASH_RC).toContain("shopt -s histappend")
     expect(BASH_RC).toContain("history -a; history -n")

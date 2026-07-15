@@ -138,6 +138,15 @@ in a cmux pane with the user's `.zshrc` having it off, so cmux enables it itself
   crosses into WSL.
 - **Invariant:** all panes must keep the **same `HISTFILE`** — the injection must never set
   a per-pane histfile, or sharing breaks.
+- **ZDOTDIR poisons `HISTFILE` (fixed 2026-07-15).** We inject `ZDOTDIR=<temp>` to load our
+  rc, but the system `/etc/zshrc` runs **before** our rc and (on macOS) does
+  `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history` — so it points `HISTFILE` into our **temp** dir.
+  Result: smterm panes shared history **with each other** (same temp file) but were **siloed
+  from every other terminal** (vscode/cmux/Terminal, which use `$HOME/.zsh_history`). Fix: our
+  rc repoints `HISTFILE` **only** when it equals the poisoned `$SMTERM_ZDOTDIR/.zsh_history` →
+  `${SMTERM_USER_ZDOTDIR:-$HOME}/.zsh_history` (never a `HISTFILE` the user set on purpose).
+  Runs even when shared-history is opted out — it's a file-location correctness fix, not a
+  sharing opt-in.
 
 ## node-pty is a native module {#node-pty}
 
