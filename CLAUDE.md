@@ -52,7 +52,7 @@ src/
   `chore` `style` `ci` `build` `revert` (breaking → `!` or `BREAKING CHANGE:`). **No emoji in
   commit messages.**
 - **PR titles**: the **same** Conventional-Commit format **with a leading emoji** (HuggingFace
-  style) — `<emoji> type(scope): subject`. Emoji per type: ✨ `feat` · 🐛 `fix` · 📝 `docs` ·
+  style) — `<emoji> type(scope): subject`. Emoji per type: ✨ `feat` · 🩹 `fix` · 📝 `docs` ·
   ♻️ `refactor` · ⚡ `perf` · ✅ `test` · 🔧 `chore` · 🎨 `style` · 👷 `ci` · 📦 `build` ·
   ⏪ `revert` · 🚨 breaking. Example: `✨ feat(diff-panel): syntax-highlight the changed file`.
 - **Performance is a first-class design criterion.** Every new feature must stay **off the terminal
