@@ -37,6 +37,7 @@ export interface Ipc {
   notify: (title: string, body: string) => void
   clipboardWrite: (text: string) => void
   clipboardRead: () => Promise<string>
+  clipboardHasImage: () => Promise<boolean>
 
   minimizeWindow: () => void
   maximizeWindow: () => void
