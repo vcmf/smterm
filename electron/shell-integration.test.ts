@@ -65,11 +65,13 @@ describe("wslInjection", () => {
     expect(r?.wslenv).toEqual(["SMTERM_SHARE_HISTORY"]) // opt-out crosses the boundary
   })
 
-  it("zsh → ZDOTDIR forwarded across the WSL boundary", () => {
+  it("zsh → ZDOTDIR + SMTERM_ZDOTDIR forwarded across the WSL boundary", () => {
     const r = wslInjection("/usr/bin/zsh", base)
     expect(r?.args).toEqual(["--", "zsh", "-i"])
     expect(r?.env.ZDOTDIR).toBe(`${base}/zsh`)
+    expect(r?.env.SMTERM_ZDOTDIR).toBe(`${base}/zsh`) // lets the HISTFILE-repoint fire in WSL
     expect(r?.wslenv).toContain("ZDOTDIR")
+    expect(r?.wslenv).toContain("SMTERM_ZDOTDIR")
   })
 
   it("unsupported shells (fish) → null (plain shell, no integration)", () => {
@@ -121,6 +123,24 @@ describe("shared history (cmux-like)", () => {
     // Must run after sourcing the user's .zshrc so our setopt wins.
     expect(ZSH_ZSHRC.indexOf('source "$ZDOTDIR/.zshrc"')).toBeLessThan(
       ZSH_ZSHRC.indexOf("setopt SHARE_HISTORY"),
+    )
+  })
+
+  it("zsh repoints a HISTFILE a system zshrc pointed into our ZDOTDIR back to the real one", () => {
+    // A system zshrc (e.g. macOS /etc/zshrc) runs before our rc with HISTFILE derived from
+    // ZDOTDIR (= our injected dir), siloing history. Match ANY file inside our dir + keep
+    // the basename, guarded by -n so it never fires when SMTERM_ZDOTDIR is empty.
+    expect(ZSH_ZSHRC).toContain('-n "$SMTERM_ZDOTDIR"')
+    expect(ZSH_ZSHRC).toContain('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')
+    expect(ZSH_ZSHRC).toContain('HISTFILE="${SMTERM_USER_ZDOTDIR:-$HOME}/${HISTFILE:t}"')
+    // The repoint must run before SHARE_HISTORY is enabled (so it reads/writes the right file)…
+    expect(ZSH_ZSHRC.indexOf('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')).toBeLessThan(
+      ZSH_ZSHRC.indexOf("setopt SHARE_HISTORY"),
+    )
+    // …and OUTSIDE the shared-history opt-out gate — it's a correctness fix that must run
+    // even when SMTERM_SHARE_HISTORY=0 (guards against a refactor folding it into that `if`).
+    expect(ZSH_ZSHRC.indexOf('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')).toBeLessThan(
+      ZSH_ZSHRC.indexOf('"${SMTERM_SHARE_HISTORY:-1}" != "0"'),
     )
   })
 
