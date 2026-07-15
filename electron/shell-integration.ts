@@ -234,7 +234,10 @@ export function wslInjection(
   if (name === "zsh") {
     // zsh finds our .zshrc via $ZDOTDIR; it restores ZDOTDIR to $HOME + sources ~/.zshrc.
     // SMTERM_ZDOTDIR lets the rc detect + undo a HISTFILE a system zshrc pointed into our
-    // injected ZDOTDIR (same history-siloing fix as local shells — see ZSH_ZSHRC).
+    // injected ZDOTDIR (same history-siloing fix as local shells — see ZSH_ZSHRC). We do
+    // NOT forward SMTERM_USER_ZDOTDIR (the distro-side ZDOTDIR is unknown at inject time),
+    // so the repoint target falls back to $HOME — matching this path's existing behaviour
+    // of sourcing ~/.zshrc. Known limitation: a custom in-WSL ZDOTDIR isn't honoured here.
     const zdir = `${wslBase}/zsh`
     return {
       args: ["--", "zsh", "-i"],

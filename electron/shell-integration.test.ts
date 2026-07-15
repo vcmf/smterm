@@ -133,9 +133,14 @@ describe("shared history (cmux-like)", () => {
     expect(ZSH_ZSHRC).toContain('-n "$SMTERM_ZDOTDIR"')
     expect(ZSH_ZSHRC).toContain('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')
     expect(ZSH_ZSHRC).toContain('HISTFILE="${SMTERM_USER_ZDOTDIR:-$HOME}/${HISTFILE:t}"')
-    // The repoint must run before SHARE_HISTORY is enabled (so it reads/writes the right file).
+    // The repoint must run before SHARE_HISTORY is enabled (so it reads/writes the right file)…
     expect(ZSH_ZSHRC.indexOf('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')).toBeLessThan(
       ZSH_ZSHRC.indexOf("setopt SHARE_HISTORY"),
+    )
+    // …and OUTSIDE the shared-history opt-out gate — it's a correctness fix that must run
+    // even when SMTERM_SHARE_HISTORY=0 (guards against a refactor folding it into that `if`).
+    expect(ZSH_ZSHRC.indexOf('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')).toBeLessThan(
+      ZSH_ZSHRC.indexOf('"${SMTERM_SHARE_HISTORY:-1}" != "0"'),
     )
   })
 
