@@ -9,6 +9,15 @@
 
 export type TermKeyAction = "copy" | "paste" | "select-all" | "newline" | null
 
+/** How a paste should be delivered, given clipboard state. Text wins (normal paste,
+ *  works everywhere); an image with no text routes to the running program (send raw
+ *  Ctrl+V so it reads the image itself); nothing to do otherwise. Pure — tested. */
+export function pasteAction(text: string, hasImage: boolean): "text" | "image" | "none" {
+  if (text) return "text"
+  if (hasImage) return "image"
+  return "none"
+}
+
 export interface TermKeyEvent {
   key: string
   metaKey: boolean

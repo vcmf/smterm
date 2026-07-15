@@ -13,7 +13,7 @@ import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
 import { allSessionIds } from "../lib/pane-tree"
 import { webglPanes, shouldRebuildAtlas } from "../lib/renderer-policy"
-import { keyAction } from "../lib/terminal-keys"
+import { keyAction, pasteAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
 
@@ -85,7 +85,20 @@ function ensureFontLoaded(family: string, size: number): Promise<unknown> {
   )
 }
 
-/** Start rendering this terminal via WebGL (GPU-fast, ligature-capable). */
+// Paste into a terminal. Text on the clipboard → normal paste. An image with no text
+// (e.g. a screenshot) → send Ctrl+V (0x16) so the running program (Claude Code, etc.)
+// reads the image from the clipboard itself — the same path as pressing Ctrl+V. Without
+// this, ⌘V text-pastes an empty string and the image is dropped; this makes ⌘V attach
+// images in Claude, matching cmux. In a plain shell 0x16 is quoted-insert (the line
+// editor waits for the next key; recover with Ctrl+C) — identical to pressing Ctrl+V there.
+function pasteInto(term: Terminal) {
+  void Promise.all([ipc.clipboardRead(), ipc.clipboardHasImage()]).then(([text, hasImage]) => {
+    const action = pasteAction(text, hasImage)
+    if (action === "text") term.paste(text)
+    else if (action === "image") term.input("\x16")
+  })
+}
+
 /** Give this pane a WebGL context if it doesn't have one. Returns true if a context
  *  was newly created (so the caller can rebuild the shared atlas across panes). */
 function acquireWebgl(entry: Entry): boolean {
@@ -227,7 +240,7 @@ function build(): Entry {
       // immediate second Ctrl+C sends SIGINT instead of re-copying.
       if (!isMac && e.ctrlKey && !e.shiftKey) term.clearSelection()
     } else if (action === "paste") {
-      void ipc.clipboardRead().then((text) => text && term.paste(text))
+      pasteInto(term)
     } else if (action === "newline") {
       // Gated so it can be turned off if a plain shell doesn't decode CSI-u; default
       // on (works with Claude Code & other agent CLIs). Off → let xterm submit normally.
@@ -463,7 +476,7 @@ export const TerminalManager = {
   },
   paste(id: string) {
     const entry = entries.get(id)
-    if (entry) void ipc.clipboardRead().then((text) => text && entry.term.paste(text))
+    if (entry) pasteInto(entry.term)
   },
   selectAll(id: string) {
     entries.get(id)?.term.selectAll()

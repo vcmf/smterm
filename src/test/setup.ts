@@ -21,6 +21,7 @@ const smtermStub = {
   settingsPath: vi.fn(async () => "/tmp/smterm/settings.json"),
   onSettingsChanged: vi.fn(unsub),
   onAgentEvents: vi.fn(unsub),
+  clipboardHasImage: vi.fn(async () => false),
   openExternal: vi.fn(),
   openPath: vi.fn(),
   notify: vi.fn(),

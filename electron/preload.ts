@@ -45,6 +45,7 @@ const api = {
 
   clipboardWrite: (text: string) => ipcRenderer.send("clipboard:write", text),
   clipboardRead: () => ipcRenderer.invoke("clipboard:read") as Promise<string>,
+  clipboardHasImage: () => ipcRenderer.invoke("clipboard:has-image") as Promise<boolean>,
 
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
   maximizeWindow: () => ipcRenderer.send("window:maximize"),
