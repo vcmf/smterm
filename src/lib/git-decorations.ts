@@ -59,5 +59,7 @@ export function statusColor(s: ChangeStatus): string {
       return "var(--red)"
     case "R":
       return "var(--blue)"
+    default:
+      return "var(--dim)" // a future status (C/T…) decorates neutrally, never undefined
   }
 }

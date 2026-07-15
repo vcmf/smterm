@@ -32,6 +32,7 @@ import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
+import { toDirListing } from "../src/lib/dir-listing"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -384,17 +385,28 @@ function registerIpc() {
   // to route ⌘V to the running program's own image paste instead of a text paste.
   ipcMain.handle("clipboard:has-image", async () => !clipboard.readImage().isEmpty())
 
-  // Files browser: list ONE directory (lazy — never a recursive walk). Dirs first,
-  // then alphabetical; `.git` hidden; capped so a huge dir can't flood the renderer.
+  // Files browser: list ONE directory (lazy — never a recursive walk). Sorting /
+  // .git-filter / cap live in the pure, tested lib/dir-listing; here we just gather
+  // entries (resolving symlinked dirs via stat so they browse, not open as files).
   ipcMain.handle("fs:readdir", async (_e, dir: string) => {
-    const CAP = 500
     try {
       const ents = await fs.promises.readdir(dir, { withFileTypes: true })
-      const mapped = ents
-        .filter((e) => e.name !== ".git")
-        .map((e) => ({ name: e.name, isDir: e.isDirectory() }))
-        .sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1))
-      return { entries: mapped.slice(0, CAP), truncated: mapped.length > CAP }
+      const raw = await Promise.all(
+        ents.map(async (e) => {
+          let isDir = e.isDirectory()
+          if (e.isSymbolicLink()) {
+            // isDirectory() is false for a symlink even when it targets a dir — stat
+            // the target so a symlinked directory expands instead of opening.
+            try {
+              isDir = (await fs.promises.stat(path.join(dir, e.name))).isDirectory()
+            } catch {
+              // dangling link → treat as a file
+            }
+          }
+          return { name: e.name, isDir }
+        }),
+      )
+      return toDirListing(raw)
     } catch {
       return { entries: [], truncated: false } // unreadable / not-a-dir / WSL path → empty
     }

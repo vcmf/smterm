@@ -1,6 +1,7 @@
 import type { ShellOption } from "../types"
 import type { WslContext } from "./wsl"
 import type { AgentEvent } from "./agent-graph"
+import type { DirListing } from "./dir-listing"
 
 // The typed surface the preload exposes on window.smterm. Every renderer→main
 // call goes through this one seam (keeps components portable + is the insulation
@@ -52,16 +53,6 @@ export interface Ipc {
   writeWorkspace: (contents: string) => void
   appMetrics: () => Promise<ProcMetric[]>
   perfMode: () => Promise<boolean>
-}
-
-export interface DirEntry {
-  name: string
-  isDir: boolean
-}
-
-export interface DirListing {
-  entries: DirEntry[] // dirs first, then alphabetical
-  truncated: boolean // more entries existed than the cap (surface it, don't hide)
 }
 
 export interface ProcMetric {

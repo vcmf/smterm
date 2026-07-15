@@ -33,7 +33,11 @@ export function FilesPanel() {
 
   // Git decorations for the current repo (reuses the already-polled store.git; no
   // extra git calls). Files get a status letter + colour, folders get a tinted name.
-  const deco = useMemo(() => (git?.isRepo ? buildGitDecorations(git.root, git.files) : null), [git])
+  const deco = useMemo(
+    () => (git?.isRepo ? buildGitDecorations(git.root, git.files) : null),
+    // Key on the actual inputs, not the whole git object (setGit replaces it every poll).
+    [git?.isRepo, git?.root, git?.files],
+  )
 
   // Apply a state update to a specific cwd's cache entry; mirror to the UI only if
   // that cwd is still active — so a late background readdir for a pane you've since

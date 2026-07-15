@@ -10,7 +10,7 @@ import {
   FileTreeCache,
   type FileTreeState,
 } from "./file-tree"
-import type { DirListing } from "./ipc"
+import type { DirListing } from "./dir-listing"
 
 const listing = (names: [string, boolean][], truncated = false): DirListing => ({
   entries: names.map(([name, isDir]) => ({ name, isDir })),
@@ -115,10 +115,12 @@ describe("visibleRows", () => {
     expect(visibleRows(s).some((r) => r.name === "app.ts")).toBe(false)
   })
 
-  it("a truncated listing appends a non-interactive note row", () => {
+  it("a truncated listing appends a non-interactive note row with a clean key", () => {
     const s = setListing(emptyTree("/repo"), "/repo", listing([["a", false]], true))
     const rows = visibleRows(s)
-    expect(rows[rows.length - 1]!.kind).toBe("note")
+    const last = rows[rows.length - 1]!
+    expect(last.kind).toBe("note")
+    expect(last.path).toBe("note:/repo") // stable, printable key (no NUL byte)
   })
 
   it("nothing renders before the root listing arrives", () => {
