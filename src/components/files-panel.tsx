@@ -1,96 +1,79 @@
-import { Fragment, useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CaretRight, CaretDown, Folder, File as FileIcon, X } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
 import { useActiveCwd } from "../lib/use-active-cwd"
-import type { DirListing } from "../lib/ipc"
+import {
+  FileTreeCache,
+  emptyTree,
+  setListing,
+  toggleDir,
+  visibleRows,
+  openDirs,
+  baseName,
+  type FileTreeState,
+} from "../lib/file-tree"
 
-const join = (dir: string, name: string) => (dir.endsWith("/") ? dir + name : `${dir}/${name}`)
-const base = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p
+// Per-cwd LRU cache so re-focusing a pane restores its tree instantly instead of
+// re-listing from scratch. Bounded to 16 folders (each listing itself capped by the
+// backend → a few-MB ceiling). Module-level so it survives the panel unmounting when
+// you switch to another view.
+const cache = new FileTreeCache(16)
 
 /** Right-rail lazy file browser rooted at the focused pane's cwd. Reads ONE directory
- *  per expand (never a recursive walk); clicking a file opens it via the OS/editor. */
+ *  per expand; caches per cwd (restore on refocus) and background-refreshes for
+ *  freshness. All tree/cache logic is the pure, tested `lib/file-tree`. */
 export function FilesPanel() {
   const cwd = useActiveCwd()
-  const [tree, setTree] = useState<Record<string, DirListing>>({})
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [tree, setTree] = useState<FileTreeState | null>(null)
+  const cwdRef = useRef<string | undefined>(undefined)
   const close = () => useStore.getState().setRightView(null)
 
-  const load = (dir: string) => {
-    void ipc.readdir(dir).then((res) => setTree((t) => ({ ...t, [dir]: res })))
+  // Apply a state update to a specific cwd's cache entry; mirror to the UI only if
+  // that cwd is still active — so a late background readdir for a pane you've since
+  // left updates its cache but never flashes into the current view.
+  const apply = (key: string, fn: (s: FileTreeState) => FileTreeState) => {
+    const next = fn(cache.get(key) ?? emptyTree(key))
+    cache.set(key, next)
+    if (cwdRef.current === key) setTree(next)
+  }
+  const load = (key: string, dir: string) => {
+    void ipc.readdir(dir).then((listing) => apply(key, (s) => setListing(s, dir, listing)))
   }
 
-  // Reset + load the root whenever the focused pane's cwd changes.
   useEffect(() => {
-    setTree({})
-    setExpanded(new Set())
-    if (cwd) load(cwd)
+    cwdRef.current = cwd
+    if (!cwd) {
+      setTree(null)
+      return
+    }
+    const cached = cache.get(cwd)
+    if (cached) {
+      setTree(cached) // instant restore…
+      openDirs(cached).forEach((dir) => load(cwd, dir)) // …then refresh open dirs in the background
+    } else {
+      const t = emptyTree(cwd)
+      cache.set(cwd, t)
+      setTree(t)
+      load(cwd, cwd) // first visit: read the root
+    }
   }, [cwd])
 
-  const toggle = (path: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(path)) next.delete(path)
-      else {
-        next.add(path)
-        if (!tree[path]) load(path) // lazy: only read a folder the first time it's opened
-      }
-      return next
-    })
+  const toggle = (dir: string) => {
+    if (!tree || !cwd) return
+    const { state, needsLoad } = toggleDir(tree, dir)
+    cache.set(cwd, state)
+    setTree(state)
+    if (needsLoad) load(cwd, needsLoad)
   }
 
-  const renderDir = (dir: string, depth: number): ReactNode[] => {
-    const listing = tree[dir]
-    if (!listing) return []
-    const pad = (d: number) => ({ paddingLeft: 8 + d * 14 })
-    const rows: ReactNode[] = listing.entries.map((e) => {
-      const p = join(dir, e.name)
-      if (e.isDir) {
-        const open = expanded.has(p)
-        return (
-          <Fragment key={p}>
-            <div className="diff-file file-row" style={pad(depth)} onMouseDown={() => toggle(p)}>
-              {open ? <CaretDown size={12} /> : <CaretRight size={12} />}
-              <Folder size={14} weight="fill" color="var(--blue)" />
-              <span className="tree-primary">{e.name}</span>
-            </div>
-            {open && renderDir(p, depth + 1)}
-          </Fragment>
-        )
-      }
-      return (
-        <div
-          key={p}
-          className="diff-file file-row"
-          style={pad(depth)}
-          title="Open file"
-          onMouseDown={() => cwd && ipc.openFile(cwd, p)}
-        >
-          <span style={{ width: 12 }} />
-          <FileIcon size={14} color="var(--dim)" />
-          <span className="tree-primary">{e.name}</span>
-        </div>
-      )
-    })
-    if (listing.truncated) {
-      rows.push(
-        <div
-          key={`${dir}:trunc`}
-          className="status-faint"
-          style={{ ...pad(depth), padding: "2px 10px" }}
-        >
-          … more (truncated)
-        </div>,
-      )
-    }
-    return rows
-  }
+  const rows = tree ? visibleRows(tree) : []
 
   return (
     <div className="diffpanel">
       <div className="diffpanel-header">
         <span className="section-label">Files</span>
-        <span className="diff-summary status-faint">{cwd ? base(cwd) : "no folder"}</span>
+        <span className="diff-summary status-faint">{cwd ? baseName(cwd) : "no folder"}</span>
         <button className="iconbtn" style={{ width: 22, height: 22 }} title="Close" onClick={close}>
           <X size={13} />
         </button>
@@ -101,7 +84,43 @@ export function FilesPanel() {
             No folder — the focused pane has no cwd yet.
           </div>
         )}
-        {cwd && renderDir(cwd, 0)}
+        {rows.map((r) => {
+          const pad = { paddingLeft: 8 + r.depth * 14 }
+          if (r.kind === "note") {
+            return (
+              <div key={r.path} className="status-faint" style={{ ...pad, padding: "2px 10px" }}>
+                {r.name}
+              </div>
+            )
+          }
+          if (r.kind === "dir") {
+            return (
+              <div
+                key={r.path}
+                className="diff-file file-row"
+                style={pad}
+                onMouseDown={() => toggle(r.path)}
+              >
+                {r.expanded ? <CaretDown size={12} /> : <CaretRight size={12} />}
+                <Folder size={14} weight="fill" color="var(--blue)" />
+                <span className="tree-primary">{r.name}</span>
+              </div>
+            )
+          }
+          return (
+            <div
+              key={r.path}
+              className="diff-file file-row"
+              style={pad}
+              title="Open file"
+              onMouseDown={() => cwd && ipc.openFile(cwd, r.path)}
+            >
+              <span style={{ width: 12 }} />
+              <FileIcon size={14} color="var(--dim)" />
+              <span className="tree-primary">{r.name}</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
