@@ -11,6 +11,7 @@ const st = () => useStore.getState()
 
 const status: GitStatus = {
   isRepo: true,
+  root: "",
   branch: "main",
   ahead: 0,
   behind: 0,

@@ -207,13 +207,15 @@ describe("store — cwd & UI toggles", () => {
     expect(st().sessions.nope).toBeUndefined()
   })
 
-  it("toggles paletteOpen / settingsOpen / diffPanelOpen", () => {
+  it("toggles paletteOpen / settingsOpen / rightView", () => {
     st().setPaletteOpen(true)
     st().setSettingsOpen(true)
-    st().setDiffPanelOpen(true)
+    st().setRightView("changes")
     expect(st().paletteOpen).toBe(true)
     expect(st().settingsOpen).toBe(true)
-    expect(st().diffPanelOpen).toBe(true)
+    expect(st().rightView).toBe("changes")
+    st().setRightView(null) // one panel, hidden when null
+    expect(st().rightView).toBeNull()
   })
 
   it("applyAgentEvents folds hook batches into the agent tree", () => {
@@ -229,7 +231,16 @@ describe("store — cwd & UI toggles", () => {
   })
 
   it("setGit stores the latest git status", () => {
-    st().setGit({ isRepo: true, branch: "main", ahead: 1, behind: 0, files: [], add: 0, del: 0 })
+    st().setGit({
+      isRepo: true,
+      root: "",
+      branch: "main",
+      ahead: 1,
+      behind: 0,
+      files: [],
+      add: 0,
+      del: 0,
+    })
     expect(st().git?.branch).toBe("main")
   })
 

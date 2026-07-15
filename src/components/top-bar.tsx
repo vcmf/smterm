@@ -7,6 +7,7 @@ import {
   GearSix,
   GitDiff,
   TreeStructure,
+  FolderOpen,
   Bell,
   Minus,
   Square,
@@ -30,8 +31,7 @@ export function TopBar() {
   const sessions = useStore((s) => s.sessions)
   const home = useStore((s) => s.home)
   const defaultShellPref = useStore((s) => s.settings.defaultShell)
-  const diffPanelOpen = useStore((s) => s.diffPanelOpen)
-  const agentsPanelOpen = useStore((s) => s.agentsPanelOpen)
+  const rightView = useStore((s) => s.rightView)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const [maximized, setMaximized] = useState(false)
   const [shellMenu, setShellMenu] = useState(false)
@@ -205,17 +205,27 @@ export function TopBar() {
           <span>Search or run</span>
           <span className="kbd">⌘K</span>
         </button>
+        {/* One right-side panel; these icons switch its view (click active → hide). */}
         <button
-          className={`iconbtn${diffPanelOpen ? " on" : ""}`}
-          title="Toggle changes panel"
-          onClick={() => useStore.getState().setDiffPanelOpen(!diffPanelOpen)}
+          className={`iconbtn${rightView === "files" ? " on" : ""}`}
+          title="Files"
+          onClick={() => useStore.getState().setRightView(rightView === "files" ? null : "files")}
+        >
+          <FolderOpen size={15} />
+        </button>
+        <button
+          className={`iconbtn${rightView === "changes" ? " on" : ""}`}
+          title="Changes"
+          onClick={() =>
+            useStore.getState().setRightView(rightView === "changes" ? null : "changes")
+          }
         >
           <GitDiff size={15} />
         </button>
         <button
-          className={`iconbtn${agentsPanelOpen ? " on" : ""}`}
-          title="Toggle agents panel"
-          onClick={() => useStore.getState().setAgentsPanelOpen(!agentsPanelOpen)}
+          className={`iconbtn${rightView === "agents" ? " on" : ""}`}
+          title="Agents"
+          onClick={() => useStore.getState().setRightView(rightView === "agents" ? null : "agents")}
         >
           <TreeStructure size={15} />
         </button>

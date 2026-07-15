@@ -32,6 +32,7 @@ import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
+import { toDirListing } from "../src/lib/dir-listing"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -383,6 +384,33 @@ function registerIpc() {
   // Whether the clipboard holds an image (e.g. a screenshot) — the renderer uses this
   // to route ⌘V to the running program's own image paste instead of a text paste.
   ipcMain.handle("clipboard:has-image", async () => !clipboard.readImage().isEmpty())
+
+  // Files browser: list ONE directory (lazy — never a recursive walk). Sorting /
+  // .git-filter / cap live in the pure, tested lib/dir-listing; here we just gather
+  // entries (resolving symlinked dirs via stat so they browse, not open as files).
+  ipcMain.handle("fs:readdir", async (_e, dir: string) => {
+    try {
+      const ents = await fs.promises.readdir(dir, { withFileTypes: true })
+      const raw = await Promise.all(
+        ents.map(async (e) => {
+          let isDir = e.isDirectory()
+          if (e.isSymbolicLink()) {
+            // isDirectory() is false for a symlink even when it targets a dir — stat
+            // the target so a symlinked directory expands instead of opening.
+            try {
+              isDir = (await fs.promises.stat(path.join(dir, e.name))).isDirectory()
+            } catch {
+              // dangling link → treat as a file
+            }
+          }
+          return { name: e.name, isDir }
+        }),
+      )
+      return toDirListing(raw)
+    } catch {
+      return { entries: [], truncated: false } // unreadable / not-a-dir / WSL path → empty
+    }
+  })
 
   // Links + notifications.
   ipcMain.on("open-external", (_e, url: string) => void shell.openExternal(url))

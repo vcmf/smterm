@@ -42,7 +42,7 @@ export function DiffPanel() {
     }
   }, [cwd, selected, git?.add, git?.del])
 
-  const close = () => useStore.getState().setDiffPanelOpen(false)
+  const close = () => useStore.getState().setRightView(null)
 
   return (
     <div className="diffpanel">

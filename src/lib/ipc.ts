@@ -1,6 +1,7 @@
 import type { ShellOption } from "../types"
 import type { WslContext } from "./wsl"
 import type { AgentEvent } from "./agent-graph"
+import type { DirListing } from "./dir-listing"
 
 // The typed surface the preload exposes on window.smterm. Every renderer→main
 // call goes through this one seam (keeps components portable + is the insulation
@@ -38,6 +39,7 @@ export interface Ipc {
   clipboardWrite: (text: string) => void
   clipboardRead: () => Promise<string>
   clipboardHasImage: () => Promise<boolean>
+  readdir: (dir: string) => Promise<DirListing> // lazy, one directory at a time (files browser)
 
   minimizeWindow: () => void
   maximizeWindow: () => void
@@ -80,6 +82,7 @@ export interface GitFile {
 
 export interface GitStatus {
   isRepo: boolean
+  root: string // repo toplevel (abs); "" when not a repo
   branch: string
   ahead: number
   behind: number

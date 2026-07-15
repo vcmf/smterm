@@ -55,7 +55,7 @@ export function AgentsPanel() {
   const agents = useStore((s) => s.agents)
   const sessions = useStore((s) => s.sessions)
   const home = useStore((s) => s.home)
-  const close = () => useStore.getState().setAgentsPanelOpen(false)
+  const close = () => useStore.getState().setRightView(null)
 
   // Bring the pane that owns this session to the front (switch tab + focus terminal).
   const focusPane = (paneId?: string) => {
