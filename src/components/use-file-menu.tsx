@@ -3,6 +3,7 @@ import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
 import { getActiveWsl } from "../lib/use-active-cwd"
 import { ContextMenu } from "./context-menu"
+import { baseName } from "../lib/file-tree"
 import {
   fileMenuItems,
   revealLabel,
@@ -48,7 +49,9 @@ export function useFileMenu(): {
 
   const dispatch = (id: FileActionId) => {
     if (!menu) return
-    if (id === "open") ipc.openFile("", menu.abs)
+    if (id === "preview")
+      useStore.getState().setPreview({ abs: menu.abs, name: baseName(menu.abs) })
+    else if (id === "open") ipc.openFile("", menu.abs)
     else if (id === "reveal") ipc.revealPath(menu.abs)
     else if (id === "copyPath") ipc.clipboardWrite(menu.abs)
     else if (id === "copyRel") ipc.clipboardWrite(menu.rel)

@@ -1086,3 +1086,135 @@ body {
   color: var(--faint);
   cursor: default;
 }
+
+/* ── File preview popup ──────────────────────────────────
+   Quick-look modal (reuses .palette-overlay backdrop). Line-numbered code view:
+   a sticky gutter column beside a no-wrap <pre>, so numbers align by line-height
+   without splitting highlight.js's multi-line spans. */
+.preview {
+  display: flex;
+  flex-direction: column;
+  width: 900px;
+  max-width: 92vw;
+  height: fit-content;
+  max-height: calc(100vh - 200px);
+  background: var(--elev);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.75);
+  overflow: hidden;
+}
+.preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.preview-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.preview-meta {
+  font-size: 11px;
+}
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.preview-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.preview-note {
+  padding: 28px 20px;
+  margin: auto;
+  font-size: 12px;
+}
+.lp-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+.lp-grid {
+  display: flex;
+  min-width: min-content;
+  font-family: var(--code-font);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.lp-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: 12px 10px 12px 14px;
+  text-align: right;
+  color: var(--faint);
+  background: var(--elev);
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+.lp-code {
+  flex: 1 1 auto;
+  padding: 12px 16px;
+  white-space: pre;
+  color: var(--text);
+}
+.lp-code code {
+  font: inherit;
+  background: none;
+}
+
+/* highlight.js token colours mapped to theme tokens (theme-aware, no external CSS). */
+.hljs-comment,
+.hljs-quote {
+  color: var(--faint);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag {
+  color: var(--blue);
+}
+.hljs-string,
+.hljs-attr,
+.hljs-regexp,
+.hljs-addition {
+  color: var(--accent);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-meta {
+  color: var(--amber);
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-name {
+  color: var(--blue);
+}
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-built_in,
+.hljs-builtin-name {
+  color: var(--amber);
+}
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-deletion {
+  color: var(--red);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}

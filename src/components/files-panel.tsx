@@ -141,8 +141,10 @@ export function FilesPanel() {
               key={r.path}
               className="diff-file file-row"
               style={pad}
-              title="Open file"
-              onMouseDown={(e) => e.button === 0 && cwd && ipc.openFile(cwd, r.path)}
+              title="Preview file"
+              onMouseDown={(e) =>
+                e.button === 0 && useStore.getState().setPreview({ abs: r.path, name: r.name })
+              }
               onContextMenu={(e) =>
                 openFileMenu(e, { abs: r.path, rel: relTo(r.path), isDir: false })
               }

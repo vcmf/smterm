@@ -3,6 +3,7 @@ import type { WslContext } from "./wsl"
 import type { AgentEvent } from "./agent-graph"
 import type { DirListing } from "./dir-listing"
 import type { EditorInfo } from "./file-actions"
+import type { PreviewData } from "./file-preview"
 
 // The typed surface the preload exposes on window.smterm. Every renderer→main
 // call goes through this one seam (keeps components portable + is the insulation
@@ -43,6 +44,7 @@ export interface Ipc {
   clipboardRead: () => Promise<string>
   clipboardHasImage: () => Promise<boolean>
   readdir: (dir: string) => Promise<DirListing> // lazy, one directory at a time (files browser)
+  readFilePreview: (path: string) => Promise<PreviewData> // read a file for the preview popup
 
   minimizeWindow: () => void
   maximizeWindow: () => void

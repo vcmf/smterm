@@ -35,6 +35,12 @@ import { orderMacEditors, planEditor, type EditorPlan, type EditorInfo } from ".
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { toDirListing } from "../src/lib/dir-listing"
+import {
+  classifyPreview,
+  PREVIEW_READ_CAP,
+  PREVIEW_MAX_SIZE,
+  type PreviewData,
+} from "../src/lib/file-preview"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -426,6 +432,30 @@ function registerIpc() {
       return toDirListing(raw)
     } catch {
       return { entries: [], truncated: false } // unreadable / not-a-dir / WSL path → empty
+    }
+  })
+
+  // Read a file for the preview popup: guard the size, read up to the cap, and
+  // classify text vs binary. Best-effort — any failure returns an error kind.
+  ipcMain.handle("fs:read-preview", async (_e, p: string): Promise<PreviewData> => {
+    try {
+      const st = await fs.promises.stat(p)
+      if (!st.isFile()) return { kind: "error", message: "Not a file" }
+      const size = st.size
+      if (size > PREVIEW_MAX_SIZE) return { kind: "too-large", size }
+      const len = Math.min(size, PREVIEW_READ_CAP)
+      const buf = Buffer.alloc(len)
+      const fh = await fs.promises.open(p, "r")
+      try {
+        if (len > 0) await fh.read(buf, 0, len, 0)
+      } finally {
+        await fh.close()
+      }
+      const meta = classifyPreview(size, len, buf.includes(0))
+      if (meta.kind === "binary") return { kind: "binary", size }
+      return { kind: "text", text: buf.toString("utf8"), truncated: meta.truncated, size }
+    } catch (err) {
+      return { kind: "error", message: String(err) }
     }
   })
 
