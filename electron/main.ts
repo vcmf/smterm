@@ -469,14 +469,18 @@ function registerIpc() {
 
   // Native folder picker for the Files-panel root; returns null if cancelled.
   ipcMain.handle("dialog:pick-directory", async (_e, defaultPath?: string) => {
-    const opts: Electron.OpenDialogOptions = {
-      properties: ["openDirectory"],
-      ...(defaultPath ? { defaultPath } : {}),
+    try {
+      const opts: Electron.OpenDialogOptions = {
+        properties: ["openDirectory"],
+        ...(defaultPath ? { defaultPath } : {}),
+      }
+      const res = await (mainWindow
+        ? dialog.showOpenDialog(mainWindow, opts)
+        : dialog.showOpenDialog(opts))
+      return res.canceled ? null : (res.filePaths[0] ?? null)
+    } catch {
+      return null // e.g. window destroyed mid-dialog — never throw into Electron
     }
-    const res = await (mainWindow
-      ? dialog.showOpenDialog(mainWindow, opts)
-      : dialog.showOpenDialog(opts))
-    return res.canceled ? null : (res.filePaths[0] ?? null)
   })
   // Validate a typed path is an existing directory (Files-panel root entry).
   ipcMain.handle("fs:is-dir", async (_e, p: string) => {
