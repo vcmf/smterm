@@ -80,11 +80,14 @@ function defaultShell(): string {
 // The app icon. Packaged builds get it from the bundle (electron-builder → build/icon.*),
 // but in dev Electron shows its default icon unless we set it at runtime, so point at the
 // source PNG in build/ (app path = project root in dev). Returns null if not found.
+// Memoised — the PNG is decoded once and reused by both the window and the dock.
+let cachedIcon: Electron.NativeImage | null | undefined
 function appIcon(): Electron.NativeImage | null {
+  if (cachedIcon !== undefined) return cachedIcon
   const p = path.join(app.getAppPath(), "build", "icon.png")
-  if (!fs.existsSync(p)) return null
+  if (!fs.existsSync(p)) return (cachedIcon = null)
   const img = nativeImage.createFromPath(p)
-  return img.isEmpty() ? null : img
+  return (cachedIcon = img.isEmpty() ? null : img)
 }
 
 function createWindow() {

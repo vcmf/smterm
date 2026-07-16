@@ -113,9 +113,6 @@ body {
   gap: 8px;
   color: var(--text);
 }
-.brand svg {
-  color: var(--accent);
-}
 .brand-icon {
   display: block;
   width: 18px;
