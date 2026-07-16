@@ -51,7 +51,11 @@ export function useFileMenu(): {
     if (!menu) return
     if (id === "preview")
       useStore.getState().setPreview({ abs: menu.abs, name: baseName(menu.abs) })
-    else if (id === "open") ipc.openFile("", menu.abs)
+    else if (id === "setRoot") {
+      const s = useStore.getState()
+      const sid = s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId
+      if (sid) s.setPaneRoot(sid, menu.abs)
+    } else if (id === "open") ipc.openFile("", menu.abs)
     else if (id === "reveal") ipc.revealPath(menu.abs)
     else if (id === "copyPath") ipc.clipboardWrite(menu.abs)
     else if (id === "copyRel") ipc.clipboardWrite(menu.rel)

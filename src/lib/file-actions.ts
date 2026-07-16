@@ -24,7 +24,7 @@ export function revealLabel(platform: string): string {
   return "Show in File Manager"
 }
 
-export type FileActionId = "preview" | "open" | "reveal" | "copyPath" | "copyRel"
+export type FileActionId = "preview" | "open" | "setRoot" | "reveal" | "copyPath" | "copyRel"
 
 export interface MenuItemSpec {
   id: FileActionId
@@ -45,7 +45,9 @@ export interface FileMenuInput {
  *  (the template targets a file); everything else is available everywhere. */
 export function fileMenuItems(input: FileMenuInput): MenuItemSpec[] {
   const items: MenuItemSpec[] = []
-  if (!input.isDir) {
+  if (input.isDir) {
+    items.push({ id: "setRoot", label: "Set as root folder" })
+  } else {
     items.push({ id: "preview", label: "Preview" })
     items.push({
       id: "open",

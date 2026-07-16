@@ -12,9 +12,10 @@ describe("fileMenuItems", () => {
     expect(items.find((i) => i.id === "copyPath")!.separatorBefore).toBe(true)
   })
 
-  it("folder: no Open item", () => {
+  it("folder: Set as root instead of Preview/Open", () => {
     const items = fileMenuItems({ ...base, isDir: true })
-    expect(items.map((i) => i.id)).toEqual(["reveal", "copyPath", "copyRel"])
+    expect(items.map((i) => i.id)).toEqual(["setRoot", "reveal", "copyPath", "copyRel"])
+    expect(items[0]!.label).toBe("Set as root folder")
   })
 
   it("no editor: Open is disabled with a generic label + hint", () => {
@@ -31,9 +32,8 @@ describe("fileMenuItems", () => {
   })
 
   it("uses the OS-specific reveal label", () => {
-    expect(
-      fileMenuItems({ ...base, isDir: true, revealLabel: "Show in File Manager" })[0]!.label,
-    ).toBe("Show in File Manager")
+    const items = fileMenuItems({ ...base, isDir: true, revealLabel: "Show in File Manager" })
+    expect(items.find((i) => i.id === "reveal")!.label).toBe("Show in File Manager")
   })
 })
 

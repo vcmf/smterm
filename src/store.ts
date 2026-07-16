@@ -55,11 +55,14 @@ interface AppState {
   platform: string // process.platform ("darwin"|"win32"|"linux"); "" until fetched
   editor: EditorInfo | null // configured editor availability (file context menu)
   preview: { abs: string; name: string } | null // file open in the preview popup (null = closed)
+  paneRoot: Record<string, string> // per-session Files-panel root override (absent = follow cwd)
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
   setEditor: (editor: EditorInfo) => void
   setPreview: (preview: { abs: string; name: string } | null) => void
+  setPaneRoot: (sessionId: string, root: string) => void
+  clearPaneRoot: (sessionId: string) => void
   setSessionOscTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
   applyAgentEvents: (events: AgentEvent[]) => void
@@ -127,11 +130,21 @@ export const useStore = create<AppState>((set, get) => ({
   platform: "",
   editor: null,
   preview: null,
+  paneRoot: {},
 
   setHome: (home) => set({ home }),
   setPlatform: (platform) => set({ platform }),
   setEditor: (editor) => set({ editor }),
   setPreview: (preview) => set({ preview }),
+  setPaneRoot: (sessionId, root) =>
+    set((s) => ({ paneRoot: { ...s.paneRoot, [sessionId]: root } })),
+  clearPaneRoot: (sessionId) =>
+    set((s) => {
+      if (!(sessionId in s.paneRoot)) return {}
+      const next = { ...s.paneRoot }
+      delete next[sessionId]
+      return { paneRoot: next }
+    }),
   setSessionOscTitle: (sessionId, title) =>
     set((state) => {
       const s = state.sessions[sessionId]

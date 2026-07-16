@@ -45,6 +45,8 @@ export interface Ipc {
   clipboardHasImage: () => Promise<boolean>
   readdir: (dir: string) => Promise<DirListing> // lazy, one directory at a time (files browser)
   readFilePreview: (path: string) => Promise<PreviewData> // read a file for the preview popup
+  pickDirectory: (defaultPath?: string) => Promise<string | null> // native folder picker (Files root)
+  pathIsDir: (p: string) => Promise<boolean> // validate a typed path is a directory
 
   minimizeWindow: () => void
   maximizeWindow: () => void

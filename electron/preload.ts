@@ -50,6 +50,8 @@ const api = {
   clipboardHasImage: () => ipcRenderer.invoke("clipboard:has-image") as Promise<boolean>,
   readdir: (dir: string) => ipcRenderer.invoke("fs:readdir", dir),
   readFilePreview: (path: string) => ipcRenderer.invoke("fs:read-preview", path),
+  pickDirectory: (defaultPath?: string) => ipcRenderer.invoke("dialog:pick-directory", defaultPath),
+  pathIsDir: (p: string) => ipcRenderer.invoke("fs:is-dir", p),
 
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
   maximizeWindow: () => ipcRenderer.send("window:maximize"),
