@@ -14,6 +14,7 @@ import {
   type FileTreeState,
 } from "../lib/file-tree"
 import { buildGitDecorations, statusLetter, statusColor } from "../lib/git-decorations"
+import { useFileMenu } from "./use-file-menu"
 
 // Per-cwd LRU cache so re-focusing a pane restores its tree instantly instead of
 // re-listing from scratch. Bounded to 16 folders (each listing itself capped by the
@@ -84,6 +85,11 @@ export function FilesPanel() {
 
   const rows = useMemo(() => (tree ? visibleRows(tree) : []), [tree])
 
+  const { menu, openFileMenu } = useFileMenu()
+  // Path relative to the panel root (cwd), for "Copy relative path".
+  const relTo = (abs: string) =>
+    cwd && abs.startsWith(cwd) ? abs.slice(cwd.length).replace(/^\//, "") : abs
+
   return (
     <div className="diffpanel">
       <div className="diffpanel-header">
@@ -115,7 +121,10 @@ export function FilesPanel() {
                 key={r.path}
                 className="diff-file file-row"
                 style={pad}
-                onMouseDown={() => toggle(r.path)}
+                onMouseDown={(e) => e.button === 0 && toggle(r.path)}
+                onContextMenu={(e) =>
+                  openFileMenu(e, { abs: r.path, rel: relTo(r.path), isDir: true })
+                }
               >
                 {r.expanded ? <CaretDown size={12} /> : <CaretRight size={12} />}
                 <Folder size={14} weight="fill" color="var(--blue)" />
@@ -133,7 +142,10 @@ export function FilesPanel() {
               className="diff-file file-row"
               style={pad}
               title="Open file"
-              onMouseDown={() => cwd && ipc.openFile(cwd, r.path)}
+              onMouseDown={(e) => e.button === 0 && cwd && ipc.openFile(cwd, r.path)}
+              onContextMenu={(e) =>
+                openFileMenu(e, { abs: r.path, rel: relTo(r.path), isDir: false })
+              }
             >
               <span style={{ width: 12 }} />
               <FileIcon size={14} color={color ?? "var(--dim)"} />
@@ -149,6 +161,7 @@ export function FilesPanel() {
           )
         })}
       </div>
+      {menu}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { FileText, FilePlus, FileX, X } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
 import { useActiveCwd, getActiveWsl } from "../lib/use-active-cwd"
+import { useFileMenu } from "./use-file-menu"
 import type { ChangeStatus, DiffLine } from "../lib/ipc"
 
 const fileIcon = (status: ChangeStatus) => {
@@ -44,6 +45,9 @@ export function DiffPanel() {
 
   const close = () => useStore.getState().setRightView(null)
 
+  const { menu, openFileMenu } = useFileMenu()
+  const root = git?.root ?? ""
+
   return (
     <div className="diffpanel">
       <div className="diffpanel-header">
@@ -70,7 +74,14 @@ export function DiffPanel() {
           <div
             key={f.path}
             className={`diff-file${f.path === selected ? " selected" : ""}`}
-            onMouseDown={() => setSelected(f.path)}
+            onMouseDown={(e) => e.button === 0 && setSelected(f.path)}
+            onContextMenu={(e) =>
+              openFileMenu(e, {
+                abs: root ? `${root}/${f.path}` : f.path,
+                rel: f.path,
+                isDir: false,
+              })
+            }
           >
             <span className="tree-icon">{fileIcon(f.status)}</span>
             <div className="tree-labels">
@@ -100,6 +111,7 @@ export function DiffPanel() {
           ))}
         </div>
       )}
+      {menu}
     </div>
   )
 }

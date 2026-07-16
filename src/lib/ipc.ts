@@ -2,6 +2,7 @@ import type { ShellOption } from "../types"
 import type { WslContext } from "./wsl"
 import type { AgentEvent } from "./agent-graph"
 import type { DirListing } from "./dir-listing"
+import type { EditorInfo } from "./file-actions"
 
 // The typed surface the preload exposes on window.smterm. Every renderer→main
 // call goes through this one seam (keeps components portable + is the insulation
@@ -35,6 +36,8 @@ export interface Ipc {
   pathExists: (cwd: string, path: string) => Promise<boolean>
   // Open a clicked file link in the configured editor (falls back to the OS default).
   openFile: (cwd: string, file: string, line?: number, col?: number) => void
+  revealPath: (p: string) => void // show the file/folder in Finder/Explorer
+  editorInfo: () => Promise<EditorInfo> // can the configured editor open a file?
   notify: (title: string, body: string) => void
   clipboardWrite: (text: string) => void
   clipboardRead: () => Promise<string>
