@@ -12,8 +12,11 @@
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%2FWSL-informational" alt="Platforms" />
 </p>
 
-It is a fast, normal terminal (tabs, split panes, real shells) with a few things added for
-people who run coding agents all day:
+smterm is a fast, cross-platform terminal (tabs, split panes, real shells) for people who run
+coding agents all day. It stays out of your way like a normal terminal, then adds a few panels
+that show you what the agents are actually doing: git diffs, files, and a live agents board that
+works with Claude Code. If you have looked for an open-source Warp alternative, or a tmux built
+for coding agents, this is that.
 
 - 🔔 **Knows which session needs you.** Working, waiting for input, or done, shown as a dot on
   the tab and in the sidebar, plus a native notification when a background pane wants you. No
@@ -39,6 +42,13 @@ Agents write the code now, but you are still the one who reviews it and ships it
 terminal should help you read and stay in the loop, not just scroll text past you. That is the
 whole point of the Changes, Files, and Agents panels: see what changed, not just that something
 did.
+
+## Works with Claude Code
+
+Run `claude` in any pane and the Agents board lights up: the root session, its sub-agents, what
+each is doing, its working directory, and the files it touched. It reads Claude Code's own hook
+events, so there is zero setup and no global config to edit; smterm only wires the panes it
+launches. Agents started outside smterm simply do not show up.
 
 ## Install
 
