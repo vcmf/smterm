@@ -317,6 +317,31 @@ body {
   color: var(--faint);
 }
 
+/* Right-click file/folder menu — same chrome as the shell dropdown, but anchored
+   at viewport coords (fixed) above the backdrop, with disabled items + separators. */
+.ctx-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 41;
+  min-width: 170px;
+}
+.ctx-menu .shell-menu-item {
+  width: 100%;
+}
+.ctx-menu .shell-menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ctx-menu .shell-menu-item:disabled:hover {
+  background: transparent;
+}
+.ctx-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
 .searchpill {
   display: flex;
   align-items: center;

@@ -41,6 +41,8 @@ const api = {
     ipcRenderer.invoke("fs:path-exists", cwd, path) as Promise<boolean>,
   openFile: (cwd: string, file: string, line?: number, col?: number) =>
     ipcRenderer.send("file:open", cwd, file, line, col),
+  revealPath: (p: string) => ipcRenderer.send("file:reveal", p),
+  editorInfo: () => ipcRenderer.invoke("editor:info"),
   notify: (title: string, body: string) => ipcRenderer.send("notify", title, body),
 
   clipboardWrite: (text: string) => ipcRenderer.send("clipboard:write", text),

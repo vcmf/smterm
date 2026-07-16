@@ -104,6 +104,7 @@ function App() {
     })()
     const unlisten = ipc.onSettingsChanged(async () => {
       useStore.getState().setSettings(await loadSettings())
+      void ipc.editorInfo().then((e) => useStore.getState().setEditor(e)) // openPath may have changed
     })
     return () => unlisten()
   }, [])
@@ -222,9 +223,13 @@ function App() {
     }
   }, [activeCwd])
 
-  // Cache $HOME once (for home-relative cwd labels in the sidebar).
+  // Cache $HOME + platform once (home-relative labels; OS-specific menu labels).
   useEffect(() => {
-    void ipc.platformInfo().then((i) => useStore.getState().setHome(i.home))
+    void ipc.platformInfo().then((i) => {
+      useStore.getState().setHome(i.home)
+      useStore.getState().setPlatform(i.platform)
+    })
+    void ipc.editorInfo().then((e) => useStore.getState().setEditor(e))
   }, [])
 
   // Load-test mode (SMTERM_PERF=1): run the perf suite once, then report.

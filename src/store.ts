@@ -9,6 +9,7 @@ import type { AgentEvent, AgentGraph } from "./lib/agent-graph"
 import { defaultSettings } from "./settings/schema"
 import type { Settings } from "./settings/schema"
 import type { GitStatus } from "./lib/ipc"
+import type { EditorInfo } from "./lib/file-actions"
 import type { WorkspaceState } from "./lib/workspace"
 
 const newId = () => crypto.randomUUID()
@@ -51,8 +52,12 @@ interface AppState {
   git: GitStatus | null
   agents: AgentGraph // live tree of Claude agents/sub-agents (M6, fed by hook events)
   home: string
+  platform: string // process.platform ("darwin"|"win32"|"linux"); "" until fetched
+  editor: EditorInfo | null // configured editor availability (file context menu)
 
   setHome: (home: string) => void
+  setPlatform: (platform: string) => void
+  setEditor: (editor: EditorInfo) => void
   setSessionOscTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
   applyAgentEvents: (events: AgentEvent[]) => void
@@ -117,8 +122,12 @@ export const useStore = create<AppState>((set, get) => ({
   git: null,
   agents: emptyGraph,
   home: "",
+  platform: "",
+  editor: null,
 
   setHome: (home) => set({ home }),
+  setPlatform: (platform) => set({ platform }),
+  setEditor: (editor) => set({ editor }),
   setSessionOscTitle: (sessionId, title) =>
     set((state) => {
       const s = state.sessions[sessionId]

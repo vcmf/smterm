@@ -31,6 +31,7 @@ import { OutputBuffer } from "./output-buffer"
 import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
+import { editorDisplayName, MAC_EDITORS, type EditorInfo } from "./editor-detect"
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { toDirListing } from "../src/lib/dir-listing"
@@ -440,6 +441,14 @@ function registerIpc() {
   ipcMain.on("file:open", (_e, cwd: string, file: string, line?: number, col?: number) =>
     openFile(cwd, file, line, col),
   )
+  // Reveal a file/folder in the OS file manager (Finder/Explorer/etc.) — always works,
+  // no editor/PATH dependency, so the file context menu can rely on it.
+  ipcMain.on("file:reveal", (_e, p: string) => shell.showItemInFolder(p))
+  // Can the configured editor actually open a file? Drives the menu label/enabled state.
+  ipcMain.handle("editor:info", async (): Promise<EditorInfo> => {
+    const plan = resolveEditor()
+    return { available: plan.kind !== "none", name: plan.name }
+  })
 }
 
 // Expand a leading ~ and resolve relative to cwd → absolute host path.
@@ -468,31 +477,98 @@ function openPathTemplate(): string {
   }
 }
 
-// Open a clicked file link in the configured editor; fall back to the OS default
-// app if there's no editor command or the editor binary isn't found.
+// How to open a file, resolved from the configured template + what's installed:
+//  - "template": the openPath command is on PATH → spawn it (supports line/col jump)
+//  - "osDefault": empty template → user opted into the OS default app
+//  - "macApp": no CLI, but a known editor .app is installed → `open -a <App>`
+//  - "none": nothing available → caller reveals the file instead
+type EditorPlan =
+  | { kind: "template"; name: string }
+  | { kind: "osDefault"; name: "" }
+  | { kind: "macApp"; name: string; app: string }
+  | { kind: "none"; name: "" }
+
+// Is `cmd` an executable on the current PATH? (absolute paths checked directly).
+// process.env carries the login-shell PATH imported at startup (shell-env.ts).
+function commandOnPath(cmd: string): boolean {
+  const test = (p: string) => {
+    try {
+      return fs.statSync(p).isFile()
+    } catch {
+      return false
+    }
+  }
+  if (path.isAbsolute(cmd)) return test(cmd)
+  const exts =
+    process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";") : [""]
+  for (const d of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (!d) continue
+    for (const ext of exts) if (test(path.join(d, cmd + ext))) return true
+  }
+  return false
+}
+
+// macOS only: the best installed editor .app to `open -a`, preferring one that
+// matches the configured command so "code" → Visual Studio Code, not just any app.
+function macAppFor(cmd: string): { name: string; app: string } | null {
+  const bin = cmd.replace(/\.(exe|cmd|bat)$/i, "").toLowerCase()
+  const preferred = MAC_EDITORS.filter((e) => e.bin === bin)
+  const rest = MAC_EDITORS.filter((e) => e.bin !== bin)
+  for (const e of [...preferred, ...rest]) {
+    if (fs.existsSync(`/Applications/${e.app}.app`)) return { name: e.name, app: e.app }
+  }
+  return null
+}
+
+// Resolve the open strategy fresh each call (settings can change; probes are cheap).
+function resolveEditor(): EditorPlan {
+  const template = openPathTemplate().trim()
+  if (!template) return { kind: "osDefault", name: "" }
+  const cmd = template.split(/\s+/)[0] ?? ""
+  if (cmd && commandOnPath(cmd)) return { kind: "template", name: editorDisplayName(cmd) }
+  if (process.platform === "darwin") {
+    const app = macAppFor(cmd)
+    if (app) return { kind: "macApp", name: app.name, app: app.app }
+  }
+  return { kind: "none", name: "" }
+}
+
+// Open a file in the configured editor. Falls back to revealing it in the OS file
+// manager when no editor is available or the launch fails — so a click always does
+// something visible (never the silent no-op of shell.openPath on a source file).
 function openFile(cwd: string, file: string, line?: number, col?: number): void {
   const abs = resolveHostPath(cwd, file)
-  const built = buildEditorCommand(openPathTemplate(), { file: abs, line, col })
-  if (!built) {
-    void shell.openPath(abs)
-    return
-  }
+  const reveal = () => shell.showItemInFolder(abs)
+  const plan = resolveEditor()
   try {
-    // `process.env` carries the login-shell PATH imported at startup (shell-env),
-    // so a GUI-launched app can still find `code`/etc. On Windows, editors are `.cmd`
-    // shims that `spawn` can't exec directly — use the shell and quote args (winQuote).
+    if (plan.kind === "osDefault") {
+      void shell.openPath(abs)
+      return
+    }
+    if (plan.kind === "none") {
+      reveal()
+      return
+    }
+    // On Windows, editors are `.cmd` shims that `spawn` can't exec without a shell.
     const isWin = process.platform === "win32"
-    const child = spawn(built.cmd, isWin ? built.args.map(winQuote) : built.args, {
+    const [cmd, args] =
+      plan.kind === "macApp"
+        ? (["open", ["-a", plan.app, abs]] as const)
+        : (() => {
+            const built = buildEditorCommand(openPathTemplate(), { file: abs, line, col })!
+            return [built.cmd, isWin ? built.args.map(winQuote) : built.args] as const
+          })()
+    const child = spawn(cmd, args as string[], {
       detached: true,
       stdio: "ignore",
       env: process.env,
-      shell: isWin,
+      shell: isWin && plan.kind === "template",
       windowsHide: true,
     })
-    child.on("error", () => void shell.openPath(abs)) // editor not on PATH → OS default
+    child.on("error", reveal) // launch failed → reveal instead of a silent no-op
     child.unref()
   } catch {
-    void shell.openPath(abs)
+    reveal()
   }
 }
 
