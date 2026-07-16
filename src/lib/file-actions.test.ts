@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { fileMenuItems, clampMenuPosition, revealLabel } from "./file-actions"
+import { fileMenuItems, clampMenuPosition, revealLabel, isAbsoluteHostPath } from "./file-actions"
 
 const base = { editorName: "VS Code", editorAvailable: true, revealLabel: "Reveal in Finder" }
 
@@ -42,6 +42,19 @@ describe("revealLabel", () => {
     expect(revealLabel("darwin")).toBe("Reveal in Finder")
     expect(revealLabel("win32")).toBe("Reveal in Explorer")
     expect(revealLabel("linux")).toBe("Show in File Manager")
+  })
+})
+
+describe("isAbsoluteHostPath", () => {
+  it("accepts POSIX-absolute and Windows drive paths", () => {
+    expect(isAbsoluteHostPath("/Users/me/x")).toBe(true)
+    expect(isAbsoluteHostPath("C:\\Users\\me\\x")).toBe(true)
+    expect(isAbsoluteHostPath("D:/repo/x")).toBe(true)
+  })
+  it("rejects repo-relative paths", () => {
+    expect(isAbsoluteHostPath("src/x.ts")).toBe(false)
+    expect(isAbsoluteHostPath("x.ts")).toBe(false)
+    expect(isAbsoluteHostPath("")).toBe(false)
   })
 })
 

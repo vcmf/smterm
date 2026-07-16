@@ -31,7 +31,7 @@ import { OutputBuffer } from "./output-buffer"
 import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
-import { editorDisplayName, MAC_EDITORS, type EditorInfo } from "./editor-detect"
+import { orderMacEditors, planEditor, type EditorPlan, type EditorInfo } from "./editor-detect"
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { toDirListing } from "../src/lib/dir-listing"
@@ -477,17 +477,6 @@ function openPathTemplate(): string {
   }
 }
 
-// How to open a file, resolved from the configured template + what's installed:
-//  - "template": the openPath command is on PATH → spawn it (supports line/col jump)
-//  - "osDefault": empty template → user opted into the OS default app
-//  - "macApp": no CLI, but a known editor .app is installed → `open -a <App>`
-//  - "none": nothing available → caller reveals the file instead
-type EditorPlan =
-  | { kind: "template"; name: string }
-  | { kind: "osDefault"; name: "" }
-  | { kind: "macApp"; name: string; app: string }
-  | { kind: "none"; name: "" }
-
 // Is `cmd` an executable on the current PATH? (absolute paths checked directly).
 // process.env carries the login-shell PATH imported at startup (shell-env.ts).
 function commandOnPath(cmd: string): boolean {
@@ -508,29 +497,37 @@ function commandOnPath(cmd: string): boolean {
   return false
 }
 
-// macOS only: the best installed editor .app to `open -a`, preferring one that
-// matches the configured command so "code" → Visual Studio Code, not just any app.
+// macOS only: the best installed editor .app to `open -a`, checking both the
+// system and per-user app folders (auto-updaters often land in ~/Applications).
 function macAppFor(cmd: string): { name: string; app: string } | null {
-  const bin = cmd.replace(/\.(exe|cmd|bat)$/i, "").toLowerCase()
-  const preferred = MAC_EDITORS.filter((e) => e.bin === bin)
-  const rest = MAC_EDITORS.filter((e) => e.bin !== bin)
-  for (const e of [...preferred, ...rest]) {
-    if (fs.existsSync(`/Applications/${e.app}.app`)) return { name: e.name, app: e.app }
+  if (process.platform !== "darwin") return null
+  const dirs = ["/Applications", path.join(os.homedir(), "Applications")]
+  for (const e of orderMacEditors(cmd)) {
+    if (dirs.some((d) => fs.existsSync(path.join(d, `${e.app}.app`)))) {
+      return { name: e.name, app: e.app }
+    }
   }
   return null
 }
 
-// Resolve the open strategy fresh each call (settings can change; probes are cheap).
+// Resolve the open strategy via the pure planEditor (probes injected). Memoised with
+// a short TTL: bounds the synchronous PATH walk to ~once per window on rapid clicks,
+// while still noticing an editor installed mid-session within a few seconds.
+let editorPlanCache: { template: string; at: number; plan: EditorPlan } | null = null
+const EDITOR_PLAN_TTL_MS = 3000
 function resolveEditor(): EditorPlan {
   const template = openPathTemplate().trim()
-  if (!template) return { kind: "osDefault", name: "" }
-  const cmd = template.split(/\s+/)[0] ?? ""
-  if (cmd && commandOnPath(cmd)) return { kind: "template", name: editorDisplayName(cmd) }
-  if (process.platform === "darwin") {
-    const app = macAppFor(cmd)
-    if (app) return { kind: "macApp", name: app.name, app: app.app }
+  const now = Date.now()
+  if (
+    editorPlanCache &&
+    editorPlanCache.template === template &&
+    now - editorPlanCache.at < EDITOR_PLAN_TTL_MS
+  ) {
+    return editorPlanCache.plan
   }
-  return { kind: "none", name: "" }
+  const plan = planEditor(template, { onPath: commandOnPath, macAppFor })
+  editorPlanCache = { template, at: now, plan }
+  return plan
 }
 
 // Open a file in the configured editor. Falls back to revealing it in the OS file

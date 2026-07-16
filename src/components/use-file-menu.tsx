@@ -1,8 +1,14 @@
 import { useState, type MouseEvent, type ReactNode } from "react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
+import { getActiveWsl } from "../lib/use-active-cwd"
 import { ContextMenu } from "./context-menu"
-import { fileMenuItems, revealLabel, type FileActionId } from "../lib/file-actions"
+import {
+  fileMenuItems,
+  revealLabel,
+  isAbsoluteHostPath,
+  type FileActionId,
+} from "../lib/file-actions"
 
 // The row a menu was opened on. `abs` is the absolute host path (for reveal/open/copy),
 // `rel` the path shown relative to the panel root (for "Copy relative path").
@@ -30,7 +36,14 @@ export function useFileMenu(): {
 
   const openFileMenu = (e: MouseEvent, target: FileTarget) => {
     e.preventDefault()
+    // The actions run on the host fs (reveal/open/copy), so skip when we don't have a
+    // resolvable host path: a repo-relative path (empty git root) or a WSL pane whose
+    // paths the Windows/macOS host can't reach.
+    if (getActiveWsl() || !isAbsoluteHostPath(target.abs)) return
     setMenu({ ...target, x: e.clientX, y: e.clientY })
+    // Re-probe on open so an editor installed mid-session (without a settings change)
+    // is reflected in the label/enabled state; main memoises so this stays cheap.
+    void ipc.editorInfo().then((info) => useStore.getState().setEditor(info))
   }
 
   const dispatch = (id: FileActionId) => {
