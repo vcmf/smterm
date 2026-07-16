@@ -10,6 +10,26 @@ export function useActiveCwd(): string | undefined {
   })
 }
 
+/** The focused session's id (keys the per-pane Files-panel root override). */
+export function useActiveSessionId(): string | undefined {
+  return useStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId)
+}
+
+/** The Files-panel root for the focused pane: the per-session override if set, else the
+ *  live cwd. `diverged` = an override that no longer matches the terminal's cwd (drives
+ *  the amber reset button). `sessionId` is needed to set/clear the override. */
+export function useFilesRoot(): {
+  root: string | undefined
+  cwd: string | undefined
+  sessionId: string | undefined
+  diverged: boolean
+} {
+  const cwd = useActiveCwd()
+  const sessionId = useActiveSessionId()
+  const override = useStore((s) => (sessionId ? s.paneRoot[sessionId] : undefined))
+  return { root: override ?? cwd, cwd, sessionId, diverged: !!override && override !== cwd }
+}
+
 /** Non-reactive: the focused session's WSL context (so git runs inside the distro),
  *  or undefined for a native shell. Read at git-call time — it tracks the same
  *  session as the cwd, so it needn't be a reactive dependency. */

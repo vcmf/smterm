@@ -26,6 +26,8 @@ const smtermStub = {
   clipboardHasImage: vi.fn(async () => false),
   readdir: vi.fn(async () => ({ entries: [], truncated: false })),
   readFilePreview: vi.fn(async () => ({ kind: "text", text: "", truncated: false, size: 0 })),
+  pickDirectory: vi.fn(async () => null),
+  pathIsDir: vi.fn(async () => true),
   openExternal: vi.fn(),
   openPath: vi.fn(),
   openFile: vi.fn(),

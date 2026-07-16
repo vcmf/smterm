@@ -9,7 +9,10 @@ import type { AgentEvent, AgentGraph } from "./lib/agent-graph"
 import { defaultSettings } from "./settings/schema"
 import type { Settings } from "./settings/schema"
 import type { GitStatus } from "./lib/ipc"
+import { isAbsoluteHostPath } from "./lib/file-actions"
 import type { EditorInfo } from "./lib/file-actions"
+import { normalizeRootPath } from "./lib/breadcrumb"
+import { wslContext } from "./lib/wsl"
 import type { WorkspaceState } from "./lib/workspace"
 
 const newId = () => crypto.randomUUID()
@@ -55,11 +58,14 @@ interface AppState {
   platform: string // process.platform ("darwin"|"win32"|"linux"); "" until fetched
   editor: EditorInfo | null // configured editor availability (file context menu)
   preview: { abs: string; name: string } | null // file open in the preview popup (null = closed)
+  paneRoot: Record<string, string> // per-session Files-panel root override (absent = follow cwd)
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
   setEditor: (editor: EditorInfo) => void
   setPreview: (preview: { abs: string; name: string } | null) => void
+  setPaneRoot: (sessionId: string, root: string) => void
+  clearPaneRoot: (sessionId: string) => void
   setSessionOscTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
   applyAgentEvents: (events: AgentEvent[]) => void
@@ -127,11 +133,30 @@ export const useStore = create<AppState>((set, get) => ({
   platform: "",
   editor: null,
   preview: null,
+  paneRoot: {},
 
   setHome: (home) => set({ home }),
   setPlatform: (platform) => set({ platform }),
   setEditor: (editor) => set({ editor }),
   setPreview: (preview) => set({ preview }),
+  // Central guard for every reroot entry point (double-click, context menu, breadcrumb,
+  // typed path, picker): normalize the path and reject anything not resolvable on the
+  // host — non-absolute, or a WSL pane whose paths the host can't reach.
+  setPaneRoot: (sessionId, root) =>
+    set((s) => {
+      const sess = s.sessions[sessionId]
+      if (!sess) return {}
+      const norm = normalizeRootPath(root)
+      if (!isAbsoluteHostPath(norm) || wslContext(sess.command, sess.args)) return {}
+      return { paneRoot: { ...s.paneRoot, [sessionId]: norm } }
+    }),
+  clearPaneRoot: (sessionId) =>
+    set((s) => {
+      if (!(sessionId in s.paneRoot)) return {}
+      const next = { ...s.paneRoot }
+      delete next[sessionId]
+      return { paneRoot: next }
+    }),
   setSessionOscTitle: (sessionId, title) =>
     set((state) => {
       const s = state.sessions[sessionId]
@@ -182,11 +207,15 @@ export const useStore = create<AppState>((set, get) => ({
       const tab = state.tabs.find((t) => t.id === tabId)
       if (!tab) return {}
       const sessions = { ...state.sessions }
-      for (const id of allSessionIds(tab.root)) delete sessions[id]
+      const paneRoot = { ...state.paneRoot }
+      for (const id of allSessionIds(tab.root)) {
+        delete sessions[id]
+        delete paneRoot[id] // don't leak the pane's root override
+      }
       const tabs = state.tabs.filter((t) => t.id !== tabId)
       const activeTabId =
         state.activeTabId === tabId ? (tabs[tabs.length - 1]?.id ?? null) : state.activeTabId
-      return { sessions, tabs, activeTabId }
+      return { sessions, tabs, activeTabId, paneRoot }
     }),
 
   setActiveTab: (tabId) => {
@@ -229,17 +258,20 @@ export const useStore = create<AppState>((set, get) => ({
       if (!tab) return {}
       const sessions = { ...state.sessions }
       delete sessions[sessionId]
+      const paneRoot = { ...state.paneRoot }
+      delete paneRoot[sessionId] // don't leak the closed pane's root override
       const root = removeNode(tab.root, sessionId)
       if (root === null) {
         const tabs = state.tabs.filter((t) => t.id !== tabId)
         const activeTabId =
           state.activeTabId === tabId ? (tabs[tabs.length - 1]?.id ?? null) : state.activeTabId
-        return { sessions, tabs, activeTabId }
+        return { sessions, tabs, activeTabId, paneRoot }
       }
       const activeSessionId =
         tab.activeSessionId === sessionId ? firstSessionId(root) : tab.activeSessionId
       return {
         sessions,
+        paneRoot,
         tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, root, activeSessionId } : t)),
       }
     }),

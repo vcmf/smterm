@@ -1218,3 +1218,100 @@ body {
 .hljs-strong {
   font-weight: 600;
 }
+
+/* ── Files panel: root navigation breadcrumb ─────────────
+   Collapsible clickable path + "…" ancestor dropdown + browse/edit + amber reset. */
+.rootbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.crumb-seg,
+.crumb-more {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  max-width: 130px;
+  padding: 2px 5px;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11.5px;
+  border-radius: 5px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crumb:hover {
+  background: var(--elev);
+  color: var(--text);
+}
+.crumb.current {
+  color: var(--text);
+  font-weight: 600;
+}
+.crumb-sep {
+  color: var(--faint);
+  flex: 0 0 auto;
+}
+.crumb-more {
+  position: relative;
+}
+/* Absolute within .crumb-more (not the fixed .ctx-menu) so it drops under the "…". */
+.crumb-menu {
+  left: 0;
+  min-width: 150px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.rootbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
+}
+.root-reset {
+  color: var(--amber);
+}
+.root-reset:hover:not(:disabled) {
+  color: var(--amber);
+  background: rgba(224, 169, 74, 0.15);
+}
+.root-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 11.5px;
+  outline: none;
+}
+.root-input:focus {
+  border-color: var(--accent);
+}
+.root-input.invalid {
+  border-color: var(--red);
+}
