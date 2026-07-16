@@ -46,10 +46,11 @@ describe("revealLabel", () => {
 })
 
 describe("isAbsoluteHostPath", () => {
-  it("accepts POSIX-absolute and Windows drive paths", () => {
+  it("accepts POSIX-absolute, Windows drive and UNC paths", () => {
     expect(isAbsoluteHostPath("/Users/me/x")).toBe(true)
     expect(isAbsoluteHostPath("C:\\Users\\me\\x")).toBe(true)
     expect(isAbsoluteHostPath("D:/repo/x")).toBe(true)
+    expect(isAbsoluteHostPath("\\\\server\\share\\proj")).toBe(true)
   })
   it("rejects repo-relative paths", () => {
     expect(isAbsoluteHostPath("src/x.ts")).toBe(false)

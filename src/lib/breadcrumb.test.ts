@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseBreadcrumb, collapseBreadcrumb } from "./breadcrumb"
+import { parseBreadcrumb, collapseBreadcrumb, normalizeRootPath } from "./breadcrumb"
 
 describe("parseBreadcrumb", () => {
   it("splits a POSIX path into cumulative crumbs, root first", () => {
@@ -30,9 +30,34 @@ describe("parseBreadcrumb", () => {
       "D:\\repo\\src",
     ])
   })
+  it("splits a UNC path (\\\\server\\share\\proj)", () => {
+    expect(parseBreadcrumb("\\\\server\\share\\proj").map((c) => c.path)).toEqual([
+      "\\\\server\\share",
+      "\\\\server\\share\\proj",
+    ])
+  })
+  it("handles a bare drive with no separator", () => {
+    expect(parseBreadcrumb("C:")).toEqual([{ name: "C:\\", path: "C:\\" }])
+  })
   it("returns [] for a non-absolute path", () => {
     expect(parseBreadcrumb("relative/x")).toEqual([])
     expect(parseBreadcrumb("")).toEqual([])
+  })
+})
+
+describe("normalizeRootPath", () => {
+  it("strips a trailing slash but keeps bare roots", () => {
+    expect(normalizeRootPath("/a/b/")).toBe("/a/b")
+    expect(normalizeRootPath("/a/b")).toBe("/a/b")
+    expect(normalizeRootPath("/")).toBe("/")
+  })
+  it("trims whitespace", () => {
+    expect(normalizeRootPath("  /a/b/  ")).toBe("/a/b")
+  })
+  it("keeps a Windows drive root", () => {
+    expect(normalizeRootPath("C:\\a\\b\\")).toBe("C:\\a\\b")
+    expect(normalizeRootPath("C:\\")).toBe("C:\\")
+    expect(normalizeRootPath("C:")).toBe("C:\\")
   })
 })
 

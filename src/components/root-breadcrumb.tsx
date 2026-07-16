@@ -9,6 +9,7 @@ import {
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
 import { parseBreadcrumb, collapseBreadcrumb } from "../lib/breadcrumb"
+import { isAbsoluteHostPath } from "../lib/file-actions"
 
 const MAX_VISIBLE = 3 // trailing crumbs shown inline; the rest fold into the "…" menu
 
@@ -47,7 +48,8 @@ export function RootBreadcrumb({
   const applyTyped = async () => {
     const p = value.trim()
     if (p === root) return setEditing(false)
-    if (await ipc.pathIsDir(p)) {
+    // Must be an absolute host path (setPaneRoot enforces it too) AND an existing dir.
+    if (isAbsoluteHostPath(p) && (await ipc.pathIsDir(p))) {
       setRoot(p)
       setEditing(false)
     } else {

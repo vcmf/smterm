@@ -14,7 +14,7 @@ export interface EditorInfo {
 // drive path (C:\… / C:/…). Guards the file menu against repo-relative paths (empty
 // git root) and WSL paths that the Windows/macOS host can't resolve.
 export function isAbsoluteHostPath(p: string): boolean {
-  return /^\//.test(p) || /^[A-Za-z]:[\\/]/.test(p)
+  return /^\//.test(p) || /^[A-Za-z]:[\\/]/.test(p) || /^\\\\/.test(p)
 }
 
 // Platform-appropriate label for the reveal-in-file-manager action.

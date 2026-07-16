@@ -95,11 +95,9 @@ export function FilesPanel() {
     if (getActiveWsl() || !isAbsoluteHostPath(abs)) return
     useStore.getState().setPreview({ abs, name })
   }
-  // Double-click a folder → make it the panel root (guarded the same way).
-  const setRootTo = (p: string) => {
-    if (getActiveWsl() || !isAbsoluteHostPath(p) || !sessionId) return
-    useStore.getState().setPaneRoot(sessionId, p)
-  }
+  // Double-click a folder → make it the panel root. setPaneRoot centralises the
+  // host-path / WSL guard, so no need to repeat it here.
+  const setRootTo = (p: string) => sessionId && useStore.getState().setPaneRoot(sessionId, p)
 
   return (
     <div className="diffpanel">
