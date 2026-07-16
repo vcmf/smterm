@@ -10,6 +10,7 @@ import { AgentsPanel } from "./components/agents-panel"
 import { FilesPanel } from "./components/files-panel"
 import { PaneLayout } from "./components/pane-layout"
 import { SettingsPanel } from "./components/settings-panel"
+import { FilePreview } from "./components/file-preview"
 import { useActiveCwd, getActiveWsl } from "./lib/use-active-cwd"
 import { TerminalManager } from "./terminal/terminal-manager"
 import { useStore } from "./store"
@@ -280,6 +281,7 @@ function App() {
       <StatusBar />
       {paletteOpen && <CommandPalette />}
       {settingsOpen && <SettingsPanel />}
+      <FilePreview />
     </div>
   )
 }

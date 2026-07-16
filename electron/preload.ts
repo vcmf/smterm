@@ -49,6 +49,7 @@ const api = {
   clipboardRead: () => ipcRenderer.invoke("clipboard:read") as Promise<string>,
   clipboardHasImage: () => ipcRenderer.invoke("clipboard:has-image") as Promise<boolean>,
   readdir: (dir: string) => ipcRenderer.invoke("fs:readdir", dir),
+  readFilePreview: (path: string) => ipcRenderer.invoke("fs:read-preview", path),
 
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
   maximizeWindow: () => ipcRenderer.send("window:maximize"),

@@ -24,7 +24,7 @@ export function revealLabel(platform: string): string {
   return "Show in File Manager"
 }
 
-export type FileActionId = "open" | "reveal" | "copyPath" | "copyRel"
+export type FileActionId = "preview" | "open" | "reveal" | "copyPath" | "copyRel"
 
 export interface MenuItemSpec {
   id: FileActionId
@@ -46,6 +46,7 @@ export interface FileMenuInput {
 export function fileMenuItems(input: FileMenuInput): MenuItemSpec[] {
   const items: MenuItemSpec[] = []
   if (!input.isDir) {
+    items.push({ id: "preview", label: "Preview" })
     items.push({
       id: "open",
       label: input.editorAvailable ? `Open in ${input.editorName}` : "Open in editor",

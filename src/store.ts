@@ -54,10 +54,12 @@ interface AppState {
   home: string
   platform: string // process.platform ("darwin"|"win32"|"linux"); "" until fetched
   editor: EditorInfo | null // configured editor availability (file context menu)
+  preview: { abs: string; name: string } | null // file open in the preview popup (null = closed)
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
   setEditor: (editor: EditorInfo) => void
+  setPreview: (preview: { abs: string; name: string } | null) => void
   setSessionOscTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
   applyAgentEvents: (events: AgentEvent[]) => void
@@ -124,10 +126,12 @@ export const useStore = create<AppState>((set, get) => ({
   home: "",
   platform: "",
   editor: null,
+  preview: null,
 
   setHome: (home) => set({ home }),
   setPlatform: (platform) => set({ platform }),
   setEditor: (editor) => set({ editor }),
+  setPreview: (preview) => set({ preview }),
   setSessionOscTitle: (sessionId, title) =>
     set((state) => {
       const s = state.sessions[sessionId]

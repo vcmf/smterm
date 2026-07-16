@@ -4,11 +4,11 @@ import { fileMenuItems, clampMenuPosition, revealLabel, isAbsoluteHostPath } fro
 const base = { editorName: "VS Code", editorAvailable: true, revealLabel: "Reveal in Finder" }
 
 describe("fileMenuItems", () => {
-  it("file: Open (named) + Reveal + Copy path + Copy relative", () => {
+  it("file: Preview + Open (named) + Reveal + Copy path + Copy relative", () => {
     const items = fileMenuItems({ ...base, isDir: false })
-    expect(items.map((i) => i.id)).toEqual(["open", "reveal", "copyPath", "copyRel"])
-    expect(items[0]!.label).toBe("Open in VS Code")
-    expect(items[0]!.disabled).toBeFalsy()
+    expect(items.map((i) => i.id)).toEqual(["preview", "open", "reveal", "copyPath", "copyRel"])
+    expect(items.find((i) => i.id === "open")!.label).toBe("Open in VS Code")
+    expect(items.find((i) => i.id === "open")!.disabled).toBeFalsy()
     expect(items.find((i) => i.id === "copyPath")!.separatorBefore).toBe(true)
   })
 

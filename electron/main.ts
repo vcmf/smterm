@@ -15,6 +15,7 @@ import fs from "node:fs"
 import os from "node:os"
 import { randomUUID } from "node:crypto"
 import { spawn } from "node:child_process"
+import { StringDecoder } from "node:string_decoder"
 import * as pty from "node-pty"
 import type { IPty } from "node-pty"
 import { watch } from "chokidar"
@@ -35,6 +36,12 @@ import { orderMacEditors, planEditor, type EditorPlan, type EditorInfo } from ".
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { toDirListing } from "../src/lib/dir-listing"
+import {
+  classifyPreview,
+  PREVIEW_READ_CAP,
+  PREVIEW_MAX_SIZE,
+  type PreviewData,
+} from "../src/lib/file-preview"
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -426,6 +433,37 @@ function registerIpc() {
       return toDirListing(raw)
     } catch {
       return { entries: [], truncated: false } // unreadable / not-a-dir / WSL path → empty
+    }
+  })
+
+  // Read a file for the preview popup: guard the size, read up to the cap, and
+  // classify text vs binary. Best-effort — any failure returns an error kind.
+  ipcMain.handle("fs:read-preview", async (_e, p: string): Promise<PreviewData> => {
+    try {
+      const st = await fs.promises.stat(p)
+      if (!st.isFile()) return { kind: "error", message: "Not a file" }
+      const size = st.size
+      if (size > PREVIEW_MAX_SIZE) return { kind: "too-large", size }
+      const len = Math.min(size, PREVIEW_READ_CAP)
+      const buf = Buffer.alloc(len)
+      let bytesRead = 0
+      const fh = await fs.promises.open(p, "r")
+      try {
+        if (len > 0) ({ bytesRead } = await fh.read(buf, 0, len, 0))
+      } finally {
+        await fh.close()
+      }
+      // Only the bytes actually read — a short read must not leave zero-filled tail
+      // (→ false 'binary'), and the decoder must not see it (→ trailing garbage).
+      const chunk = buf.subarray(0, bytesRead)
+      const meta = classifyPreview(size, bytesRead, chunk.includes(0))
+      if (meta.kind === "binary") return { kind: "binary", size }
+      // StringDecoder drops a dangling multi-byte sequence at the truncation boundary
+      // (never .end()ed) instead of emitting a � replacement char.
+      const text = new StringDecoder("utf8").write(chunk)
+      return { kind: "text", text, truncated: meta.truncated, size }
+    } catch (err) {
+      return { kind: "error", message: String(err) }
     }
   })
 

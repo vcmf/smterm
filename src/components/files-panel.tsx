@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { CaretRight, CaretDown, Folder, File as FileIcon, X } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
-import { useActiveCwd } from "../lib/use-active-cwd"
+import { useActiveCwd, getActiveWsl } from "../lib/use-active-cwd"
+import { isAbsoluteHostPath } from "../lib/file-actions"
 import {
   FileTreeCache,
   emptyTree,
@@ -89,6 +90,12 @@ export function FilesPanel() {
   // Path relative to the panel root (cwd), for "Copy relative path".
   const relTo = (abs: string) =>
     cwd && abs.startsWith(cwd) ? abs.slice(cwd.length).replace(/^\//, "") : abs
+  // Open the preview, but only for a resolvable host path (same guard as the menu):
+  // skip on WSL panes / non-absolute paths so readFilePreview never gets a bad path.
+  const preview = (abs: string, name: string) => {
+    if (getActiveWsl() || !isAbsoluteHostPath(abs)) return
+    useStore.getState().setPreview({ abs, name })
+  }
 
   return (
     <div className="diffpanel">
@@ -141,8 +148,8 @@ export function FilesPanel() {
               key={r.path}
               className="diff-file file-row"
               style={pad}
-              title="Open file"
-              onMouseDown={(e) => e.button === 0 && cwd && ipc.openFile(cwd, r.path)}
+              title="Preview file"
+              onMouseDown={(e) => e.button === 0 && preview(r.path, r.name)}
               onContextMenu={(e) =>
                 openFileMenu(e, { abs: r.path, rel: relTo(r.path), isDir: false })
               }
