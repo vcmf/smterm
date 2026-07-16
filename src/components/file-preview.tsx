@@ -52,7 +52,13 @@ export function FilePreview() {
     return () => window.removeEventListener("keydown", onKey)
   }, [target])
 
-  const lineCount = data?.kind === "text" ? data.text.split("\n").length : 0
+  // Count newlines without materializing a per-line array of the (up to 256KB) text.
+  const lineCount = useMemo(() => {
+    if (data?.kind !== "text") return 0
+    let n = 1
+    for (let i = 0; i < data.text.length; i++) if (data.text.charCodeAt(i) === 10) n++
+    return n
+  }, [data])
   // A parallel `1\n2\n…` column beside a no-wrap <pre>: each source line stays one
   // visual line, so numbers align by line-height without splitting hljs spans.
   const gutter = useMemo(

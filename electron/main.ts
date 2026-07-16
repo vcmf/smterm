@@ -15,6 +15,7 @@ import fs from "node:fs"
 import os from "node:os"
 import { randomUUID } from "node:crypto"
 import { spawn } from "node:child_process"
+import { StringDecoder } from "node:string_decoder"
 import * as pty from "node-pty"
 import type { IPty } from "node-pty"
 import { watch } from "chokidar"
@@ -445,15 +446,22 @@ function registerIpc() {
       if (size > PREVIEW_MAX_SIZE) return { kind: "too-large", size }
       const len = Math.min(size, PREVIEW_READ_CAP)
       const buf = Buffer.alloc(len)
+      let bytesRead = 0
       const fh = await fs.promises.open(p, "r")
       try {
-        if (len > 0) await fh.read(buf, 0, len, 0)
+        if (len > 0) ({ bytesRead } = await fh.read(buf, 0, len, 0))
       } finally {
         await fh.close()
       }
-      const meta = classifyPreview(size, len, buf.includes(0))
+      // Only the bytes actually read — a short read must not leave zero-filled tail
+      // (→ false 'binary'), and the decoder must not see it (→ trailing garbage).
+      const chunk = buf.subarray(0, bytesRead)
+      const meta = classifyPreview(size, bytesRead, chunk.includes(0))
       if (meta.kind === "binary") return { kind: "binary", size }
-      return { kind: "text", text: buf.toString("utf8"), truncated: meta.truncated, size }
+      // StringDecoder drops a dangling multi-byte sequence at the truncation boundary
+      // (never .end()ed) instead of emitting a � replacement char.
+      const text = new StringDecoder("utf8").write(chunk)
+      return { kind: "text", text, truncated: meta.truncated, size }
     } catch (err) {
       return { kind: "error", message: String(err) }
     }

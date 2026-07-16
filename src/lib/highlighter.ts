@@ -41,6 +41,11 @@ async function loadHljs(): Promise<Hljs> {
       })
       return hljs
     })()
+    // Don't cache a rejection: a transient chunk-fetch blip would otherwise disable
+    // highlighting until restart. Drop it so the next preview retries the load.
+    hljsPromise.catch(() => {
+      hljsPromise = null
+    })
   }
   return hljsPromise
 }
