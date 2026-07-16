@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react"
 import {
-  TerminalWindow,
   Plus,
   CaretDown,
   MagnifyingGlass,
@@ -22,6 +21,7 @@ import { aggregateBadge } from "../lib/session-status"
 import { tabTitle } from "../lib/session-label"
 import { resolveDefaultShell } from "../lib/shells"
 import { TerminalManager } from "../terminal/terminal-manager"
+import brandIcon from "../assets/icon.png"
 
 /** The mux top bar: brand · session tabs · search pill · window controls. */
 export function TopBar() {
@@ -100,7 +100,7 @@ export function TopBar() {
         <SidebarSimple size={15} />
       </button>
       <div className="brand">
-        <TerminalWindow size={16} weight="fill" />
+        <img className="brand-icon" src={brandIcon} alt="" width={18} height={18} />
         <span className="brand-name">smterm</span>
       </div>
       <div className="vdivider" />

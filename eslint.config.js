@@ -36,7 +36,7 @@ export default tseslint.config(
   },
   {
     // Config files, Electron main/preload, build scripts, and test setup run in Node.
-    files: ["*.{ts,js,mjs,cjs}", "electron/**", "src/test/**", "build/**"],
+    files: ["*.{ts,js,mjs,cjs}", "electron/**", "src/test/**", "build/**", "scripts/**"],
     languageOptions: { globals: { ...globals.node } },
   },
   {

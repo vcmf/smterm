@@ -7,6 +7,7 @@ import {
   dialog,
   powerMonitor,
   clipboard,
+  nativeImage,
 } from "electron"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
@@ -76,7 +77,21 @@ function defaultShell(): string {
   return process.env.SHELL ?? (process.platform === "win32" ? "powershell.exe" : "/bin/zsh")
 }
 
+// The app icon. Packaged builds get it from the bundle (electron-builder → build/icon.*),
+// but in dev Electron shows its default icon unless we set it at runtime, so point at the
+// source PNG in build/ (app path = project root in dev). Returns null if not found.
+// Memoised — the PNG is decoded once and reused by both the window and the dock.
+let cachedIcon: Electron.NativeImage | null | undefined
+function appIcon(): Electron.NativeImage | null {
+  if (cachedIcon !== undefined) return cachedIcon
+  const p = path.join(app.getAppPath(), "build", "icon.png")
+  if (!fs.existsSync(p)) return (cachedIcon = null)
+  const img = nativeImage.createFromPath(p)
+  return (cachedIcon = img.isEmpty() ? null : img)
+}
+
 function createWindow() {
+  const icon = appIcon()
   const win = new BrowserWindow({
     width: 1100,
     height: 720,
@@ -85,6 +100,7 @@ function createWindow() {
     title: "smterm",
     backgroundColor: "#0b0b0d",
     frame: false, // frameless — the app draws its own top bar + window controls
+    ...(icon ? { icon } : {}), // window/taskbar icon (win/linux; macOS uses the dock icon)
     webPreferences: {
       preload: path.join(dir, "../preload/preload.mjs"),
       contextIsolation: true,
@@ -480,12 +496,24 @@ function openFile(cwd: string, file: string, line?: number, col?: number): void 
   }
 }
 
+// App identity. Packaged builds get this from the bundle (electron-builder productName),
+// but in dev the app runs from Electron.app, so the dock/menu read "Electron" unless we
+// set it here. AppUserModelId groups the taskbar + routes notifications on Windows.
+app.setName("smterm")
+app.setAppUserModelId("com.smterm.app")
+
 app.whenReady().then(async () => {
   // GUI-launched apps (Finder/Dock) inherit a bare launchd PATH, so shells can't find
   // Homebrew/cargo tools (starship, etc.). Import the login shell's real env before any
   // PTY spawns. Only when packaged — in dev the app is launched from a terminal that
   // already has the full env, so this cost (~one shell invocation) is skipped.
   if (process.platform !== "win32" && app.isPackaged) applyLoginShellEnv(defaultShell())
+  // macOS dock icon: packaged builds get it from the .app bundle, but `make run` (dev)
+  // shows the default Electron icon unless we set it here.
+  if (process.platform === "darwin") {
+    const icon = appIcon()
+    if (icon) app.dock?.setIcon(icon)
+  }
   registerIpc()
   // Start the hook receiver BEFORE the window so hookSettingsPath is set before the
   // renderer can request the first pty:spawn — otherwise the initial pane launches
