@@ -1,7 +1,7 @@
 import type { ITheme } from "@xterm/xterm"
 
 /** UI tokens become CSS custom properties; `terminal` is xterm's theme object.
- *  Token set follows the `mux` design spec (see design_handoff_mux_terminal). */
+ *  Token set follows the `mux` design spec (see docs/mux_product_spec.md). */
 export interface Theme {
   name: string
   label: string

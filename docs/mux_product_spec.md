@@ -273,5 +273,6 @@ agent cost dashboards, plugin API, mobile companion for approvals on the go.
 
 ## 13. Design Reference
 
-The look & feel is specified in the hi-fi mock `Mux.dc.html` (see also `design_handoff_mux_terminal/`
-for the full implementation spec, tokens, and component states).
+The look & feel described here is now implemented in the codebase: design tokens live in
+`src/settings/themes.ts` (→ CSS custom properties + xterm theme) and component styles in
+`src/App.css`. (The original hi-fi handoff mock has been retired now that the design is adopted.)

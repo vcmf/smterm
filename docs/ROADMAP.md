@@ -30,7 +30,7 @@ Living document. Update status as we go. Companion to [ARCHITECTURE.md](./ARCHIT
 >    bundle, higher RAM. **Clean port**, not a rewrite: reuse the React app + stores + settings +
 >    themes + docs + shell scripts; rewrite only the backend (Rust → `node-pty` + Electron IPC).
 > 2. **Conventions:** kebab-case filenames + no semicolons (applied during the port).
-> 3. **Design:** adopt the hi-fi `mux` design (`mux_product_spec.md` + `design_handoff_mux_terminal/`)
+> 3. **Design:** adopt the hi-fi `mux` design (`mux_product_spec.md`)
 >    at M3.5; agent status via output-idle heuristic; files-in-flight via **git watching only**.
 >    Deferred: approvals, orchestration, persistence daemon. **Name stays `smterm`.**
 
@@ -264,9 +264,9 @@ copy/paste work.
 
 ## M3.5 — Adopt the `mux` design + agent awareness ✅ _(Track A + B done)_
 
-**Source of truth:** [`mux_product_spec.md`](./mux_product_spec.md) (product) +
-`design_handoff_mux_terminal/` (hi-fi visual spec, tokens, states). We adopt the **visual design now**
-and a **scoped slice** of the agent features; the heavy orchestration/approval machinery is deferred.
+**Source of truth:** [`mux_product_spec.md`](./mux_product_spec.md) (product + hi-fi visual spec,
+tokens, states). We adopt the **visual design now** and a **scoped slice** of the agent features;
+the heavy orchestration/approval machinery is deferred.
 
 **Scope decisions (2026-07-08):** _functional-only_ reskin — every surface shown is wired to real
 state. Window is **frameless with custom controls** (per-OS). The design's git-diff panel is deferred
