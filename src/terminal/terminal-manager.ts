@@ -375,7 +375,8 @@ function spawn(session: Session, entry: Entry) {
 
   // Clickable file links: detect path-like tokens on the hovered row, validate they
   // exist against the session cwd (kills false positives — versions, domains, etc.
-  // that don't resolve to a file), and open on Cmd/Ctrl-click. Single-row for now.
+  // that don't resolve to a file), and open on click (Cmd/Ctrl-click while a TUI holds
+  // mouse mode, so a bare click still reaches the app). Single-row for now.
   if (useStore.getState().settings.fileLinks) {
     term.registerLinkProvider({
       provideLinks(y, cb) {
@@ -392,7 +393,12 @@ function spawn(session: Session, entry: Entry) {
                 range: { start: { x: m.start + 1, y }, end: { x: m.start + m.length, y } },
                 decorations: { pointerCursor: true, underline: true },
                 activate: (e: MouseEvent) => {
-                  if (!e.metaKey && !e.ctrlKey) return // Cmd/Ctrl-click only (reduces noise)
+                  if (e.button !== 0) return // left-click only
+                  // In plain output a bare click opens (like cmux). But when the app has
+                  // mouse tracking on (Claude's live TUI, vim), a bare click belongs to the
+                  // app — require Cmd/Ctrl there so we don't hijack it (VS Code does the same).
+                  const mouseMode = term.modes.mouseTrackingMode !== "none"
+                  if (mouseMode && !e.metaKey && !e.ctrlKey) return
                   ipc.openFile(cwd, m.path, m.line, m.col)
                 },
               }))

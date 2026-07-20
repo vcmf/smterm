@@ -184,8 +184,11 @@ host fs) and the diff null-device (`NUL` vs `/dev/null`) are also WSL-aware.
 
 ## Clickable file links {#file-links}
 
-Path-like tokens in output are made clickable (Cmd/Ctrl-click → open in editor). Detection is
-a **permissive regex on purpose** (`lib/file-links.ts`, pure + tested) — the real false-positive
+Path-like tokens in output are made clickable (click → open in editor / reveal). A **plain click**
+opens in normal output, but while a full-screen TUI holds **mouse tracking** (Claude's live UI, vim
+— `term.modes.mouseTrackingMode`) a bare click belongs to the app, so there it needs **Cmd/Ctrl-click**
+(same as VS Code) — otherwise clicks inside the agent's UI would get hijacked into opening files.
+Detection is a **permissive regex on purpose** (`lib/file-links.ts`, pure + tested) — the real false-positive
 filter is **existence validation** (`fs:path-exists`, `main`) against the session cwd, so a version
 string like `1.2.3` or a domain that doesn't resolve to a file never underlines. Validation is
 cached in `terminal-manager` (the link provider fires on hover, not per render). Clicking runs the
