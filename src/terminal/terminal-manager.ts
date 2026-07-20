@@ -222,7 +222,7 @@ function build(): Entry {
     // sluggish vs VS Code/cmux). More lines per wheel/trackpad tick + a short glide.
     scrollSensitivity: 3,
     fastScrollSensitivity: 12, // Alt-scroll
-    smoothScrollDuration: 100, // ms; modest — higher starts to feel laggy
+    smoothScrollDuration: 300, // ms
     theme: getTheme(s.theme).terminal,
   })
   const fit = new FitAddon()
