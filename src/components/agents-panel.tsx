@@ -1,5 +1,5 @@
 import { Fragment } from "react"
-import { X, TreeStructure, TerminalWindow, GitBranch } from "@phosphor-icons/react"
+import { X, TreeStructure, GitBranch } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { displaySessionTitle } from "../lib/session-label"
@@ -14,23 +14,6 @@ const DOT: Record<AgentStatus, { cls: string; word: string }> = {
 }
 
 const base = (p?: string) => (p ? (p.replace(/\/+$/, "").split(/[\\/]/).pop() ?? p) : "")
-
-// A small "open a terminal split rooted here" button, shared by agent rows + worktrees.
-function OpenHere({ cwd, onOpen }: { cwd: string; onOpen: (cwd: string) => void }) {
-  return (
-    <button
-      className="iconbtn agent-openhere"
-      style={{ width: 22, height: 22 }}
-      title={`Open a terminal here — ${cwd}`}
-      onMouseDown={(e) => {
-        e.stopPropagation() // don't also focus the source pane
-        onOpen(cwd)
-      }}
-    >
-      <TerminalWindow size={13} />
-    </button>
-  )
-}
 
 function AgentRow({
   node,
@@ -48,14 +31,14 @@ function AgentRow({
   const d = DOT[node.status]
   const isRoot = node.agentType === "root"
   const primary = isRoot ? "session" : node.agentType
-  // Root: show its folder. Sub-agent: show its folder only when it differs from the root
-  // (e.g. a worktree) — else keep the more useful recent-file / last-message signal, since
-  // a sub-agent's cwd is usually just the session's, which is already shown right above.
-  const sub = isRoot
-    ? base(node.cwd) || "—"
-    : node.cwd && node.cwd !== rootCwd
-      ? base(node.cwd)
-      : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—"
+  // The folder this row's subline represents (clickable → open a terminal there). Root: its
+  // cwd. Sub-agent: only when its cwd differs from the root (e.g. a worktree) — otherwise the
+  // subline keeps the more useful recent-file / last-message signal (the root's folder, shown
+  // right above, already covers the shared cwd).
+  const folderLink = isRoot ? node.cwd : node.cwd && node.cwd !== rootCwd ? node.cwd : undefined
+  const sub = folderLink
+    ? base(folderLink)
+    : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—"
   return (
     <div
       className="diff-file"
@@ -69,11 +52,22 @@ function AgentRow({
           {primary}
           {node.currentTool && <span className="status-faint"> · {node.currentTool}</span>}
         </span>
-        <span className="tree-sub" title={node.cwd}>
-          {sub}
-        </span>
+        {folderLink ? (
+          // The folder is the affordance: hover underlines it, click opens a terminal there.
+          <span
+            className="tree-sub folder-link"
+            title={`Open a terminal here — ${folderLink}`}
+            onMouseDown={(e) => {
+              e.stopPropagation() // don't also focus the source pane
+              onOpen(folderLink)
+            }}
+          >
+            {sub}
+          </span>
+        ) : (
+          <span className="tree-sub">{sub}</span>
+        )}
       </div>
-      {node.cwd && <OpenHere cwd={node.cwd} onOpen={onOpen} />}
       <span className="status-faint">{d.word}</span>
     </div>
   )
@@ -152,15 +146,19 @@ export function AgentsPanel() {
                 ) : null
               })}
               {root.worktrees?.map((w) => (
-                <div key={w.path} className="diff-file agent-worktree" style={{ paddingLeft: 26 }}>
+                // A worktree row exists to be opened → the whole row is the affordance.
+                <div
+                  key={w.path}
+                  className="diff-file agent-worktree"
+                  style={{ paddingLeft: 26, cursor: "pointer" }}
+                  title={`Open a terminal here — ${w.path}`}
+                  onMouseDown={() => openForSession(w.path)}
+                >
                   <GitBranch size={12} color="var(--blue)" />
                   <div className="tree-labels">
                     <span className="tree-primary">{w.branch ?? base(w.path)}</span>
-                    <span className="tree-sub" title={w.path}>
-                      {base(w.path)}
-                    </span>
+                    <span className="tree-sub folder-link">{base(w.path)}</span>
                   </div>
-                  <OpenHere cwd={w.path} onOpen={openForSession} />
                 </div>
               ))}
             </Fragment>

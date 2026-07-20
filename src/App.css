@@ -1316,20 +1316,14 @@ body {
   border-color: var(--red);
 }
 
-/* ── Agents board: open-terminal-here + worktree rows ────
-   The inline "open a terminal here" action reveals on row hover (VS Code style). */
-.agent-openhere {
-  opacity: 0;
-  flex: 0 0 auto;
-  transition: opacity 0.1s;
+/* ── Agents board: open-a-terminal-here ──────────────────
+   The folder itself is the affordance — hover underlines it, click opens a terminal
+   split rooted there (no separate icon). A worktree row is clickable as a whole. */
+.folder-link {
+  cursor: pointer;
 }
-.diff-file:hover .agent-openhere,
-.agent-openhere:focus-visible {
-  opacity: 1;
-}
-.agent-worktree .agent-openhere {
-  opacity: 0.5; /* worktree rows exist to be opened — hint the action */
-}
-.agent-worktree:hover .agent-openhere {
-  opacity: 1;
+.folder-link:hover,
+.agent-worktree:hover .folder-link {
+  color: var(--text);
+  text-decoration: underline;
 }
