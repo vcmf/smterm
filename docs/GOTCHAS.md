@@ -184,7 +184,7 @@ host fs) and the diff null-device (`NUL` vs `/dev/null`) are also WSL-aware.
 
 ## Clickable file links {#file-links}
 
-Path-like tokens in output are made clickable (Cmd/Ctrl-click → open in editor). Detection is
+Path-like tokens in output are made clickable (click → open in editor / reveal). Detection is
 a **permissive regex on purpose** (`lib/file-links.ts`, pure + tested) — the real false-positive
 filter is **existence validation** (`fs:path-exists`, `main`) against the session cwd, so a version
 string like `1.2.3` or a domain that doesn't resolve to a file never underlines. Validation is

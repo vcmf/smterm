@@ -16,7 +16,7 @@ export interface Settings {
   shareHistory: boolean // cmux-like shared, incrementally-written zsh/bash history across panes
   shiftEnterNewline: boolean // Shift+Enter sends CSI-u (newline in Claude Code etc.); off = normal submit
   defaultShell: string // command path of the preferred shell; "" = system $SHELL
-  fileLinks: boolean // Cmd/Ctrl-click file paths in output to open them
+  fileLinks: boolean // click file paths in output to open them
   openPath: string // editor command for clicked paths; "" = OS default. {file}/{line}/{col}
 }
 
