@@ -35,23 +35,27 @@ function OpenHere({ cwd, onOpen }: { cwd: string; onOpen: (cwd: string) => void 
 function AgentRow({
   node,
   depth,
+  rootCwd,
   onFocusPane,
   onOpen,
 }: {
   node: AgentNode
   depth: number
+  rootCwd?: string // the session root's cwd, so a sub-agent only shows its folder when it differs
   onFocusPane?: () => void
   onOpen: (cwd: string) => void
 }) {
   const d = DOT[node.status]
   const isRoot = node.agentType === "root"
   const primary = isRoot ? "session" : node.agentType
-  // Folder-forward: show where the agent is operating; fall back to file/message.
-  const sub =
-    base(node.cwd) ||
-    (isRoot
-      ? "—"
-      : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—")
+  // Root: show its folder. Sub-agent: show its folder only when it differs from the root
+  // (e.g. a worktree) — else keep the more useful recent-file / last-message signal, since
+  // a sub-agent's cwd is usually just the session's, which is already shown right above.
+  const sub = isRoot
+    ? base(node.cwd) || "—"
+    : node.cwd && node.cwd !== rootCwd
+      ? base(node.cwd)
+      : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—"
   return (
     <div
       className="diff-file"
@@ -88,8 +92,10 @@ export function AgentsPanel() {
     useStore.getState().focusSession(paneId)
     TerminalManager.focus(paneId)
   }
-  // Open a folder (agent cwd / worktree) as a split beside the active pane.
-  const openHere = (cwd: string) => useStore.getState().openFolderInSplit(cwd)
+  // Open a folder (agent cwd / worktree) as a split beside the active pane; the shell
+  // context comes from the session's own pane (paneId) so a WSL agent's path opens in WSL.
+  const openHere = (cwd: string, paneId?: string) =>
+    useStore.getState().openFolderInSplit(cwd, paneId)
 
   const nodes = Object.values(agents.nodes)
   const working = nodes.filter((n) => n.status === "working").length
@@ -120,6 +126,8 @@ export function AgentsPanel() {
           const paneSession = root.paneId ? sessions[root.paneId] : undefined
           const paneLabel = paneSession ? displaySessionTitle(paneSession, home) : "external"
           const go = paneSession ? () => focusPane(root.paneId) : undefined
+          // Every folder opened from this session uses the session's own pane shell context.
+          const openForSession = (cwd: string) => openHere(cwd, root.paneId)
           return (
             <Fragment key={rid}>
               <div
@@ -129,11 +137,18 @@ export function AgentsPanel() {
               >
                 <TreeStructure size={12} /> {paneLabel}
               </div>
-              <AgentRow node={root} depth={0} onFocusPane={go} onOpen={openHere} />
+              <AgentRow node={root} depth={0} onFocusPane={go} onOpen={openForSession} />
               {root.childIds.map((cid) => {
                 const child = agents.nodes[cid]
                 return child ? (
-                  <AgentRow key={cid} node={child} depth={1} onFocusPane={go} onOpen={openHere} />
+                  <AgentRow
+                    key={cid}
+                    node={child}
+                    depth={1}
+                    rootCwd={root.cwd}
+                    onFocusPane={go}
+                    onOpen={openForSession}
+                  />
                 ) : null
               })}
               {root.worktrees?.map((w) => (
@@ -145,7 +160,7 @@ export function AgentsPanel() {
                       {base(w.path)}
                     </span>
                   </div>
-                  <OpenHere cwd={w.path} onOpen={openHere} />
+                  <OpenHere cwd={w.path} onOpen={openForSession} />
                 </div>
               ))}
             </Fragment>

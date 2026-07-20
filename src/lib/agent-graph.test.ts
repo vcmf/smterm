@@ -254,6 +254,16 @@ describe("agent-graph — worktrees", () => {
     expect(g.nodes["root:sess-1"]!.worktrees).toHaveLength(1)
   })
 
+  it("routes a worktree to the session root even when the event carries an agent_id", () => {
+    const g = reduceAgentEvents([
+      { event: "SessionStart", sessionId: S },
+      { event: "SubagentStart", sessionId: S, agentId: A, agentType: "Explore" },
+      { event: "WorktreeCreate", sessionId: S, agentId: A, worktreePath: "/wt/x", baseBranch: "x" },
+    ])
+    expect(g.nodes["root:sess-1"]!.worktrees).toEqual([{ path: "/wt/x", branch: "x" }])
+    expect(g.nodes[A]!.worktrees).toBeUndefined() // not on the sub-agent
+  })
+
   it("removes a worktree on WorktreeRemove, leaving the others", () => {
     const g = reduceAgentEvents([
       { event: "SessionStart", sessionId: S },

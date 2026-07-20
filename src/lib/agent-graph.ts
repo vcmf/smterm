@@ -171,18 +171,21 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
     case "FileChanged":
       set(targetId, { recentFiles: withFile(at(targetId).recentFiles, ev.filePath) })
       break
+    // Worktrees live on the session root (the board renders root.worktrees), so target
+    // `rid` even when the event carries an agent_id — else a sub-agent-context create
+    // would hide the worktree, and a remove couldn't clear one held on the root.
     case "WorktreeCreate":
       if (ev.worktreePath) {
-        const cur = at(targetId).worktrees ?? []
+        const cur = at(rid).worktrees ?? []
         if (!cur.some((w) => w.path === ev.worktreePath))
-          set(targetId, { worktrees: [...cur, { path: ev.worktreePath, branch: ev.baseBranch }] })
+          set(rid, { worktrees: [...cur, { path: ev.worktreePath, branch: ev.baseBranch }] })
       }
       break
     case "WorktreeRemove":
       if (ev.worktreePath) {
-        const cur = at(targetId).worktrees
+        const cur = at(rid).worktrees
         if (cur?.some((w) => w.path === ev.worktreePath))
-          set(targetId, { worktrees: cur.filter((w) => w.path !== ev.worktreePath) })
+          set(rid, { worktrees: cur.filter((w) => w.path !== ev.worktreePath) })
       }
       break
     case "SessionEnd": {
