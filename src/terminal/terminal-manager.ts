@@ -218,6 +218,11 @@ function build(): Entry {
     lineHeight: s.font.lineHeight,
     cursorBlink: s.cursorBlink,
     scrollback: s.scrollback,
+    // Snappier scrollback feel (xterm defaults to 1 line/tick, no smoothing — reads as
+    // sluggish vs VS Code/cmux). More lines per wheel/trackpad tick + a short glide.
+    scrollSensitivity: 3,
+    fastScrollSensitivity: 12, // Alt-scroll
+    smoothScrollDuration: 300, // ms
     theme: getTheme(s.theme).terminal,
   })
   const fit = new FitAddon()
