@@ -34,6 +34,8 @@ export function normalizeHookEvent(raw: unknown, paneId?: string): AgentEvent | 
     toolName: str(r.tool_name),
     filePath,
     message: str(r.message) ?? str(r.last_assistant_message),
+    worktreePath: str(r.worktree_path),
+    baseBranch: str(r.base_branch),
   }
 }
 

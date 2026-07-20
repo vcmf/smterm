@@ -178,6 +178,8 @@ function agentHookSettings(port: number, token: string): string {
     "PostToolUse",
     "CwdChanged",
     "FileChanged",
+    "WorktreeCreate",
+    "WorktreeRemove",
   ]
   const hooks: Record<string, unknown[]> = {}
   for (const e of events)

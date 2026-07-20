@@ -1,5 +1,5 @@
 import { Fragment } from "react"
-import { X, TreeStructure } from "@phosphor-icons/react"
+import { X, TreeStructure, GitBranch } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { displaySessionTitle } from "../lib/session-label"
@@ -18,17 +18,26 @@ const base = (p?: string) => (p ? (p.replace(/\/+$/, "").split(/[\\/]/).pop() ??
 function AgentRow({
   node,
   depth,
+  rootCwd,
   onFocusPane,
+  onOpen,
 }: {
   node: AgentNode
   depth: number
+  rootCwd?: string // the session root's cwd, so a sub-agent only shows its folder when it differs
   onFocusPane?: () => void
+  onOpen: (cwd: string) => void
 }) {
   const d = DOT[node.status]
   const isRoot = node.agentType === "root"
   const primary = isRoot ? "session" : node.agentType
-  const sub = isRoot
-    ? base(node.cwd) || "—"
+  // The folder this row's subline represents (clickable → open a terminal there). Root: its
+  // cwd. Sub-agent: only when its cwd differs from the root (e.g. a worktree) — otherwise the
+  // subline keeps the more useful recent-file / last-message signal (the root's folder, shown
+  // right above, already covers the shared cwd).
+  const folderLink = isRoot ? node.cwd : node.cwd && node.cwd !== rootCwd ? node.cwd : undefined
+  const sub = folderLink
+    ? base(folderLink)
     : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—"
   return (
     <div
@@ -43,7 +52,20 @@ function AgentRow({
           {primary}
           {node.currentTool && <span className="status-faint"> · {node.currentTool}</span>}
         </span>
-        <span className="tree-sub">{sub}</span>
+        {folderLink ? (
+          // The folder is the affordance: a real button (keyboard-focusable) styled as
+          // inline text — hover/focus underlines it, click/Enter opens a terminal there.
+          <button
+            className="tree-sub folder-link"
+            title={`Open a terminal here — ${folderLink}`}
+            onMouseDown={(e) => e.stopPropagation()} // don't also focus the source pane
+            onClick={() => onOpen(folderLink)}
+          >
+            {sub}
+          </button>
+        ) : (
+          <span className="tree-sub">{sub}</span>
+        )}
       </div>
       <span className="status-faint">{d.word}</span>
     </div>
@@ -63,6 +85,10 @@ export function AgentsPanel() {
     useStore.getState().focusSession(paneId)
     TerminalManager.focus(paneId)
   }
+  // Open a folder (agent cwd / worktree) as a split beside the active pane; the shell
+  // context comes from the session's own pane (paneId) so a WSL agent's path opens in WSL.
+  const openHere = (cwd: string, paneId?: string) =>
+    useStore.getState().openFolderInSplit(cwd, paneId)
 
   const nodes = Object.values(agents.nodes)
   const working = nodes.filter((n) => n.status === "working").length
@@ -93,6 +119,8 @@ export function AgentsPanel() {
           const paneSession = root.paneId ? sessions[root.paneId] : undefined
           const paneLabel = paneSession ? displaySessionTitle(paneSession, home) : "external"
           const go = paneSession ? () => focusPane(root.paneId) : undefined
+          // Every folder opened from this session uses the session's own pane shell context.
+          const openForSession = (cwd: string) => openHere(cwd, root.paneId)
           return (
             <Fragment key={rid}>
               <div
@@ -102,11 +130,35 @@ export function AgentsPanel() {
               >
                 <TreeStructure size={12} /> {paneLabel}
               </div>
-              <AgentRow node={root} depth={0} onFocusPane={go} />
+              <AgentRow node={root} depth={0} onFocusPane={go} onOpen={openForSession} />
               {root.childIds.map((cid) => {
                 const child = agents.nodes[cid]
-                return child ? <AgentRow key={cid} node={child} depth={1} onFocusPane={go} /> : null
+                return child ? (
+                  <AgentRow
+                    key={cid}
+                    node={child}
+                    depth={1}
+                    rootCwd={root.cwd}
+                    onFocusPane={go}
+                    onOpen={openForSession}
+                  />
+                ) : null
               })}
+              {root.worktrees?.map((w) => (
+                <div key={w.path} className="diff-file agent-worktree" style={{ paddingLeft: 26 }}>
+                  <GitBranch size={12} color="var(--blue)" />
+                  <div className="tree-labels">
+                    <span className="tree-primary">{w.branch ?? base(w.path)}</span>
+                    <button
+                      className="tree-sub folder-link"
+                      title={`Open a terminal here — ${w.path}`}
+                      onClick={() => openForSession(w.path)}
+                    >
+                      {base(w.path)}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </Fragment>
           )
         })}

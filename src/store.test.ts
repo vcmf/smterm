@@ -28,6 +28,16 @@ describe("store — tabs & panes", () => {
     expect(Object.keys(st().sessions)).toHaveLength(2)
   })
 
+  it("openFolderInSplit splits the active pane with a session rooted at the given cwd", () => {
+    st().newTab(shell)
+    st().openFolderInSplit("/some/worktree")
+    const tab = firstTab()
+    expect(tab.root.type).toBe("split")
+    expect(allSessionIds(tab.root)).toHaveLength(2)
+    // the newly-opened (now active) pane is rooted at the requested folder
+    expect(st().sessions[tab.activeSessionId]!.cwd).toBe("/some/worktree")
+  })
+
   it("closePane collapses a split back to a single leaf", () => {
     st().newTab(shell)
     st().splitActive("row", shell)
