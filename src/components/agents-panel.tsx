@@ -53,17 +53,16 @@ function AgentRow({
           {node.currentTool && <span className="status-faint"> · {node.currentTool}</span>}
         </span>
         {folderLink ? (
-          // The folder is the affordance: hover underlines it, click opens a terminal there.
-          <span
+          // The folder is the affordance: a real button (keyboard-focusable) styled as
+          // inline text — hover/focus underlines it, click/Enter opens a terminal there.
+          <button
             className="tree-sub folder-link"
             title={`Open a terminal here — ${folderLink}`}
-            onMouseDown={(e) => {
-              e.stopPropagation() // don't also focus the source pane
-              onOpen(folderLink)
-            }}
+            onMouseDown={(e) => e.stopPropagation()} // don't also focus the source pane
+            onClick={() => onOpen(folderLink)}
           >
             {sub}
-          </span>
+          </button>
         ) : (
           <span className="tree-sub">{sub}</span>
         )}
@@ -146,18 +145,17 @@ export function AgentsPanel() {
                 ) : null
               })}
               {root.worktrees?.map((w) => (
-                // A worktree row exists to be opened → the whole row is the affordance.
-                <div
-                  key={w.path}
-                  className="diff-file agent-worktree"
-                  style={{ paddingLeft: 26, cursor: "pointer" }}
-                  title={`Open a terminal here — ${w.path}`}
-                  onMouseDown={() => openForSession(w.path)}
-                >
+                <div key={w.path} className="diff-file agent-worktree" style={{ paddingLeft: 26 }}>
                   <GitBranch size={12} color="var(--blue)" />
                   <div className="tree-labels">
                     <span className="tree-primary">{w.branch ?? base(w.path)}</span>
-                    <span className="tree-sub folder-link">{base(w.path)}</span>
+                    <button
+                      className="tree-sub folder-link"
+                      title={`Open a terminal here — ${w.path}`}
+                      onClick={() => openForSession(w.path)}
+                    >
+                      {base(w.path)}
+                    </button>
                   </div>
                 </div>
               ))}

@@ -1317,13 +1317,22 @@ body {
 }
 
 /* ── Agents board: open-a-terminal-here ──────────────────
-   The folder itself is the affordance — hover underlines it, click opens a terminal
-   split rooted there (no separate icon). A worktree row is clickable as a whole. */
+   The folder itself is the affordance — a real button styled as inline text (so it's
+   keyboard-focusable); hover/focus underlines it, click/Enter opens a terminal split
+   rooted there. .tree-sub still owns its font-size/colour; this only resets the button. */
 .folder-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
   cursor: pointer;
 }
-.folder-link:hover,
-.agent-worktree:hover .folder-link {
+.folder-link:hover {
   color: var(--text);
   text-decoration: underline;
+}
+.folder-link:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 3px;
 }
