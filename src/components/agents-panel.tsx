@@ -1,5 +1,5 @@
 import { Fragment } from "react"
-import { X, TreeStructure } from "@phosphor-icons/react"
+import { X, TreeStructure, TerminalWindow, GitBranch } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { displaySessionTitle } from "../lib/session-label"
@@ -15,21 +15,43 @@ const DOT: Record<AgentStatus, { cls: string; word: string }> = {
 
 const base = (p?: string) => (p ? (p.replace(/\/+$/, "").split(/[\\/]/).pop() ?? p) : "")
 
+// A small "open a terminal split rooted here" button, shared by agent rows + worktrees.
+function OpenHere({ cwd, onOpen }: { cwd: string; onOpen: (cwd: string) => void }) {
+  return (
+    <button
+      className="iconbtn agent-openhere"
+      style={{ width: 22, height: 22 }}
+      title={`Open a terminal here — ${cwd}`}
+      onMouseDown={(e) => {
+        e.stopPropagation() // don't also focus the source pane
+        onOpen(cwd)
+      }}
+    >
+      <TerminalWindow size={13} />
+    </button>
+  )
+}
+
 function AgentRow({
   node,
   depth,
   onFocusPane,
+  onOpen,
 }: {
   node: AgentNode
   depth: number
   onFocusPane?: () => void
+  onOpen: (cwd: string) => void
 }) {
   const d = DOT[node.status]
   const isRoot = node.agentType === "root"
   const primary = isRoot ? "session" : node.agentType
-  const sub = isRoot
-    ? base(node.cwd) || "—"
-    : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—"
+  // Folder-forward: show where the agent is operating; fall back to file/message.
+  const sub =
+    base(node.cwd) ||
+    (isRoot
+      ? "—"
+      : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—")
   return (
     <div
       className="diff-file"
@@ -43,8 +65,11 @@ function AgentRow({
           {primary}
           {node.currentTool && <span className="status-faint"> · {node.currentTool}</span>}
         </span>
-        <span className="tree-sub">{sub}</span>
+        <span className="tree-sub" title={node.cwd}>
+          {sub}
+        </span>
       </div>
+      {node.cwd && <OpenHere cwd={node.cwd} onOpen={onOpen} />}
       <span className="status-faint">{d.word}</span>
     </div>
   )
@@ -63,6 +88,8 @@ export function AgentsPanel() {
     useStore.getState().focusSession(paneId)
     TerminalManager.focus(paneId)
   }
+  // Open a folder (agent cwd / worktree) as a split beside the active pane.
+  const openHere = (cwd: string) => useStore.getState().openFolderInSplit(cwd)
 
   const nodes = Object.values(agents.nodes)
   const working = nodes.filter((n) => n.status === "working").length
@@ -102,11 +129,25 @@ export function AgentsPanel() {
               >
                 <TreeStructure size={12} /> {paneLabel}
               </div>
-              <AgentRow node={root} depth={0} onFocusPane={go} />
+              <AgentRow node={root} depth={0} onFocusPane={go} onOpen={openHere} />
               {root.childIds.map((cid) => {
                 const child = agents.nodes[cid]
-                return child ? <AgentRow key={cid} node={child} depth={1} onFocusPane={go} /> : null
+                return child ? (
+                  <AgentRow key={cid} node={child} depth={1} onFocusPane={go} onOpen={openHere} />
+                ) : null
               })}
+              {root.worktrees?.map((w) => (
+                <div key={w.path} className="diff-file agent-worktree" style={{ paddingLeft: 26 }}>
+                  <GitBranch size={12} color="var(--blue)" />
+                  <div className="tree-labels">
+                    <span className="tree-primary">{w.branch ?? base(w.path)}</span>
+                    <span className="tree-sub" title={w.path}>
+                      {base(w.path)}
+                    </span>
+                  </div>
+                  <OpenHere cwd={w.path} onOpen={openHere} />
+                </div>
+              ))}
             </Fragment>
           )
         })}

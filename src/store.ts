@@ -83,6 +83,7 @@ interface AppState {
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
   splitActive: (direction: "row" | "column", fallback?: ShellOption) => void
+  openFolderInSplit: (cwd: string) => void // split the active pane, rooted at cwd (agents board)
   closePane: (tabId: string, sessionId: string) => void
   setActivePane: (tabId: string, sessionId: string) => void
   focusSession: (sessionId: string) => void
@@ -244,6 +245,26 @@ export const useStore = create<AppState>((set, get) => ({
         session.id,
         newId(),
       )
+      return {
+        sessions: { ...state.sessions, [session.id]: session },
+        tabs: state.tabs.map((t) =>
+          t.id === tab.id ? { ...t, root, activeSessionId: session.id } : t,
+        ),
+      }
+    }),
+
+  // Open a folder (an agent's cwd / worktree from the board) as a split beside the active
+  // pane. Mirrors splitActive but with an explicit cwd; a missing dir falls back to $HOME
+  // in main (spawn guard), so a stale worktree path can't fail the spawn.
+  openFolderInSplit: (cwd) =>
+    set((state) => {
+      const tab = state.tabs.find((t) => t.id === state.activeTabId)
+      if (!tab) return {}
+      const src = state.sessions[tab.activeSessionId]
+      const shell = inheritShell(state.shells, src) ?? state.shells[0]
+      if (!shell) return {}
+      const session = makeSession(shell, cwd)
+      const root: PaneNode = splitNode(tab.root, tab.activeSessionId, "row", session.id, newId())
       return {
         sessions: { ...state.sessions, [session.id]: session },
         tabs: state.tabs.map((t) =>

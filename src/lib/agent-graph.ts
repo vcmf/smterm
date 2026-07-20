@@ -25,6 +25,14 @@ export interface AgentEvent {
   toolName?: string // tool_name on Pre/PostToolUse
   filePath?: string // extracted from a file tool's input, or a FileChanged path
   message?: string // Notification message / last_assistant_message
+  worktreePath?: string // worktree_path on WorktreeCreate/WorktreeRemove
+  baseBranch?: string // base_branch on WorktreeCreate
+}
+
+/** A git worktree an agent created (WorktreeCreate), for the "open a terminal here" chip. */
+export interface Worktree {
+  path: string
+  branch?: string
 }
 
 export interface AgentNode {
@@ -36,6 +44,7 @@ export interface AgentNode {
   currentTool?: string // in-flight tool (set on PreToolUse, cleared on PostToolUse)
   cwd?: string
   recentFiles: string[] // most-recent-first, capped
+  worktrees?: Worktree[] // worktrees created in this session (WorktreeCreate), root only
   lastMessage?: string
   parentId?: string // undefined for a root
   childIds: string[] // sub-agents, in order of appearance
@@ -161,6 +170,20 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
       break
     case "FileChanged":
       set(targetId, { recentFiles: withFile(at(targetId).recentFiles, ev.filePath) })
+      break
+    case "WorktreeCreate":
+      if (ev.worktreePath) {
+        const cur = at(targetId).worktrees ?? []
+        if (!cur.some((w) => w.path === ev.worktreePath))
+          set(targetId, { worktrees: [...cur, { path: ev.worktreePath, branch: ev.baseBranch }] })
+      }
+      break
+    case "WorktreeRemove":
+      if (ev.worktreePath) {
+        const cur = at(targetId).worktrees
+        if (cur?.some((w) => w.path === ev.worktreePath))
+          set(targetId, { worktrees: cur.filter((w) => w.path !== ev.worktreePath) })
+      }
       break
     case "SessionEnd": {
       // Session closed → evict it from the live board (root + its sub-agents). Also

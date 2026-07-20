@@ -228,3 +228,39 @@ describe("agent-graph — sessions & edge cases", () => {
     expect(reduceAgentEvents([])).toEqual(emptyGraph)
   })
 })
+
+describe("agent-graph — worktrees", () => {
+  it("records a created worktree (path + branch) on the session root", () => {
+    const g = reduceAgentEvents([
+      { event: "SessionStart", sessionId: S, cwd: "/repo" },
+      {
+        event: "WorktreeCreate",
+        sessionId: S,
+        worktreePath: "/repo/.worktrees/feat-x",
+        baseBranch: "feat/x",
+      },
+    ])
+    expect(g.nodes["root:sess-1"]!.worktrees).toEqual([
+      { path: "/repo/.worktrees/feat-x", branch: "feat/x" },
+    ])
+  })
+
+  it("dedupes a repeated WorktreeCreate for the same path", () => {
+    const g = reduceAgentEvents([
+      { event: "SessionStart", sessionId: S },
+      { event: "WorktreeCreate", sessionId: S, worktreePath: "/wt/a", baseBranch: "a" },
+      { event: "WorktreeCreate", sessionId: S, worktreePath: "/wt/a", baseBranch: "a" },
+    ])
+    expect(g.nodes["root:sess-1"]!.worktrees).toHaveLength(1)
+  })
+
+  it("removes a worktree on WorktreeRemove, leaving the others", () => {
+    const g = reduceAgentEvents([
+      { event: "SessionStart", sessionId: S },
+      { event: "WorktreeCreate", sessionId: S, worktreePath: "/wt/a", baseBranch: "a" },
+      { event: "WorktreeCreate", sessionId: S, worktreePath: "/wt/b", baseBranch: "b" },
+      { event: "WorktreeRemove", sessionId: S, worktreePath: "/wt/a" },
+    ])
+    expect(g.nodes["root:sess-1"]!.worktrees).toEqual([{ path: "/wt/b", branch: "b" }])
+  })
+})

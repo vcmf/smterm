@@ -1315,3 +1315,21 @@ body {
 .root-input.invalid {
   border-color: var(--red);
 }
+
+/* ── Agents board: open-terminal-here + worktree rows ────
+   The inline "open a terminal here" action reveals on row hover (VS Code style). */
+.agent-openhere {
+  opacity: 0;
+  flex: 0 0 auto;
+  transition: opacity 0.1s;
+}
+.diff-file:hover .agent-openhere,
+.agent-openhere:focus-visible {
+  opacity: 1;
+}
+.agent-worktree .agent-openhere {
+  opacity: 0.5; /* worktree rows exist to be opened — hint the action */
+}
+.agent-worktree:hover .agent-openhere {
+  opacity: 1;
+}
