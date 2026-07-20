@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CaretRight, CaretDown, Folder, File as FileIcon, X } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
@@ -42,18 +42,23 @@ export function FilesPanel() {
 
   // Apply a state update to a specific root's cache entry; mirror to the UI only if that
   // root is still active — so a late background readdir for a root you've since left
-  // updates its cache but never flashes into the current view.
-  const apply = (key: string, fn: (s: FileTreeState) => FileTreeState) => {
+  // updates its cache but never flashes into the current view. useCallback keeps a stable
+  // identity (it only closes over the module cache + refs) so the load effect can list it
+  // as a dep without re-running on every render.
+  const apply = useCallback((key: string, fn: (s: FileTreeState) => FileTreeState) => {
     // Drop a late read for a root that's neither active nor still cached — otherwise it
     // would rebuild a one-listing tree, re-insert it as MRU, and evict a live entry.
     if (rootRef.current !== key && !cache.has(key)) return
     const next = fn(cache.get(key) ?? emptyTree(key))
     cache.set(key, next)
     if (rootRef.current === key) setTree(next)
-  }
-  const load = (key: string, dir: string) => {
-    void ipc.readdir(dir).then((listing) => apply(key, (s) => setListing(s, dir, listing)))
-  }
+  }, [])
+  const load = useCallback(
+    (key: string, dir: string) => {
+      void ipc.readdir(dir).then((listing) => apply(key, (s) => setListing(s, dir, listing)))
+    },
+    [apply],
+  )
 
   useEffect(() => {
     rootRef.current = root
@@ -71,7 +76,7 @@ export function FilesPanel() {
       setTree(t)
       load(root, root) // first visit: read the root
     }
-  }, [root])
+  }, [root, load])
 
   const toggle = (dir: string) => {
     if (!root) return
