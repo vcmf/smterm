@@ -639,7 +639,22 @@ function openFile(cwd: string, file: string, line?: number, col?: number): void 
 app.setName("smterm")
 app.setAppUserModelId("com.smterm.app")
 
+// Single-instance guard. A second launch — an update-relaunch racing the old process, or
+// a stray double-click — would start a SECOND hook receiver on a different ephemeral port
+// and overwrite the shared claude-hooks.json. When the port-owning instance quits, the
+// survivor's Claude sessions keep POSTing to the now-dead port → `connect ECONNREFUSED`
+// on every hook, spamming the agent's output. Hold a lock: the second instance just focuses
+// the running window and quits, so there's always exactly one receiver / one config writer.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) app.quit()
+app.on("second-instance", () => {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.focus()
+})
+
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return // second instance — it's quitting; start nothing
   // GUI-launched apps (Finder/Dock) inherit a bare launchd PATH, so shells can't find
   // Homebrew/cargo tools (starship, etc.). Import the login shell's real env before any
   // PTY spawns. Only when packaged — in dev the app is launched from a terminal that
