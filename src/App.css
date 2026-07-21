@@ -667,15 +667,17 @@ body {
 .rightpanel {
   position: relative;
   flex: 0 0 auto;
+  width: var(--rpw, 388px); /* set live during a drag, committed to the store on release */
   display: flex;
   min-height: 0;
 }
+/* Sits just inside the panel's left border so its hit area never overlaps the terminal. */
 .rightpanel-resizer {
   position: absolute;
-  left: -3px;
+  left: 0;
   top: 0;
   bottom: 0;
-  width: 7px;
+  width: 6px;
   z-index: 6;
   cursor: col-resize;
 }
@@ -683,6 +685,15 @@ body {
 .rightpanel-resizer:active {
   background: var(--accent);
   opacity: 0.35;
+}
+.rightpanel-resizer:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+/* While dragging the divider, suppress text selection across the app. */
+body.resizing-col {
+  user-select: none;
+  cursor: col-resize;
 }
 .diffpanel {
   width: 100%;

@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useLayoutEffect } from "react"
 import { ipc } from "./lib/ipc"
 import { TopBar } from "./components/top-bar"
 import { Sidebar } from "./components/sidebar"
@@ -265,6 +265,24 @@ function App() {
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
 
+  // Drive the panel width via a CSS var so a drag can update it without re-rendering
+  // the App subtree each frame (the resizer sets --rpw live; the store commits on release).
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty("--rpw", `${rightPanelWidth}px`)
+  }, [rightPanelWidth])
+
+  // Keep the "≤60% of the window" guarantee outside an active drag too: re-clamp on
+  // mount (restore may carry a width from a larger monitor) and whenever the window resizes.
+  useEffect(() => {
+    const reclamp = () =>
+      useStore
+        .getState()
+        .setRightPanelWidth(useStore.getState().rightPanelWidth, window.innerWidth * 0.6)
+    reclamp()
+    window.addEventListener("resize", reclamp)
+    return () => window.removeEventListener("resize", reclamp)
+  }, [])
+
   return (
     <div className="app">
       <TopBar />
@@ -279,7 +297,7 @@ function App() {
           {searchOpen && <SearchBar />}
         </div>
         {rightView && (
-          <div className="rightpanel" style={{ width: rightPanelWidth }}>
+          <div className="rightpanel">
             <RightPanelResizer />
             {rightView === "files" && <FilesPanel />}
             {rightView === "changes" && <DiffPanel />}
