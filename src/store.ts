@@ -14,6 +14,7 @@ import type { EditorInfo } from "./lib/file-actions"
 import { normalizeRootPath } from "./lib/breadcrumb"
 import { wslContext } from "./lib/wsl"
 import type { WorkspaceState } from "./lib/workspace"
+import { clampPanelWidth, RIGHT_PANEL_DEFAULT } from "./lib/right-panel"
 
 const newId = () => crypto.randomUUID()
 
@@ -51,6 +52,7 @@ interface AppState {
   paletteOpen: boolean
   searchOpen: boolean
   rightView: RightView // which view the single right-side panel shows (null = hidden)
+  rightPanelWidth: number // px width of the right panel (drag-resizable, persisted)
   sidebarCollapsed: boolean
   git: GitStatus | null
   agents: AgentGraph // live tree of Claude agents/sub-agents (M6, fed by hook events)
@@ -78,6 +80,7 @@ interface AppState {
   setSettings: (settings: Settings) => void
   setShells: (shells: ShellOption[]) => void
   restoreWorkspace: (ws: WorkspaceState) => void
+  setRightPanelWidth: (px: number, maxAvail?: number) => void
   newTab: (shell: ShellOption) => void
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
@@ -146,6 +149,7 @@ export const useStore = create<AppState>((set, get) => ({
   paletteOpen: false,
   searchOpen: false,
   rightView: null,
+  rightPanelWidth: RIGHT_PANEL_DEFAULT,
   sidebarCollapsed: false,
   git: null,
   agents: emptyGraph,
@@ -204,7 +208,13 @@ export const useStore = create<AppState>((set, get) => ({
   setShells: (shells) => set({ shells }),
 
   restoreWorkspace: (ws) =>
-    set({ sessions: ws.sessions, tabs: ws.tabs, activeTabId: ws.activeTabId }),
+    set({
+      sessions: ws.sessions,
+      tabs: ws.tabs,
+      activeTabId: ws.activeTabId,
+      ...(ws.rightPanelWidth !== undefined ? { rightPanelWidth: ws.rightPanelWidth } : {}),
+    }),
+  setRightPanelWidth: (px, maxAvail) => set({ rightPanelWidth: clampPanelWidth(px, maxAvail) }),
 
   newTab: (shell) =>
     set((state) => {

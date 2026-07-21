@@ -662,9 +662,31 @@ body {
 }
 
 /* ── Diff panel (388px) ──────────────────────────────── */
-.diffpanel {
-  width: 388px;
+/* Right panel host: fixed-width flex item (width set inline from the store), with a
+   drag handle straddling its left border. The view inside fills it. */
+.rightpanel {
+  position: relative;
   flex: 0 0 auto;
+  display: flex;
+  min-height: 0;
+}
+.rightpanel-resizer {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 6;
+  cursor: col-resize;
+}
+.rightpanel-resizer:hover,
+.rightpanel-resizer:active {
+  background: var(--accent);
+  opacity: 0.35;
+}
+.diffpanel {
+  width: 100%;
+  flex: 1 1 auto;
   background: var(--panel);
   border-left: 1px solid var(--border);
   display: flex;

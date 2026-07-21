@@ -1,4 +1,5 @@
 import type { PaneNode, Session, Tab } from "../types"
+import { clampPanelWidth } from "./right-panel"
 
 // Persisted workspace (VS Code-style layout restore). We save the layout +
 // enough to respawn each pane's shell in its last directory — NOT live process
@@ -26,12 +27,14 @@ export interface PersistedWorkspace {
   activeTabId: string | null
   tabs: PersistedTab[]
   sessions: PersistedSession[]
+  rightPanelWidth?: number
 }
 
 export interface WorkspaceState {
   sessions: Record<string, Session>
   tabs: Tab[]
   activeTabId: string | null
+  rightPanelWidth?: number
 }
 
 /** Snapshot the store's layout into the persistable shape (drops runtime status). */
@@ -52,6 +55,7 @@ export function serializeWorkspace(state: WorkspaceState): PersistedWorkspace {
       args: s.args,
       cwd: s.cwd,
     })),
+    ...(state.rightPanelWidth !== undefined ? { rightPanelWidth: state.rightPanelWidth } : {}),
   }
 }
 
@@ -93,7 +97,10 @@ export function deserializeWorkspace(input: unknown): WorkspaceState | null {
       ? w.activeTabId
       : (tabs[0]?.id ?? null)
 
-  return { sessions, tabs, activeTabId }
+  const rightPanelWidth =
+    typeof w.rightPanelWidth === "number" ? clampPanelWidth(w.rightPanelWidth) : undefined
+
+  return { sessions, tabs, activeTabId, rightPanelWidth }
 }
 
 /** Parse the raw workspace.json file, tolerant of bad/empty content. */
