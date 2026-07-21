@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useLayoutEffect } from "react"
 import { ipc } from "./lib/ipc"
 import { TopBar } from "./components/top-bar"
 import { Sidebar } from "./components/sidebar"
@@ -11,6 +11,7 @@ import { FilesPanel } from "./components/files-panel"
 import { PaneLayout } from "./components/pane-layout"
 import { SettingsPanel } from "./components/settings-panel"
 import { FilePreview } from "./components/file-preview"
+import { RightPanelResizer } from "./components/right-panel-resizer"
 import { useActiveCwd, getActiveWsl } from "./lib/use-active-cwd"
 import { TerminalManager } from "./terminal/terminal-manager"
 import { useStore } from "./store"
@@ -30,6 +31,7 @@ function App() {
   const paletteOpen = useStore((s) => s.paletteOpen)
   const searchOpen = useStore((s) => s.searchOpen)
   const rightView = useStore((s) => s.rightView)
+  const rightPanelWidth = useStore((s) => s.rightPanelWidth)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const activeCwd = useActiveCwd()
 
@@ -77,6 +79,7 @@ function App() {
         sessions: s.sessions,
         tabs: s.tabs,
         activeTabId: s.activeTabId,
+        rightPanelWidth: s.rightPanelWidth,
       })
       if (json === last) return
       last = json
@@ -86,7 +89,8 @@ function App() {
       if (
         state.tabs !== prev.tabs ||
         state.sessions !== prev.sessions ||
-        state.activeTabId !== prev.activeTabId
+        state.activeTabId !== prev.activeTabId ||
+        state.rightPanelWidth !== prev.rightPanelWidth
       ) {
         clearTimeout(timer)
         timer = setTimeout(save, 600)
@@ -261,6 +265,24 @@ function App() {
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
 
+  // Drive the panel width via a CSS var so a drag can update it without re-rendering
+  // the App subtree each frame (the resizer sets --rpw live; the store commits on release).
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty("--rpw", `${rightPanelWidth}px`)
+  }, [rightPanelWidth])
+
+  // Keep the "≤60% of the window" guarantee outside an active drag too: re-clamp on
+  // mount (restore may carry a width from a larger monitor) and whenever the window resizes.
+  useEffect(() => {
+    const reclamp = () =>
+      useStore
+        .getState()
+        .setRightPanelWidth(useStore.getState().rightPanelWidth, window.innerWidth * 0.6)
+    reclamp()
+    window.addEventListener("resize", reclamp)
+    return () => window.removeEventListener("resize", reclamp)
+  }, [])
+
   return (
     <div className="app">
       <TopBar />
@@ -274,9 +296,14 @@ function App() {
           )}
           {searchOpen && <SearchBar />}
         </div>
-        {rightView === "files" && <FilesPanel />}
-        {rightView === "changes" && <DiffPanel />}
-        {rightView === "agents" && <AgentsPanel />}
+        {rightView && (
+          <div className="rightpanel">
+            <RightPanelResizer />
+            {rightView === "files" && <FilesPanel />}
+            {rightView === "changes" && <DiffPanel />}
+            {rightView === "agents" && <AgentsPanel />}
+          </div>
+        )}
       </div>
       <StatusBar />
       {paletteOpen && <CommandPalette />}

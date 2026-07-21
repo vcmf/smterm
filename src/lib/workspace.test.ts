@@ -57,6 +57,17 @@ describe("workspace serialize/deserialize", () => {
     expect(restored.activeTabId).toBe("t1")
   })
 
+  it("round-trips rightPanelWidth (clamped), and omits it when unset", () => {
+    const withWidth = parseWorkspace(serializeToJson({ ...state, rightPanelWidth: 500 }))!
+    expect(withWidth.rightPanelWidth).toBe(500)
+    // clamped on restore (a bad persisted value can't set an absurd width)
+    const clamped = deserializeWorkspace({ ...serializeWorkspace(state), rightPanelWidth: 5000 })!
+    expect(clamped.rightPanelWidth).toBe(760)
+    // absent → undefined (restore keeps the store default)
+    expect(serializeWorkspace(state)).not.toHaveProperty("rightPanelWidth")
+    expect(parseWorkspace(serializeToJson(state))!.rightPanelWidth).toBeUndefined()
+  })
+
   it("rejects malformed / empty input", () => {
     expect(deserializeWorkspace(null)).toBeNull()
     expect(deserializeWorkspace({})).toBeNull()
