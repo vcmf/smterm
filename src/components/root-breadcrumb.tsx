@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
+import { getActiveWsl } from "../lib/use-active-cwd"
 import { parseBreadcrumb, collapseBreadcrumb } from "../lib/breadcrumb"
 import { isAbsoluteHostPath } from "../lib/file-actions"
 
@@ -48,8 +49,9 @@ export function RootBreadcrumb({
   const applyTyped = async () => {
     const p = value.trim()
     if (p === root) return setEditing(false)
-    // Must be an absolute host path (setPaneRoot enforces it too) AND an existing dir.
-    if (isAbsoluteHostPath(p) && (await ipc.pathIsDir(p))) {
+    // Must be an absolute host path (setPaneRoot enforces it too) AND an existing dir —
+    // checked via the pane's WSL context so a Linux path validates through the UNC share.
+    if (isAbsoluteHostPath(p) && (await ipc.pathIsDir(p, getActiveWsl()))) {
       setRoot(p)
       setEditing(false)
     } else {
@@ -57,7 +59,7 @@ export function RootBreadcrumb({
     }
   }
   const browse = async () => {
-    const picked = await ipc.pickDirectory(root)
+    const picked = await ipc.pickDirectory(root, getActiveWsl())
     if (picked) setRoot(picked)
   }
 

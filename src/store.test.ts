@@ -363,10 +363,10 @@ describe("store — paneRoot (Files-panel root override)", () => {
     st().setPaneRoot(activeId(), "relative/x")
     expect(st().paneRoot[activeId()]).toBeUndefined()
   })
-  it("rejects a root for a WSL pane (host can't reach its Linux paths)", () => {
+  it("accepts a WSL pane's Linux path (read via the distro's UNC share)", () => {
     st().newTab(wslShell)
     st().setPaneRoot(activeId(), "/home/me/proj")
-    expect(st().paneRoot[activeId()]).toBeUndefined()
+    expect(st().paneRoot[activeId()]).toBe("/home/me/proj")
   })
   it("clearPaneRoot removes the override", () => {
     st().newTab(shell)

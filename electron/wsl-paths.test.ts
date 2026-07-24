@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { wslUncCandidates, winToMnt } from "./wsl-paths"
+import { wslUncCandidates, winToMnt, uncToWslPath } from "./wsl-paths"
 
 describe("wslUncCandidates", () => {
   it("maps an absolute Linux path into both share forms, newest first", () => {
@@ -36,5 +36,20 @@ describe("winToMnt", () => {
   it("returns null for a non-drive path", () => {
     expect(winToMnt("/already/posix")).toBeNull()
     expect(winToMnt("\\\\wsl.localhost\\Ubuntu\\home")).toBeNull()
+  })
+})
+
+describe("uncToWslPath", () => {
+  it("maps a WSL UNC path back to its Linux form", () => {
+    expect(uncToWslPath("\\\\wsl.localhost\\Ubuntu\\home\\me\\proj")).toBe("/home/me/proj")
+    expect(uncToWslPath("\\\\wsl$\\Ubuntu-22.04\\srv")).toBe("/srv")
+  })
+  it("maps the distro root to /", () => {
+    expect(uncToWslPath("\\\\wsl.localhost\\Ubuntu")).toBe("/")
+  })
+  it("returns null for a non-WSL-UNC path", () => {
+    expect(uncToWslPath("C:\\Users\\me")).toBeNull()
+    expect(uncToWslPath("/home/me")).toBeNull()
+    expect(uncToWslPath("\\\\server\\share\\x")).toBeNull()
   })
 })

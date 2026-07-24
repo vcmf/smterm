@@ -39,7 +39,7 @@ import type { AgentEvent } from "../src/lib/agent-graph"
 import { buildHookSettings } from "./hook-writer"
 import { hasImageFormat } from "./clipboard-image"
 import { toDirListing } from "../src/lib/dir-listing"
-import { wslUncCandidates, winToMnt } from "./wsl-paths"
+import { wslUncCandidates, winToMnt, uncToWslPath } from "./wsl-paths"
 import type { WslContext } from "../src/lib/wsl"
 import {
   classifyPreview,
@@ -494,27 +494,38 @@ function registerIpc() {
   )
 
   // Native folder picker for the Files-panel root; returns null if cancelled.
-  ipcMain.handle("dialog:pick-directory", async (_e, defaultPath?: string) => {
+  ipcMain.handle("dialog:pick-directory", async (_e, defaultPath?: string, wsl?: WslContext) => {
     try {
+      // On a WSL pane the dialog can only browse host-visible paths, so open it at the
+      // current root's UNC share and translate the picked UNC path back to its Linux form
+      // — keeping the tree/breadcrumb/git decorations distro-native (consistent with the
+      // crumb + double-click reroot paths).
+      const dp = wsl && defaultPath ? (wslTargets(defaultPath, wsl)[0] ?? defaultPath) : defaultPath
       const opts: Electron.OpenDialogOptions = {
         properties: ["openDirectory"],
-        ...(defaultPath ? { defaultPath } : {}),
+        ...(dp ? { defaultPath: dp } : {}),
       }
       const res = await (mainWindow
         ? dialog.showOpenDialog(mainWindow, opts)
         : dialog.showOpenDialog(opts))
-      return res.canceled ? null : (res.filePaths[0] ?? null)
+      const picked = res.canceled ? null : (res.filePaths[0] ?? null)
+      return picked && wsl ? (uncToWslPath(picked) ?? picked) : picked
     } catch {
       return null // e.g. window destroyed mid-dialog — never throw into Electron
     }
   })
   // Validate a typed path is an existing directory (Files-panel root entry).
-  ipcMain.handle("fs:is-dir", async (_e, p: string) => {
-    try {
-      return (await fs.promises.stat(p)).isDirectory()
-    } catch {
-      return false
+  ipcMain.handle("fs:is-dir", async (_e, p: string, wsl?: WslContext) => {
+    // WSL-aware (like readdir/read-preview): a WSL pane's Linux path is checked through the
+    // distro's UNC share, so the typed-path reroot validates instead of always failing.
+    for (const target of wslTargets(p, wsl)) {
+      try {
+        if ((await fs.promises.stat(target)).isDirectory()) return true
+      } catch {
+        // try the next share form
+      }
     }
+    return false
   })
 
   // Links + notifications.

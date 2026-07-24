@@ -52,8 +52,9 @@ const api = {
   readdir: (dir: string, wsl?: WslContext) => ipcRenderer.invoke("fs:readdir", dir, wsl),
   readFilePreview: (path: string, wsl?: WslContext) =>
     ipcRenderer.invoke("fs:read-preview", path, wsl),
-  pickDirectory: (defaultPath?: string) => ipcRenderer.invoke("dialog:pick-directory", defaultPath),
-  pathIsDir: (p: string) => ipcRenderer.invoke("fs:is-dir", p),
+  pickDirectory: (defaultPath?: string, wsl?: WslContext) =>
+    ipcRenderer.invoke("dialog:pick-directory", defaultPath, wsl),
+  pathIsDir: (p: string, wsl?: WslContext) => ipcRenderer.invoke("fs:is-dir", p, wsl),
 
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
   maximizeWindow: () => ipcRenderer.send("window:maximize"),

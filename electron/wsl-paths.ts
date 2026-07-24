@@ -24,3 +24,13 @@ export function winToMnt(windowsPath: string): string | null {
   if (!m) return null
   return `/mnt/${m[1]!.toLowerCase()}/${m[2]!.replace(/\\/g, "/")}`
 }
+
+/** Linux path for a WSL UNC path (`\\wsl.localhost\<distro>\home\me` → `/home/me`), so a
+ *  path the native folder picker returned from a distro share becomes the distro-native
+ *  form our tree/breadcrumb/git decorations use. null if it isn't a WSL UNC path. */
+export function uncToWslPath(p: string): string | null {
+  const m = /^\\\\(?:wsl\.localhost|wsl\$)\\[^\\]+(\\.*)?$/.exec(p)
+  if (!m) return null
+  const rest = m[1] ?? ""
+  return rest ? rest.replace(/\\/g, "/") : "/"
+}
