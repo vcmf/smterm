@@ -228,7 +228,8 @@ export function wslInjection(
     return {
       args: ["--", "bash", "--rcfile", `${wslBase}/bash/bashrc`, "-i"],
       env: {},
-      wslenv: ["SMTERM_SHARE_HISTORY"],
+      // /p path-translates the (Windows) hook-settings path so claude-in-WSL can read it.
+      wslenv: ["SMTERM_SHARE_HISTORY", "SMTERM_CLAUDE_SETTINGS/p", "SMTERM_PANE_ID"],
     }
   }
   if (name === "zsh") {
@@ -242,7 +243,14 @@ export function wslInjection(
     return {
       args: ["--", "zsh", "-i"],
       env: { ZDOTDIR: zdir, SMTERM_ZDOTDIR: zdir, SMTERM_SHELL_INTEGRATION: "1" },
-      wslenv: ["ZDOTDIR", "SMTERM_ZDOTDIR", "SMTERM_SHELL_INTEGRATION", "SMTERM_SHARE_HISTORY"],
+      wslenv: [
+        "ZDOTDIR",
+        "SMTERM_ZDOTDIR",
+        "SMTERM_SHELL_INTEGRATION",
+        "SMTERM_SHARE_HISTORY",
+        "SMTERM_CLAUDE_SETTINGS/p", // /p path-translates it for claude-in-WSL to read
+        "SMTERM_PANE_ID",
+      ],
     }
   }
   return null

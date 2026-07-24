@@ -82,7 +82,11 @@ describe("wslInjection", () => {
   it("bash → --rcfile with the WSL-translated path", () => {
     const r = wslInjection("/bin/bash", base)
     expect(r?.args).toEqual(["--", "bash", "--rcfile", `${base}/bash/bashrc`, "-i"])
-    expect(r?.wslenv).toEqual(["SMTERM_SHARE_HISTORY"]) // opt-out crosses the boundary
+    expect(r?.wslenv).toEqual([
+      "SMTERM_SHARE_HISTORY", // opt-out crosses the boundary
+      "SMTERM_CLAUDE_SETTINGS/p", // hook settings path (path-translated)
+      "SMTERM_PANE_ID", // agents-board pane tag
+    ])
   })
 
   it("zsh → ZDOTDIR + SMTERM_ZDOTDIR forwarded across the WSL boundary", () => {
@@ -92,6 +96,8 @@ describe("wslInjection", () => {
     expect(r?.env.SMTERM_ZDOTDIR).toBe(`${base}/zsh`) // lets the HISTFILE-repoint fire in WSL
     expect(r?.wslenv).toContain("ZDOTDIR")
     expect(r?.wslenv).toContain("SMTERM_ZDOTDIR")
+    expect(r?.wslenv).toContain("SMTERM_CLAUDE_SETTINGS/p") // hooks reach claude inside WSL
+    expect(r?.wslenv).toContain("SMTERM_PANE_ID")
   })
 
   it("unsupported shells (fish) → null (plain shell, no integration)", () => {

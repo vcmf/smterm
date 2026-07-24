@@ -1,17 +1,19 @@
-// Loopback receiver for Claude Code `http` hooks (M6 6b). It ACKs every POST
-// immediately (200 {}) and does all normalisation + coalescing OFF the response
-// path, so it can never slow the agent's loop or the terminal (see the
-// performance rules in docs/design/AGENT_OBSERVABILITY.md §8). The renderer holds
-// the AgentGraph and runs the pure reducer; main just forwards normalised batches.
+// File-drop watcher for Claude Code hooks (M6). Claude writes each event as a file into
+// a watched directory (see electron/hook-writer.ts); we read + delete each file, normalise
+// it off any hot path, and forward coalesced batches to the renderer (which holds the
+// AgentGraph and runs the pure reducer). No HTTP server, no port — so nothing can go stale
+// (the old loopback receiver's ECONNREFUSED class) and it works across the WSL boundary,
+// where a Windows-loopback server is unreachable. See docs/design/AGENT_OBSERVABILITY.md.
 
-import http from "node:http"
-import type { AddressInfo } from "node:net"
+import fs from "node:fs"
+import path from "node:path"
+import { watch } from "chokidar"
 import type { AgentEvent } from "../src/lib/agent-graph"
 
 // tool_input keys that carry a file path, across the file-touching tools.
 const FILE_TOOL_KEYS = ["file_path", "path", "notebook_path"] as const
 
-/** Raw hook JSON (+ the pane id from the x-smterm-pane header) → the normalised
+/** Raw hook JSON (+ the pane id parsed from the drop file's name) → the normalised
  *  AgentEvent; null if the payload lacks the minimum (event name + session id). */
 export function normalizeHookEvent(raw: unknown, paneId?: string): AgentEvent | null {
   if (typeof raw !== "object" || raw === null) return null
@@ -39,22 +41,25 @@ export function normalizeHookEvent(raw: unknown, paneId?: string): AgentEvent | 
   }
 }
 
-export interface HookReceiver {
-  port: number
+export interface HookWatcher {
   close: () => Promise<void>
 }
 
-export interface HookReceiverOptions {
-  token: string // shared secret; POSTs must send it in the x-smterm-token header
-  onBatch: (events: AgentEvent[]) => void // coalesced, off the response path
-  coalesceMs?: number // batch window (default 50ms) — one emit per window, not per event
-  maxBodyBytes?: number // reject bodies larger than this (default 1 MiB) to bound memory
+export interface HookWatcherOptions {
+  dir: string // the drop directory to watch (must already exist)
+  onBatch: (events: AgentEvent[]) => void // coalesced, off any hot path
+  coalesceMs?: number // batch window (default 50ms) — one emit per window
+  sweepMs?: number // safety-net directory rescan (default 750ms)
 }
 
-/** Start the loopback hook receiver on an ephemeral 127.0.0.1 port. */
-export async function startHookReceiver(opts: HookReceiverOptions): Promise<HookReceiver> {
+const MAX_DROP_BYTES = 1024 * 1024 // ignore a pathologically large drop (bound main memory)
+
+/** Watch `dir` for event files; claim + parse + delete each, tag it with the pane id from
+ *  the filename, and forward coalesced batches. A periodic sweep re-scans the dir so a burst
+ *  the OS watcher coalesced/dropped is still picked up (guaranteed-ish delivery); the rename
+ *  claim makes watcher + sweep consume each file exactly once. Best-effort per file. */
+export async function startHookWatcher(opts: HookWatcherOptions): Promise<HookWatcher> {
   const coalesceMs = opts.coalesceMs ?? 50
-  const maxBody = opts.maxBodyBytes ?? 1024 * 1024
   let pending: AgentEvent[] = []
   let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -66,74 +71,69 @@ export async function startHookReceiver(opts: HookReceiverOptions): Promise<Hook
     try {
       opts.onBatch(batch)
     } catch {
-      // a consumer error must never take down the receiver
+      // a consumer error must never take down the watcher
     }
   }
   const schedule = () => {
     if (!timer) timer = setTimeout(flush, coalesceMs)
   }
 
-  const server = http.createServer((req, res) => {
-    if (req.method !== "POST") {
-      res.writeHead(405)
-      res.end()
-      return
-    }
-    if (req.headers["x-smterm-token"] !== opts.token) {
-      res.writeHead(403)
-      res.end()
-      return
-    }
-    const paneHeader = req.headers["x-smterm-pane"]
-    const paneId = Array.isArray(paneHeader) ? paneHeader[0] : paneHeader
-    // Accumulate raw Buffer chunks and decode ONCE at the end — decoding each chunk
-    // independently corrupts a multi-byte UTF-8 sequence split across a chunk boundary
-    // (e.g. CJK/emoji in last_assistant_message). `size` counts exact bytes for the cap.
-    const chunks: Buffer[] = []
-    let size = 0
-    let tooBig = false
-    req.on("data", (c: Buffer) => {
-      if (tooBig) return
-      size += c.length
-      if (size > maxBody) {
-        tooBig = true
-        chunks.length = 0 // over the cap — drop it; we won't process this event
-      } else {
-        chunks.push(c)
-      }
-    })
-    req.on("end", () => {
-      // ACK FIRST — the response never waits on parsing, reduction, or IPC.
-      res.writeHead(200, { "content-type": "application/json" })
-      res.end("{}")
-      if (tooBig) return
-      const body = Buffer.concat(chunks).toString("utf8")
-      // Defer everything else off the response so acks stay sub-millisecond.
-      queueMicrotask(() => {
-        let raw: unknown
+  // Claim a drop by renaming it (atomic) → only one of {watcher, sweep} wins, so an event
+  // is never delivered twice. Size-cap it, parse, emit, then remove the claimed file.
+  const ingest = (file: string) => {
+    if (!file.endsWith(".json")) return // skip our own .rd claim files + anything else
+    const claim = `${file}.rd`
+    void fs.promises
+      .rename(file, claim)
+      .then(async () => {
         try {
-          raw = JSON.parse(body)
-        } catch {
-          return
-        }
-        const ev = normalizeHookEvent(raw, paneId)
-        if (ev) {
-          pending.push(ev)
-          schedule()
+          const st = await fs.promises.stat(claim)
+          if (st.size > MAX_DROP_BYTES) return // oversized — drop it, don't read into memory
+          let raw: unknown
+          try {
+            raw = JSON.parse(await fs.promises.readFile(claim, "utf8"))
+          } catch {
+            return // partial/corrupt drop — skip
+          }
+          // Filename is `<paneId>.<pid>.<ts>.<rand>.json`; pane ids are UUIDs (no dots).
+          const paneId = path.basename(file).split(".")[0] || undefined
+          const ev = normalizeHookEvent(raw, paneId)
+          if (ev) {
+            pending.push(ev)
+            schedule()
+          }
+        } finally {
+          void fs.promises.rm(claim, { force: true }).catch(() => {})
         }
       })
-    })
-    req.on("error", () => {})
-  })
+      .catch(() => {}) // rename failed ⇒ already claimed or gone ⇒ skip (dedup)
+  }
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()))
-  const port = (server.address() as AddressInfo).port
+  const sweep = () => {
+    void fs.promises
+      .readdir(opts.dir)
+      .then((files) => {
+        for (const f of files) if (f.endsWith(".json")) ingest(path.join(opts.dir, f))
+      })
+      .catch(() => {})
+  }
+
+  // awaitWriteFinish so we don't claim a half-written drop; ignoreInitial since the caller
+  // clears stale files before starting (a leftover would replay an old event otherwise).
+  const watcher = watch(opts.dir, {
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 30, pollInterval: 10 },
+  })
+  watcher.on("add", ingest)
+  await new Promise<void>((resolve) => watcher.on("ready", () => resolve()))
+  const sweepTimer = setInterval(sweep, opts.sweepMs ?? 750)
+
   return {
-    port,
-    close: () =>
-      new Promise<void>((resolve) => {
-        if (timer) clearTimeout(timer)
-        server.close(() => resolve())
-      }),
+    close: async () => {
+      clearInterval(sweepTimer)
+      if (timer) clearTimeout(timer)
+      flush() // deliver the final (<coalesceMs) window instead of dropping it
+      await watcher.close()
+    },
   }
 }
