@@ -25,6 +25,7 @@ import {
   isWslShell,
   wslCdArgs,
   buildWslInjection,
+  defaultWslDistro,
 } from "./shell-integration"
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
@@ -36,7 +37,8 @@ import { orderMacEditors, planEditor, type EditorPlan, type EditorInfo } from ".
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { toDirListing } from "../src/lib/dir-listing"
-import { wslToUnc } from "./wsl-paths"
+import { wslUncCandidates } from "./wsl-paths"
+import type { WslContext } from "../src/lib/wsl"
 import {
   classifyPreview,
   PREVIEW_READ_CAP,
@@ -415,31 +417,35 @@ function registerIpc() {
   // Files browser: list ONE directory (lazy — never a recursive walk). Sorting /
   // .git-filter / cap live in the pure, tested lib/dir-listing; here we just gather
   // entries (resolving symlinked dirs via stat so they browse, not open as files).
-  ipcMain.handle("fs:readdir", async (_e, dir: string, wsl?: { distro?: string }) => {
+  ipcMain.handle("fs:readdir", async (_e, dir: string, wsl?: WslContext) => {
     // A WSL pane's dir is a Linux path the host can't see — read it through the distro's
-    // \\wsl.localhost\ share instead. Non-WSL panes read the host path directly.
-    const target = wsl ? (wslToUnc(wsl.distro, dir) ?? dir) : dir
-    try {
-      const ents = await fs.promises.readdir(target, { withFileTypes: true })
-      const raw = await Promise.all(
-        ents.map(async (e) => {
-          let isDir = e.isDirectory()
-          if (e.isSymbolicLink()) {
-            // isDirectory() is false for a symlink even when it targets a dir — stat
-            // the target so a symlinked directory expands instead of opening.
-            try {
-              isDir = (await fs.promises.stat(path.join(target, e.name))).isDirectory()
-            } catch {
-              // dangling link → treat as a file
+    // UNC share (resolving the default distro's name when the pane has no explicit -d),
+    // trying \\wsl.localhost\ then legacy \\wsl$\. Non-WSL panes read the host path.
+    const candidates = wsl ? wslUncCandidates(wsl.distro ?? defaultWslDistro(), dir) : []
+    for (const target of candidates.length ? candidates : [dir]) {
+      try {
+        const ents = await fs.promises.readdir(target, { withFileTypes: true })
+        const raw = await Promise.all(
+          ents.map(async (e) => {
+            let isDir = e.isDirectory()
+            if (e.isSymbolicLink()) {
+              // isDirectory() is false for a symlink even when it targets a dir — stat
+              // the target so a symlinked directory expands instead of opening.
+              try {
+                isDir = (await fs.promises.stat(path.join(target, e.name))).isDirectory()
+              } catch {
+                // dangling link → treat as a file
+              }
             }
-          }
-          return { name: e.name, isDir }
-        }),
-      )
-      return toDirListing(raw)
-    } catch {
-      return { entries: [], truncated: false } // unreadable / not-a-dir → empty
+            return { name: e.name, isDir }
+          }),
+        )
+        return toDirListing(raw)
+      } catch {
+        // this candidate didn't resolve (wrong share form, or unreadable) — try the next
+      }
     }
+    return { entries: [], truncated: false }
   })
 
   // Read a file for the preview popup: guard the size, read up to the cap, and

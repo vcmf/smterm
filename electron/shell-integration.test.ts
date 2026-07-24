@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   parseWslDistros,
+  parseDefaultDistro,
   buildInjection,
   isWslShell,
   wslCdArgs,
@@ -18,6 +19,25 @@ describe("parseWslDistros", () => {
 
   it("strips NUL bytes (UTF-16 decode artifacts)", () => {
     expect(parseWslDistros("U\0b\0untu\n")).toEqual(["Ubuntu"])
+  })
+})
+
+describe("parseDefaultDistro", () => {
+  it("returns the *-marked distro from `wsl -l -v`", () => {
+    const out =
+      "  NAME            STATE           VERSION\r\n" +
+      "* Ubuntu          Running         2\r\n" +
+      "  Debian          Stopped         2\r\n"
+    expect(parseDefaultDistro(out)).toBe("Ubuntu")
+  })
+  it("handles the * not on the first data row", () => {
+    expect(parseDefaultDistro("  NAME\n  Ubuntu  Running  2\n* Debian  Running  2\n")).toBe(
+      "Debian",
+    )
+  })
+  it("tolerates NUL bytes and returns undefined when nothing is marked", () => {
+    expect(parseDefaultDistro("*\0 \0Ubuntu\0\n")).toBe("Ubuntu")
+    expect(parseDefaultDistro("  Ubuntu  Running  2\n")).toBeUndefined()
   })
 })
 
