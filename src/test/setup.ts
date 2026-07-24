@@ -23,7 +23,6 @@ const smtermStub = {
   onAgentEvents: vi.fn(unsub),
   clipboardWrite: vi.fn(),
   clipboardRead: vi.fn(async () => ""),
-  clipboardHasImage: vi.fn(async () => false),
   readdir: vi.fn(async () => ({ entries: [], truncated: false })),
   readFilePreview: vi.fn(async () => ({ kind: "text", text: "", truncated: false, size: 0 })),
   pickDirectory: vi.fn(async () => null),

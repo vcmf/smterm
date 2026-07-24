@@ -13,7 +13,7 @@ import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
 import { allSessionIds } from "../lib/pane-tree"
 import { webglPanes, shouldRebuildAtlas } from "../lib/renderer-policy"
-import { keyAction, pasteAction } from "../lib/terminal-keys"
+import { keyAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
 
@@ -86,24 +86,15 @@ function ensureFontLoaded(family: string, size: number): Promise<unknown> {
   )
 }
 
-// Paste into a terminal. Text on the clipboard → normal paste. An image with no text
-// (e.g. a screenshot) → send Ctrl+V (0x16) so the running program (Claude Code, etc.)
-// reads the image from the clipboard itself — the same path as pressing Ctrl+V. Without
-// this, ⌘V text-pastes an empty string and the image is dropped; this makes ⌘V attach
-// images in Claude, matching cmux. In a plain shell 0x16 is quoted-insert (the line
-// editor waits for the next key; recover with Ctrl+C) — identical to pressing Ctrl+V there.
+// Paste into a terminal. Text on the clipboard → bracketed paste. No text (e.g. a
+// screenshot) → send Ctrl+V (0x16) so the running program (Claude Code, etc.) reads the
+// clipboard itself — we never touch the image bytes, so there's NO bitmap decode (that
+// decode was slow on Windows and the whole reason image paste lagged). In a plain shell
+// 0x16 is quoted-insert (recover with Ctrl+C); on an empty clipboard it's a harmless no-op.
 function pasteInto(term: Terminal) {
-  const decide = (text: string, hasImage: boolean) => {
-    const action = pasteAction(text, hasImage)
-    if (action === "text") term.paste(text)
-    else if (action === "image") term.input("\x16")
-  }
-  // Read text first; only probe for an image when there's NO text. The image check
-  // decodes the whole clipboard bitmap (slow on Windows), and text wins anyway
-  // (pasteAction), so the common text paste no longer pays that cost.
   void ipc.clipboardRead().then((text) => {
-    if (text) decide(text, false)
-    else void ipc.clipboardHasImage().then((hasImage) => decide("", hasImage))
+    if (text) term.paste(text)
+    else term.input("\x16")
   })
 }
 

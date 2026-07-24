@@ -37,7 +37,6 @@ import { orderMacEditors, planEditor, type EditorPlan, type EditorInfo } from ".
 import { startHookWatcher } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { buildHookSettings } from "./hook-writer"
-import { hasImageFormat } from "./clipboard-image"
 import { toDirListing } from "../src/lib/dir-listing"
 import { wslUncCandidates, winToMnt } from "./wsl-paths"
 import type { WslContext } from "../src/lib/wsl"
@@ -411,15 +410,6 @@ function registerIpc() {
   ipcMain.handle("clipboard:read", async () => clipboard.readText())
   // Whether the clipboard holds an image (e.g. a screenshot) — the renderer uses this
   // to route ⌘V to the running program's own image paste instead of a text paste.
-  // Whether an image is present. Try the cheap format list first (no bitmap decode — the
-  // decode is what's slow on Windows); fall back to readImage() only when no image/* MIME
-  // is advertised, so a DIB-only screenshot (Print-Screen / Snipping Tool) is still caught
-  // — the decode then happens only for that uncommon case, not on every paste. We never use
-  // the bytes: an image paste sends Ctrl+V so the running program reads the clipboard itself.
-  ipcMain.handle(
-    "clipboard:has-image",
-    async () => hasImageFormat(clipboard.availableFormats()) || !clipboard.readImage().isEmpty(),
-  )
 
   // Files browser: list ONE directory (lazy — never a recursive walk). Sorting /
   // .git-filter / cap live in the pure, tested lib/dir-listing; here we just gather
