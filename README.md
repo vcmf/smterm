@@ -54,7 +54,7 @@ show what happened, not just that something did.
 Run `claude` in any pane and the Agents board lights up: the root session, its sub-agents, what
 each is doing, its working directory, and the files it touched. It reads Claude Code's own hook
 events, so there is zero setup and no global config to edit; smterm only wires the panes it
-launches. Agents started outside smterm simply do not show up.
+launches. Agents started outside smterm do not show up.
 
 ## Install
 
@@ -98,7 +98,7 @@ in-app settings panel; a live watcher re-applies changes as you save.
 
 ## What is still rough
 
-This is v0. It is genuinely useful, and it will also occasionally surprise you.
+This is v0. I use it every day, and it will still surprise you sometimes.
 
 - macOS is Apple Silicon only for now. An Intel build is on the list.
 - Nothing is code-signed or notarized yet, so expect a security prompt if you go around the
