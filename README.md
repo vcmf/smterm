@@ -12,6 +12,8 @@
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%2FWSL-informational" alt="Platforms" />
 </p>
 
+<p align="center">If smterm looks useful to you, a ⭐ helps other people find it.</p>
+
 smterm is a fast, cross-platform terminal (tabs, split panes, real shells) for people who run
 coding agents all day. It stays out of your way like a normal terminal, then adds a few panels
 that show you what the agents are actually doing: git diffs, files, and a live agents board that
@@ -34,14 +36,18 @@ for coding agents, this is that.
 - 🎨 **Themes and fonts.** Minimal Dark, Tokyo Night, Catppuccin, Gruvbox; bundled fonts and
   ligatures.
 
-<!-- TODO: drop a hero screenshot here once one exists, e.g. docs/media/hero.png -->
+<p align="center">
+  <img src="docs/media/screenshot.png" alt="smterm running four agent sessions in split panes, with the Agents board on the right" width="100%" />
+</p>
 
-## Why
+## Why I built this
 
-Agents write the code now, but you are still the one who reviews it and ships it. So the
-terminal should help you read and stay in the loop, not just scroll text past you. That is the
-whole point of the Changes, Files, and Agents panels: see what changed, not just that something
-did.
+I love the terminal, and honestly the easiest way to put an agent like Claude Code to work is
+to launch it from a CLI. But I also love reading the code it writes and making the edits
+myself, and a plain terminal makes that half hard: you lose track of which session needs you,
+and you never really see what changed. So I built the terminal I wanted. It keeps the shell I
+already like and adds just enough to stay in the loop: the Changes, Files, and Agents panels
+show what happened, not just that something did.
 
 ## Works with Claude Code
 
@@ -65,23 +71,10 @@ irm https://raw.githubusercontent.com/vcmf/smterm/main/install.ps1 | iex
 ```
 
 Prefer to click things? Grab a build from the
-[releases page](https://github.com/vcmf/smterm/releases). Read the honest bit below first.
+[releases page](https://github.com/vcmf/smterm/releases).
 
-### The honest bit about that curl command
-
-Piping a script from the internet straight into your shell is exactly the kind of thing you
-should be suspicious of. Good instinct. The script is short and it is [right here](install.sh),
-so read it before you run it. All it does is grab the newest release for your OS from GitHub
-and put the app in `/Applications` (macOS) or `~/.local/bin` (Linux).
-
-We lead with the curl install on purpose. smterm is not notarized by Apple yet (that costs
-money and we are getting to it). If you download the `.dmg` in a browser, macOS will show you a
-stern "could not verify this app is free of malware" box and hide the Open button. Files
-fetched from the terminal skip that check, so the curl install just works. Once we notarize,
-the double-click download will be smooth too. Same story on Windows: the terminal install
-avoids the SmartScreen warning a browser download triggers.
-
-If you already downloaded the `.dmg` and macOS is refusing to open it, this clears it:
+smterm is not notarized by Apple yet, so a `.dmg` opened from a browser may hit a Gatekeeper
+warning. If macOS refuses to open it, this clears the quarantine flag:
 
 ```
 xattr -dr com.apple.quarantine /Applications/smterm.app
