@@ -12,7 +12,7 @@ import type { GitStatus } from "./lib/ipc"
 import { isAbsoluteHostPath } from "./lib/file-actions"
 import type { EditorInfo } from "./lib/file-actions"
 import { normalizeRootPath } from "./lib/breadcrumb"
-import { wslContext, type WslContext } from "./lib/wsl"
+import type { WslContext } from "./lib/wsl"
 import type { WorkspaceState } from "./lib/workspace"
 import { clampPanelWidth, RIGHT_PANEL_DEFAULT } from "./lib/right-panel"
 
@@ -166,14 +166,14 @@ export const useStore = create<AppState>((set, get) => ({
   setEditor: (editor) => set({ editor }),
   setPreview: (preview) => set({ preview }),
   // Central guard for every reroot entry point (double-click, context menu, breadcrumb,
-  // typed path, picker): normalize the path and reject anything not resolvable on the
-  // host — non-absolute, or a WSL pane whose paths the host can't reach.
+  // typed path, picker): normalize and require an absolute path. WSL panes are allowed —
+  // their Linux paths (/home/…) are absolute, and readdir/preview read them via the
+  // distro's UNC share (the old WSL rejection predated that translation).
   setPaneRoot: (sessionId, root) =>
     set((s) => {
-      const sess = s.sessions[sessionId]
-      if (!sess) return {}
+      if (!s.sessions[sessionId]) return {}
       const norm = normalizeRootPath(root)
-      if (!isAbsoluteHostPath(norm) || wslContext(sess.command, sess.args)) return {}
+      if (!isAbsoluteHostPath(norm)) return {}
       return { paneRoot: { ...s.paneRoot, [sessionId]: norm } }
     }),
   clearPaneRoot: (sessionId) =>
