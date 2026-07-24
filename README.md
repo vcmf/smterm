@@ -12,15 +12,17 @@
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%2FWSL-informational" alt="Platforms" />
 </p>
 
+<p align="center">If smterm looks useful to you, a ⭐ helps other people find it.</p>
+
 smterm is a fast, cross-platform terminal (tabs, split panes, real shells) for people who run
 coding agents all day. It stays out of your way like a normal terminal, then adds a few panels
 that show you what the agents are actually doing: git diffs, files, and a live agents board that
 works with Claude Code. If you have looked for an open-source Warp alternative, or a tmux built
 for coding agents, this is that.
 
-- 🔔 **Knows which session needs you.** Working, waiting for input, or done, shown as a dot on
-  the tab and in the sidebar, plus a native notification when a background pane wants you. No
-  more finding a finished agent an hour late.
+- 🔔 **Notifications when a session needs you.** Working, waiting for input, or done, shown as a
+  dot on the tab and in the sidebar, plus a native OS notification when a background pane wants
+  you. No more finding a finished agent an hour late.
 - 🔍 **Changes panel.** A git diff for the focused pane's working directory, so you can read
   what an agent just touched. Branch and ahead/behind show in the status bar.
 - 📁 **Files browser.** A lazy per-folder listing rooted at the focused pane's cwd, with git
@@ -30,25 +32,31 @@ for coding agents, this is that.
   jump to its pane.
 - 🪟 **Real multiplexer.** Tabs and resizable splits. Split a pane and it keeps your shell and
   directory. Quit and reopen and your layout comes back.
+- 🖥️ **Cross-platform.** macOS, Linux, and Windows, with WSL as a first-class shell target.
 - ⌨️ **Command palette (⌘K).** New sessions, splits, theme switching, settings.
 - 🎨 **Themes and fonts.** Minimal Dark, Tokyo Night, Catppuccin, Gruvbox; bundled fonts and
   ligatures.
 
-<!-- TODO: drop a hero screenshot here once one exists, e.g. docs/media/hero.png -->
+<p align="center">
+  <img src="docs/media/screenshot.jpg" alt="smterm running four agent sessions in split panes, with the Agents board on the right" width="100%" />
+</p>
 
-## Why
+## Why I built this
 
-Agents write the code now, but you are still the one who reviews it and ships it. So the
-terminal should help you read and stay in the loop, not just scroll text past you. That is the
-whole point of the Changes, Files, and Agents panels: see what changed, not just that something
-did.
+I love the terminal, and the easiest way to put an agent like Claude Code to work is to launch
+it from a CLI. My work moves between macOS and Linux a lot, and sometimes WSL on Windows, so a
+terminal that behaves the same on all three is a big deal for me. The other half is that I like
+reading the code an agent writes and making the edits myself, and a plain terminal makes that
+hard: you lose track of which session needs you, and you never really see what changed. So I
+built the terminal I wanted. It keeps the shell I already like and adds just enough to stay in
+the loop: the Changes, Files, and Agents panels show what happened, not just that something did.
 
 ## Works with Claude Code
 
 Run `claude` in any pane and the Agents board lights up: the root session, its sub-agents, what
 each is doing, its working directory, and the files it touched. It reads Claude Code's own hook
 events, so there is zero setup and no global config to edit; smterm only wires the panes it
-launches. Agents started outside smterm simply do not show up.
+launches. Agents started outside smterm do not show up.
 
 ## Install
 
@@ -64,34 +72,10 @@ Windows (PowerShell):
 irm https://raw.githubusercontent.com/vcmf/smterm/main/install.ps1 | iex
 ```
 
-Prefer to click things? Grab a build from the
-[releases page](https://github.com/vcmf/smterm/releases). Read the honest bit below first.
-
-### The honest bit about that curl command
-
-Piping a script from the internet straight into your shell is exactly the kind of thing you
-should be suspicious of. Good instinct. The script is short and it is [right here](install.sh),
-so read it before you run it. All it does is grab the newest release for your OS from GitHub
-and put the app in `/Applications` (macOS) or `~/.local/bin` (Linux).
-
-We lead with the curl install on purpose. smterm is not notarized by Apple yet (that costs
-money and we are getting to it). If you download the `.dmg` in a browser, macOS will show you a
-stern "could not verify this app is free of malware" box and hide the Open button. Files
-fetched from the terminal skip that check, so the curl install just works. Once we notarize,
-the double-click download will be smooth too. Same story on Windows: the terminal install
-avoids the SmartScreen warning a browser download triggers.
-
-If you already downloaded the `.dmg` and macOS is refusing to open it, this clears it:
-
-```
-xattr -dr com.apple.quarantine /Applications/smterm.app
-```
-
 ## Also
 
 Beyond the headline features above:
 
-- macOS, Linux, and Windows, with WSL as a first-class shell target
 - Copy and paste, find in scrollback (`Cmd`/`Ctrl+Shift` + `F`)
 - Collapsible sidebar and a shell picker for new tabs
 - The Agents board needs zero setup: it is wired only for panes smterm spawns
@@ -115,22 +99,24 @@ in-app settings panel; a live watcher re-applies changes as you save.
 
 ## What is still rough
 
-This is v0. It is genuinely useful and it will also occasionally surprise you. Honesty beats a
-pristine-looking README.
+This is v0. I use it every day, and it will still surprise you sometimes.
 
-- macOS is Apple Silicon only for now. An Intel build is on the list.
-- Nothing is code-signed or notarized yet, so expect a security prompt if you go around the
-  installer. This is the next thing on the roadmap.
-- The "is this agent actually working or just sitting there" detection is a heuristic. It is
-  good, not psychic.
-- The Agents board is Claude Code specific right now (it reads Claude's own hook events). Other
-  agents will come; the underlying reducer is agent-agnostic.
-- Windows and WSL work but have had less real-world mileage than macOS and Linux.
-- Live processes do not survive a full quit yet. Your layout comes back, your running programs
-  do not.
+- On macOS it is Apple Silicon only for now. Intel is not built yet.
+- The app is not code-signed or notarized, so installing it outside the script gives you a
+  security prompt the first time.
+- Agent status comes from a heuristic (is the pane still producing output, or has it gone
+  quiet?), so it reads the state wrong once in a while.
+- The Agents board only knows about Claude Code today, since it reads Claude's hook events. The
+  code under it does not assume any particular agent, so others can plug in later.
+- Windows and WSL have had far less real-world use than macOS and Linux, so expect rougher edges
+  there.
+- After a full quit, your tabs and layout come back on relaunch, but running processes are not
+  restored yet.
 
-Found a bug? [Open an issue](https://github.com/vcmf/smterm/issues). A report that says "here
-is what I did, here is what happened, here is what I expected" is worth its weight in gold.
+Most of these are already on the near-term roadmap, so they should not be rough for long.
+
+Found a bug? [Open an issue](https://github.com/vcmf/smterm/issues). What you did, what
+happened, and what you expected is all it takes for a useful report.
 
 ## Build from source
 
