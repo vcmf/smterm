@@ -14,6 +14,7 @@ import path from "node:path"
 import fs from "node:fs"
 import os from "node:os"
 import { spawn } from "node:child_process"
+import { randomUUID } from "node:crypto"
 import { StringDecoder } from "node:string_decoder"
 import * as pty from "node-pty"
 import type { IPty } from "node-pty"
@@ -164,16 +165,13 @@ function startSettingsWatcher() {
 async function startAgentObservability(): Promise<void> {
   try {
     const cfg = configDir()
-    const eventsDir = path.join(cfg, "hook-events")
+    // Per-launch nonce as the drop-dir name: a foreign local process can't guess where to
+    // drop spoofed events (restores the auth boundary the old token gave), and it clears any
+    // stale drops from a previous run for free. Wipe the parent so old nonces don't pile up.
+    const eventsRoot = path.join(cfg, "hook-events")
+    fs.rmSync(eventsRoot, { recursive: true, force: true })
+    const eventsDir = path.join(eventsRoot, randomUUID())
     fs.mkdirSync(eventsDir, { recursive: true })
-    // Clear stale drops from a previous run so we don't replay old events.
-    for (const f of fs.readdirSync(eventsDir)) {
-      try {
-        fs.rmSync(path.join(eventsDir, f), { force: true })
-      } catch {
-        // ignore
-      }
-    }
     hookWatcher = await startHookWatcher({
       dir: eventsDir,
       onBatch: (events: AgentEvent[]) => mainWindow?.webContents.send("agents:events", events),

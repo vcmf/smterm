@@ -9,7 +9,10 @@ describe("buildHookSettings", () => {
   const s = JSON.parse(buildHookSettings("/tmp/ev")) as {
     hooks: Record<
       string,
-      Array<{ matcher?: string; hooks: Array<{ type: string; args: string[] }> }>
+      Array<{
+        matcher?: string
+        hooks: Array<{ type: string; args: string[]; async?: boolean; timeout?: number }>
+      }>
     >
   }
   it("emits a command hook that runs the writer with the events dir", () => {
@@ -17,6 +20,11 @@ describe("buildHookSettings", () => {
     expect(h.type).toBe("command")
     expect(h.args[0]).toBe("-e")
     expect(h.args[2]).toBe("/tmp/ev") // the events dir is argv[1] to `node -e`
+  })
+  it("is async with a timeout backstop (can't hang the agent's tool loop)", () => {
+    const h = s.hooks.SessionStart![0]!.hooks[0]!
+    expect(h.async).toBe(true)
+    expect(typeof h.timeout).toBe("number")
   })
   it("wraps tool events with a matcher, others without", () => {
     expect(s.hooks.PreToolUse![0]!.matcher).toBe("")

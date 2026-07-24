@@ -39,7 +39,16 @@ const TOOL_EVENTS = new Set(["PreToolUse", "PostToolUse"])
  *  via the inline `node -e` writer. Pure — unit-tested. `eventsDir` is the path as the
  *  agent sees it (a host path for native, a /mnt/c path for a WSL settings variant). */
 export function buildHookSettings(eventsDir: string): string {
-  const hook = { type: "command", command: "node", args: ["-e", HOOK_WRITER, eventsDir] }
+  // async: don't block the agent's tool loop waiting on the drop; timeout: a hard backstop
+  // so a stalled writer (slow/full disk, slow /mnt/c drvfs write) can never hang the agent
+  // — the guarantee the old http hook's `timeout: 3` gave (AGENT_OBSERVABILITY §8).
+  const hook = {
+    type: "command",
+    command: "node",
+    args: ["-e", HOOK_WRITER, eventsDir],
+    async: true,
+    timeout: 5,
+  }
   const hooks: Record<string, unknown[]> = {}
   for (const e of EVENTS)
     hooks[e] = [TOOL_EVENTS.has(e) ? { matcher: "", hooks: [hook] } : { hooks: [hook] }]

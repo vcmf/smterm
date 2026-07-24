@@ -79,6 +79,30 @@ describe("startHookWatcher", () => {
     }
   })
 
+  it("delivers every event under a burst (sweep backs up the OS watcher)", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "smterm-watch-"))
+    const seen = new Set<string>()
+    const w = await startHookWatcher({
+      dir,
+      coalesceMs: 10,
+      sweepMs: 40,
+      onBatch: (b) => b.forEach((e) => seen.add(e.sessionId)),
+    })
+    try {
+      for (let i = 0; i < 60; i++) {
+        fs.writeFileSync(
+          path.join(dir, `p.${i}.0.x.json`),
+          JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s" + i }),
+        )
+      }
+      await waitUntil(() => seen.size === 60, 8000)
+      expect(seen.size).toBe(60) // none dropped, none double-counted
+    } finally {
+      await w.close()
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("skips a corrupt (non-JSON) drop without emitting", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "smterm-watch-"))
     const batches: AgentEvent[][] = []

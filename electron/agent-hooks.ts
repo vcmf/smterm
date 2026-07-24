@@ -49,10 +49,15 @@ export interface HookWatcherOptions {
   dir: string // the drop directory to watch (must already exist)
   onBatch: (events: AgentEvent[]) => void // coalesced, off any hot path
   coalesceMs?: number // batch window (default 50ms) — one emit per window
+  sweepMs?: number // safety-net directory rescan (default 750ms)
 }
 
-/** Watch `dir` for event files; parse + delete each, tag it with the pane id encoded in
- *  the filename, and forward coalesced batches. Best-effort — a bad/partial file is skipped. */
+const MAX_DROP_BYTES = 1024 * 1024 // ignore a pathologically large drop (bound main memory)
+
+/** Watch `dir` for event files; claim + parse + delete each, tag it with the pane id from
+ *  the filename, and forward coalesced batches. A periodic sweep re-scans the dir so a burst
+ *  the OS watcher coalesced/dropped is still picked up (guaranteed-ish delivery); the rename
+ *  claim makes watcher + sweep consume each file exactly once. Best-effort per file. */
 export async function startHookWatcher(opts: HookWatcherOptions): Promise<HookWatcher> {
   const coalesceMs = opts.coalesceMs ?? 50
   let pending: AgentEvent[] = []
@@ -73,29 +78,47 @@ export async function startHookWatcher(opts: HookWatcherOptions): Promise<HookWa
     if (!timer) timer = setTimeout(flush, coalesceMs)
   }
 
+  // Claim a drop by renaming it (atomic) → only one of {watcher, sweep} wins, so an event
+  // is never delivered twice. Size-cap it, parse, emit, then remove the claimed file.
   const ingest = (file: string) => {
+    if (!file.endsWith(".json")) return // skip our own .rd claim files + anything else
+    const claim = `${file}.rd`
     void fs.promises
-      .readFile(file, "utf8")
-      .then((body) => {
-        void fs.promises.rm(file, { force: true }).catch(() => {})
-        let raw: unknown
+      .rename(file, claim)
+      .then(async () => {
         try {
-          raw = JSON.parse(body)
-        } catch {
-          return // partial/corrupt drop — skip
+          const st = await fs.promises.stat(claim)
+          if (st.size > MAX_DROP_BYTES) return // oversized — drop it, don't read into memory
+          let raw: unknown
+          try {
+            raw = JSON.parse(await fs.promises.readFile(claim, "utf8"))
+          } catch {
+            return // partial/corrupt drop — skip
+          }
+          // Filename is `<paneId>.<pid>.<ts>.<rand>.json`; pane ids are UUIDs (no dots).
+          const paneId = path.basename(file).split(".")[0] || undefined
+          const ev = normalizeHookEvent(raw, paneId)
+          if (ev) {
+            pending.push(ev)
+            schedule()
+          }
+        } finally {
+          void fs.promises.rm(claim, { force: true }).catch(() => {})
         }
-        // Filename is `<paneId>.<pid>.<ts>.<rand>.json`; pane ids are UUIDs (no dots).
-        const paneId = path.basename(file).split(".")[0] || undefined
-        const ev = normalizeHookEvent(raw, paneId)
-        if (ev) {
-          pending.push(ev)
-          schedule()
-        }
+      })
+      .catch(() => {}) // rename failed ⇒ already claimed or gone ⇒ skip (dedup)
+  }
+
+  const sweep = () => {
+    void fs.promises
+      .readdir(opts.dir)
+      .then((files) => {
+        for (const f of files) if (f.endsWith(".json")) ingest(path.join(opts.dir, f))
       })
       .catch(() => {})
   }
 
-  // awaitWriteFinish so we don't read a half-written drop; ignoreInitial since the caller
+  // awaitWriteFinish so we don't claim a half-written drop; ignoreInitial since the caller
   // clears stale files before starting (a leftover would replay an old event otherwise).
   const watcher = watch(opts.dir, {
     ignoreInitial: true,
@@ -103,11 +126,14 @@ export async function startHookWatcher(opts: HookWatcherOptions): Promise<HookWa
   })
   watcher.on("add", ingest)
   await new Promise<void>((resolve) => watcher.on("ready", () => resolve()))
+  const sweepTimer = setInterval(sweep, opts.sweepMs ?? 750)
 
   return {
-    close: () => {
+    close: async () => {
+      clearInterval(sweepTimer)
       if (timer) clearTimeout(timer)
-      return watcher.close()
+      flush() // deliver the final (<coalesceMs) window instead of dropping it
+      await watcher.close()
     },
   }
 }
