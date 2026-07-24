@@ -2,9 +2,17 @@ import { describe, it, expect, beforeEach } from "vitest"
 import { useStore, isVisibleIn, isSessionVisible } from "./store"
 import { allSessionIds } from "./lib/pane-tree"
 import { resetStore, testShell as shell } from "./test/helpers"
+import { RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from "./lib/right-panel"
+import type { ShellOption } from "./types"
 
 const st = () => useStore.getState()
 const firstTab = () => st().tabs[0]!
+const wslShell: ShellOption = {
+  id: "wsl",
+  label: "WSL",
+  command: "wsl.exe",
+  args: ["-d", "Ubuntu"],
+}
 
 describe("store — tabs & panes", () => {
   beforeEach(resetStore)
@@ -323,5 +331,67 @@ describe("store — cwd & UI toggles", () => {
     expect(st().tabs).toHaveLength(1)
     expect(st().activeTabId).toBe("tb")
     expect(st().sessions.x).toBeDefined()
+  })
+})
+
+describe("store — right panel width", () => {
+  beforeEach(resetStore)
+
+  it("clamps below the min and above the max", () => {
+    st().setRightPanelWidth(100)
+    expect(st().rightPanelWidth).toBe(RIGHT_PANEL_MIN)
+    st().setRightPanelWidth(99999)
+    expect(st().rightPanelWidth).toBe(RIGHT_PANEL_MAX)
+  })
+  it("respects a tighter maxAvail (60% of the window)", () => {
+    st().setRightPanelWidth(700, 500)
+    expect(st().rightPanelWidth).toBe(500)
+  })
+})
+
+describe("store — paneRoot (Files-panel root override)", () => {
+  beforeEach(resetStore)
+  const activeId = () => firstTab().activeSessionId
+
+  it("accepts an absolute host path and normalizes a trailing slash", () => {
+    st().newTab(shell)
+    st().setPaneRoot(activeId(), "/Users/me/proj/")
+    expect(st().paneRoot[activeId()]).toBe("/Users/me/proj")
+  })
+  it("rejects a non-absolute path", () => {
+    st().newTab(shell)
+    st().setPaneRoot(activeId(), "relative/x")
+    expect(st().paneRoot[activeId()]).toBeUndefined()
+  })
+  it("rejects a root for a WSL pane (host can't reach its Linux paths)", () => {
+    st().newTab(wslShell)
+    st().setPaneRoot(activeId(), "/home/me/proj")
+    expect(st().paneRoot[activeId()]).toBeUndefined()
+  })
+  it("clearPaneRoot removes the override", () => {
+    st().newTab(shell)
+    const sid = activeId()
+    st().setPaneRoot(sid, "/Users/me/proj")
+    st().clearPaneRoot(sid)
+    expect(st().paneRoot[sid]).toBeUndefined()
+  })
+  it("closePane drops the closed pane's override, keeps the sibling's", () => {
+    st().newTab(shell)
+    st().splitActive("row", shell)
+    const tab = firstTab()
+    const [a, b] = allSessionIds(tab.root)
+    st().setPaneRoot(a!, "/Users/me/a")
+    st().setPaneRoot(b!, "/Users/me/b")
+    st().closePane(tab.id, a!)
+    expect(st().paneRoot[a!]).toBeUndefined()
+    expect(st().paneRoot[b!]).toBe("/Users/me/b")
+  })
+  it("closeTab drops its panes' overrides", () => {
+    st().newTab(shell)
+    const tab = firstTab()
+    const sid = tab.activeSessionId
+    st().setPaneRoot(sid, "/Users/me/proj")
+    st().closeTab(tab.id)
+    expect(st().paneRoot[sid]).toBeUndefined()
   })
 })

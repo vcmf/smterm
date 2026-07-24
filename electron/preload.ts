@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron"
 import type { AgentEvent } from "../src/lib/agent-graph"
+import type { WslContext } from "../src/lib/wsl"
 
 const api = {
   ptySpawn: (opts: { id: string; cols: number; rows: number; shell: string; args: string[] }) =>
@@ -48,7 +49,7 @@ const api = {
   clipboardWrite: (text: string) => ipcRenderer.send("clipboard:write", text),
   clipboardRead: () => ipcRenderer.invoke("clipboard:read") as Promise<string>,
   clipboardHasImage: () => ipcRenderer.invoke("clipboard:has-image") as Promise<boolean>,
-  readdir: (dir: string) => ipcRenderer.invoke("fs:readdir", dir),
+  readdir: (dir: string, wsl?: WslContext) => ipcRenderer.invoke("fs:readdir", dir, wsl),
   readFilePreview: (path: string) => ipcRenderer.invoke("fs:read-preview", path),
   pickDirectory: (defaultPath?: string) => ipcRenderer.invoke("dialog:pick-directory", defaultPath),
   pathIsDir: (p: string) => ipcRenderer.invoke("fs:is-dir", p),

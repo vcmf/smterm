@@ -43,7 +43,10 @@ export interface Ipc {
   clipboardWrite: (text: string) => void
   clipboardRead: () => Promise<string>
   clipboardHasImage: () => Promise<boolean>
-  readdir: (dir: string) => Promise<DirListing> // lazy, one directory at a time (files browser)
+  // Lazy, one directory at a time (files browser). `wsl` translates a WSL pane's Linux
+  // path to a \\wsl.localhost\ UNC so the Windows host can list it.
+  readdir: (dir: string, wsl?: WslContext) => Promise<DirListing>
+
   readFilePreview: (path: string) => Promise<PreviewData> // read a file for the preview popup
   pickDirectory: (defaultPath?: string) => Promise<string | null> // native folder picker (Files root)
   pathIsDir: (p: string) => Promise<boolean> // validate a typed path is a directory

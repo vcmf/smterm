@@ -55,7 +55,11 @@ export function FilesPanel() {
   }, [])
   const load = useCallback(
     (key: string, dir: string) => {
-      void ipc.readdir(dir).then((listing) => apply(key, (s) => setListing(s, dir, listing)))
+      // Pass the focused pane's WSL context so a distro's Linux path is read via its
+      // \\wsl.localhost\ share (a stale read for a pane you've left is dropped by `apply`).
+      void ipc
+        .readdir(dir, getActiveWsl())
+        .then((listing) => apply(key, (s) => setListing(s, dir, listing)))
     },
     [apply],
   )
@@ -69,7 +73,10 @@ export function FilesPanel() {
     const cached = cache.get(root)
     if (cached) {
       setTree(cached) // instant restore…
-      openDirs(cached).forEach((dir) => load(root, dir)) // …then refresh open dirs in the background
+      // …then refresh open dirs in the background — but NOT for a WSL pane: each read
+      // goes over the slow \\wsl.localhost\ (9p) share, so N at once would stall the
+      // refocus. The cached tree is shown as-is; expanding a dir re-reads it fresh.
+      if (!getActiveWsl()) openDirs(cached).forEach((dir) => load(root, dir))
     } else {
       const t = emptyTree(root)
       cache.set(root, t)

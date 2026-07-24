@@ -295,6 +295,30 @@ function wslDistros(): string[] {
   }
 }
 
+/** The default distro's name from `wsl.exe -l -v` output — the row marked with `*`.
+ *  Pure — unit-tested. undefined if no default row is found. */
+export function parseDefaultDistro(listVerbose: string): string | undefined {
+  for (const line of listVerbose.replace(/\0/g, "").split(/\r?\n/)) {
+    const m = /^\s*\*\s+(\S+)/.exec(line)
+    if (m) return m[1]
+  }
+  return undefined
+}
+
+// A WSL pane spawned without `-d` runs the default distro; the UNC share still needs its
+// name. Resolve it once (rarely changes) so the files browser works there too.
+let cachedDefaultDistro: string | null | undefined
+export function defaultWslDistro(): string | undefined {
+  if (cachedDefaultDistro !== undefined) return cachedDefaultDistro ?? undefined
+  try {
+    const out = execFileSync("wsl.exe", ["-l", "-v"], { encoding: "utf16le" })
+    cachedDefaultDistro = parseDefaultDistro(out) ?? null
+  } catch {
+    cachedDefaultDistro = null
+  }
+  return cachedDefaultDistro ?? undefined
+}
+
 /** Shells/profiles available on this machine, for the "New" picker. */
 export function listShells(): ShellOption[] {
   const out: ShellOption[] = []
