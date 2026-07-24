@@ -32,6 +32,7 @@ for coding agents, this is that.
   jump to its pane.
 - 🪟 **Real multiplexer.** Tabs and resizable splits. Split a pane and it keeps your shell and
   directory. Quit and reopen and your layout comes back.
+- 🖥️ **Cross-platform.** macOS, Linux, and Windows, with WSL as a first-class shell target.
 - ⌨️ **Command palette (⌘K).** New sessions, splits, theme switching, settings.
 - 🎨 **Themes and fonts.** Minimal Dark, Tokyo Night, Catppuccin, Gruvbox; bundled fonts and
   ligatures.
@@ -74,7 +75,6 @@ irm https://raw.githubusercontent.com/vcmf/smterm/main/install.ps1 | iex
 
 Beyond the headline features above:
 
-- macOS, Linux, and Windows, with WSL as a first-class shell target
 - Copy and paste, find in scrollback (`Cmd`/`Ctrl+Shift` + `F`)
 - Collapsible sidebar and a shell picker for new tabs
 - The Agents board needs zero setup: it is wired only for panes smterm spawns
