@@ -408,8 +408,6 @@ function registerIpc() {
   // Clipboard (copy/paste) — main owns it; renderer never imports Electron.
   ipcMain.on("clipboard:write", (_e, text: string) => clipboard.writeText(text))
   ipcMain.handle("clipboard:read", async () => clipboard.readText())
-  // Whether the clipboard holds an image (e.g. a screenshot) — the renderer uses this
-  // to route ⌘V to the running program's own image paste instead of a text paste.
 
   // Files browser: list ONE directory (lazy — never a recursive walk). Sorting /
   // .git-filter / cap live in the pure, tested lib/dir-listing; here we just gather

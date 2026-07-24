@@ -90,7 +90,8 @@ function ensureFontLoaded(family: string, size: number): Promise<unknown> {
 // screenshot) → send Ctrl+V (0x16) so the running program (Claude Code, etc.) reads the
 // clipboard itself — we never touch the image bytes, so there's NO bitmap decode (that
 // decode was slow on Windows and the whole reason image paste lagged). In a plain shell
-// 0x16 is quoted-insert (recover with Ctrl+C); on an empty clipboard it's a harmless no-op.
+// 0x16 is quoted-insert — it arms the next keystroke as literal (recover with Ctrl+C); on
+// an empty clipboard that's the only cost (the previous code sent nothing there).
 function pasteInto(term: Terminal) {
   void ipc.clipboardRead().then((text) => {
     if (text) term.paste(text)
