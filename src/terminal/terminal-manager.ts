@@ -92,10 +92,17 @@ function ensureFontLoaded(family: string, size: number): Promise<unknown> {
 // images in Claude, matching cmux. In a plain shell 0x16 is quoted-insert (the line
 // editor waits for the next key; recover with Ctrl+C) — identical to pressing Ctrl+V there.
 function pasteInto(term: Terminal) {
-  void Promise.all([ipc.clipboardRead(), ipc.clipboardHasImage()]).then(([text, hasImage]) => {
+  const decide = (text: string, hasImage: boolean) => {
     const action = pasteAction(text, hasImage)
     if (action === "text") term.paste(text)
     else if (action === "image") term.input("\x16")
+  }
+  // Read text first; only probe for an image when there's NO text. The image check
+  // decodes the whole clipboard bitmap (slow on Windows), and text wins anyway
+  // (pasteAction), so the common text paste no longer pays that cost.
+  void ipc.clipboardRead().then((text) => {
+    if (text) decide(text, false)
+    else void ipc.clipboardHasImage().then((hasImage) => decide("", hasImage))
   })
 }
 
