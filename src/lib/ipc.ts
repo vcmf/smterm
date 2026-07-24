@@ -42,7 +42,6 @@ export interface Ipc {
   notify: (title: string, body: string) => void
   clipboardWrite: (text: string) => void
   clipboardRead: () => Promise<string>
-  clipboardHasImage: () => Promise<boolean>
   // Lazy, one directory at a time (files browser). `wsl` translates a WSL pane's Linux
   // path to a \\wsl.localhost\ UNC so the Windows host can list it.
   readdir: (dir: string, wsl?: WslContext) => Promise<DirListing>

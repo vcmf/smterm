@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { keyAction, pasteAction, type TermKeyEvent } from "./terminal-keys"
+import { keyAction, type TermKeyEvent } from "./terminal-keys"
 
 const ev = (over: Partial<TermKeyEvent>): TermKeyEvent => ({
   key: "a",
@@ -87,18 +87,5 @@ describe("keyAction — Shift+Enter newline", () => {
     expect(run(ev({ key: "Enter", shiftKey: true, ctrlKey: true }))).toBeNull()
     expect(run(ev({ key: "Enter", shiftKey: true, metaKey: true }))).toBeNull()
     expect(run(ev({ key: "Enter", shiftKey: true, altKey: true }))).toBeNull()
-  })
-})
-
-describe("pasteAction", () => {
-  it("text present → text paste (even alongside an image)", () => {
-    expect(pasteAction("hello", false)).toBe("text")
-    expect(pasteAction("hello", true)).toBe("text") // text wins
-  })
-  it("image only → route to the program (send Ctrl+V)", () => {
-    expect(pasteAction("", true)).toBe("image")
-  })
-  it("neither → nothing to do", () => {
-    expect(pasteAction("", false)).toBe("none")
   })
 })
