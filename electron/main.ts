@@ -13,7 +13,6 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
 import os from "node:os"
-import { randomUUID } from "node:crypto"
 import { spawn } from "node:child_process"
 import { StringDecoder } from "node:string_decoder"
 import * as pty from "node-pty"
@@ -34,10 +33,11 @@ import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
 import { orderMacEditors, planEditor, type EditorPlan, type EditorInfo } from "./editor-detect"
-import { startHookReceiver } from "./agent-hooks"
+import { startHookWatcher } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
+import { buildHookSettings } from "./hook-writer"
 import { toDirListing } from "../src/lib/dir-listing"
-import { wslUncCandidates } from "./wsl-paths"
+import { wslUncCandidates, winToMnt } from "./wsl-paths"
 import type { WslContext } from "../src/lib/wsl"
 import {
   classifyPreview,
@@ -68,9 +68,12 @@ interface PtySession {
 }
 const sessions = new Map<string, PtySession>()
 let mainWindow: BrowserWindow | null = null
-// Path to the scoped Claude Code hook-settings file the `claude` shell wrapper loads
-// (set once the loopback hook receiver is up). null ⇒ agents board stays empty.
+// Paths to the scoped Claude Code hook-settings files the `claude` shell wrapper loads
+// (set once the file-drop watcher is up). null ⇒ agents board stays empty. The WSL variant
+// (Windows only) points the drop dir at a /mnt/c path an in-WSL claude can write.
 let hookSettingsPath: string | null = null
+let hookSettingsPathWsl: string | null = null
+let hookWatcher: { close: () => Promise<void> } | null = null
 let quitConfirmed = false
 
 // PTY output batching (see electron/coalescer.ts + docs/PERF.md).
@@ -154,56 +157,41 @@ function startSettingsWatcher() {
 }
 
 // ── agent observability (M6) ───────────────────────────────────────
-// Build the scoped Claude Code hook-settings JSON: every event of interest POSTs
-// to our loopback receiver with the shared token. `timeout: 3` is a backstop so a
-// slow/dead receiver can never hang the agent (design doc §8).
-function agentHookSettings(port: number, token: string): string {
-  const hook = {
-    type: "http",
-    url: `http://127.0.0.1:${port}/`,
-    // x-smterm-pane is interpolated per pane from SMTERM_PANE_ID (set in the spawn env)
-    // so the receiver can tag each event with the pane it came from (board grouping +
-    // click-to-focus). Env interpolation via allowedEnvVars is confirmed to work.
-    headers: { "x-smterm-token": token, "x-smterm-pane": "$SMTERM_PANE_ID" },
-    allowedEnvVars: ["SMTERM_PANE_ID"],
-    timeout: 3,
-  }
-  const toolEvents = new Set(["PreToolUse", "PostToolUse"])
-  const events = [
-    "SessionStart",
-    "SessionEnd",
-    "UserPromptSubmit",
-    "Stop",
-    "Notification",
-    "SubagentStart",
-    "SubagentStop",
-    "PreToolUse",
-    "PostToolUse",
-    "CwdChanged",
-    "FileChanged",
-    "WorktreeCreate",
-    "WorktreeRemove",
-  ]
-  const hooks: Record<string, unknown[]> = {}
-  for (const e of events)
-    hooks[e] = [toolEvents.has(e) ? { matcher: "", hooks: [hook] } : { hooks: [hook] }]
-  return `${JSON.stringify({ hooks }, null, 2)}\n`
-}
-
-// Start the loopback hook receiver + write the scoped settings file. Best-effort:
-// on any failure the board just stays empty (never blocks startup or the terminal).
+// Start the file-drop watcher + write the scoped settings file(s). Best-effort: on any
+// failure the board just stays empty (never blocks startup or the terminal). Claude writes
+// each event as a file into `hook-events/`; the watcher reads + deletes them (agent-hooks).
+// No ports/networking — so nothing can go stale, and it crosses the WSL boundary.
 async function startAgentObservability(): Promise<void> {
   try {
-    const token = randomUUID()
-    const receiver = await startHookReceiver({
-      token,
+    const cfg = configDir()
+    const eventsDir = path.join(cfg, "hook-events")
+    fs.mkdirSync(eventsDir, { recursive: true })
+    // Clear stale drops from a previous run so we don't replay old events.
+    for (const f of fs.readdirSync(eventsDir)) {
+      try {
+        fs.rmSync(path.join(eventsDir, f), { force: true })
+      } catch {
+        // ignore
+      }
+    }
+    hookWatcher = await startHookWatcher({
+      dir: eventsDir,
       onBatch: (events: AgentEvent[]) => mainWindow?.webContents.send("agents:events", events),
     })
-    const p = path.join(configDir(), "claude-hooks.json")
-    fs.mkdirSync(path.dirname(p), { recursive: true })
-    fs.writeFileSync(p, agentHookSettings(receiver.port, token))
-    hookSettingsPath = p
-    diag("agent-hooks-up", { port: receiver.port })
+    // Native settings: the drop dir as a host path.
+    const nativePath = path.join(cfg, "claude-hooks.json")
+    fs.writeFileSync(nativePath, buildHookSettings(eventsDir))
+    hookSettingsPath = nativePath
+    // WSL variant (Windows only): same physical dir, addressed via /mnt/c so an in-WSL
+    // `claude` can write into it. SMTERM_CLAUDE_SETTINGS is WSLENV-forwarded with /p, so
+    // this file's Windows path is translated for claude to read.
+    const mnt = process.platform === "win32" ? winToMnt(eventsDir) : null
+    if (mnt) {
+      const wslPath = path.join(cfg, "claude-hooks.wsl.json")
+      fs.writeFileSync(wslPath, buildHookSettings(mnt))
+      hookSettingsPathWsl = wslPath
+    }
+    diag("agent-hooks-up", { dir: eventsDir })
   } catch (err) {
     diag("agent-hooks-failed", { err: String(err) })
   }
@@ -289,10 +277,14 @@ function registerIpc() {
       // so it crosses the boundary.)
       const spawnEnv = { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>
       if (!shareHistoryEnabled()) spawnEnv.SMTERM_SHARE_HISTORY = "0"
-      // Let the injected `claude` wrapper route through our scoped hook settings, and
-      // tag this pane so the agents board knows which pane each session runs in (M6).
-      if (hookSettingsPath && !wsl) {
-        spawnEnv.SMTERM_CLAUDE_SETTINGS = hookSettingsPath
+      // Let the injected `claude` wrapper route through our scoped hook settings, and tag
+      // this pane so the agents board knows which pane each session runs in (M6). WSL panes
+      // use the /mnt/c-addressed variant; wslInjection forwards both vars over WSLENV (the
+      // settings path with /p so its Windows form is translated for claude inside WSL).
+      if (hookSettingsPath) {
+        spawnEnv.SMTERM_CLAUDE_SETTINGS = wsl
+          ? (hookSettingsPathWsl ?? hookSettingsPath)
+          : hookSettingsPath
         spawnEnv.SMTERM_PANE_ID = opts.id
       }
       const proc = pty.spawn(shellCmd, [...(opts.args ?? []), ...wslArgs, ...(inj?.args ?? [])], {
@@ -702,7 +694,10 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
 
-app.on("will-quit", () => diag("will-quit", { ptys: sessions.size }))
+app.on("will-quit", () => {
+  diag("will-quit", { ptys: sessions.size })
+  void hookWatcher?.close() // stop the file-drop watcher
+})
 app.on("quit", () => diag("quit"))
 
 function killAllPtys() {
