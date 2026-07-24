@@ -18,6 +18,7 @@ import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
 
 const isMac = /mac/i.test(navigator.userAgent)
+const isWindows = /win/i.test(navigator.userAgent)
 
 interface Entry {
   term: Terminal
@@ -243,7 +244,7 @@ function build(): Entry {
   // paste). Everything else (incl. ⌃C SIGINT) passes straight through to the PTY.
   term.attachCustomKeyEventHandler((e) => {
     if (e.type !== "keydown") return true
-    const action = keyAction(e, { isMac, hasSelection: term.hasSelection() })
+    const action = keyAction(e, { isMac, isWindows, hasSelection: term.hasSelection() })
     if (!action) return true
     if (action === "copy") {
       const sel = term.getSelection()

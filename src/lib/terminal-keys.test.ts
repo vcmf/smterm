@@ -47,7 +47,7 @@ describe("keyAction — Linux/Windows", () => {
     expect(pc(ev({ key: "c", ctrlKey: true }), false)).toBeNull() // no selection → SIGINT
   })
 
-  it("plain Ctrl+V passes through (literal), not paste", () => {
+  it("plain Ctrl+V stays literal (quoted-insert) on Linux, not paste", () => {
     expect(pc(ev({ key: "v", ctrlKey: true }))).toBeNull()
   })
 
@@ -57,6 +57,20 @@ describe("keyAction — Linux/Windows", () => {
 
   it("⌘ combos don't trigger on non-mac", () => {
     expect(pc(ev({ key: "v", metaKey: true }))).toBeNull()
+  })
+})
+
+describe("keyAction — Windows (plain Ctrl+V pastes)", () => {
+  const win = (e: TermKeyEvent, hasSelection = false) =>
+    keyAction(e, { isMac: false, isWindows: true, hasSelection })
+
+  it("plain Ctrl+V pastes (Windows Terminal convention)", () => {
+    expect(win(ev({ key: "v", ctrlKey: true }))).toBe("paste")
+  })
+  it("Ctrl+Shift+V still pastes; Ctrl+C still copies-on-selection / else SIGINT", () => {
+    expect(win(ev({ key: "v", ctrlKey: true, shiftKey: true }))).toBe("paste")
+    expect(win(ev({ key: "c", ctrlKey: true }), true)).toBe("copy")
+    expect(win(ev({ key: "c", ctrlKey: true }), false)).toBeNull()
   })
 })
 

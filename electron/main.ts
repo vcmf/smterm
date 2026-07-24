@@ -402,7 +402,12 @@ function registerIpc() {
   ipcMain.handle("clipboard:read", async () => clipboard.readText())
   // Whether the clipboard holds an image (e.g. a screenshot) — the renderer uses this
   // to route ⌘V to the running program's own image paste instead of a text paste.
-  ipcMain.handle("clipboard:has-image", async () => !clipboard.readImage().isEmpty())
+  // Just whether an image is present — via the cheap format list, NOT readImage() (which
+  // decodes the whole bitmap, slow on Windows). We never need the bytes: an image paste
+  // sends Ctrl+V so the running program reads the clipboard image itself (see pasteInto).
+  ipcMain.handle("clipboard:has-image", async () =>
+    clipboard.availableFormats().some((f) => f.startsWith("image/")),
+  )
 
   // Files browser: list ONE directory (lazy — never a recursive walk). Sorting /
   // .git-filter / cap live in the pure, tested lib/dir-listing; here we just gather
