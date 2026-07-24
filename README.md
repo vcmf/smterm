@@ -37,7 +37,7 @@ for coding agents, this is that.
   ligatures.
 
 <p align="center">
-  <img src="docs/media/screenshot.png" alt="smterm running four agent sessions in split panes, with the Agents board on the right" width="100%" />
+  <img src="docs/media/screenshot.jpg" alt="smterm running four agent sessions in split panes, with the Agents board on the right" width="100%" />
 </p>
 
 ## Why I built this
