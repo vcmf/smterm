@@ -28,7 +28,7 @@ export interface TermKeyEvent {
 
 export function keyAction(
   e: TermKeyEvent,
-  opts: { isMac: boolean; hasSelection: boolean },
+  opts: { isMac: boolean; isWindows?: boolean; hasSelection: boolean },
 ): TermKeyAction {
   const key = e.key.toLowerCase()
   // Shift+Enter → insert a newline (multi-line input for agents like Claude Code)
@@ -47,10 +47,14 @@ export function keyAction(
 
   // Linux/Windows.
   if (e.metaKey) return null
-  // Plain Ctrl+C copies only when there's a selection (else it passes through as
-  // SIGINT); other plain-Ctrl keys (Ctrl+V literal, etc.) pass through untouched.
+  // Plain Ctrl+C copies only when there's a selection (else passes through as SIGINT).
+  // Plain Ctrl+V pastes on WINDOWS (matches Windows Terminal / VS Code — routed through
+  // pasteInto, so an image still becomes Ctrl+V for the app); on Linux it stays literal
+  // (quoted-insert), where Ctrl+Shift+V is the paste convention.
   if (e.ctrlKey && !e.shiftKey) {
-    return key === "c" && opts.hasSelection ? "copy" : null
+    if (key === "c") return opts.hasSelection ? "copy" : null
+    if (key === "v" && opts.isWindows) return "paste"
+    return null
   }
   // Ctrl+Shift+{C,V,A} — explicit copy / paste / select-all.
   if (e.ctrlKey && e.shiftKey) {
