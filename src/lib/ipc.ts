@@ -49,8 +49,11 @@ export interface Ipc {
 
   // Read a file for the preview popup; `wsl` reads a WSL pane's Linux path via its UNC share.
   readFilePreview: (path: string, wsl?: WslContext) => Promise<PreviewData>
-  pickDirectory: (defaultPath?: string) => Promise<string | null> // native folder picker (Files root)
-  pathIsDir: (p: string) => Promise<boolean> // validate a typed path is a directory
+  // Native folder picker (Files root); `wsl` opens it at the distro's UNC share and returns
+  // a distro-native Linux path.
+  pickDirectory: (defaultPath?: string, wsl?: WslContext) => Promise<string | null>
+  // Validate a typed path is a directory; `wsl` checks a WSL pane's path via the UNC share.
+  pathIsDir: (p: string, wsl?: WslContext) => Promise<boolean>
 
   minimizeWindow: () => void
   maximizeWindow: () => void
