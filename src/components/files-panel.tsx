@@ -101,11 +101,11 @@ export function FilesPanel() {
   // Path relative to the panel root, for "Copy relative path".
   const relTo = (abs: string) =>
     root && abs.startsWith(root) ? abs.slice(root.length).replace(/^\//, "") : abs
-  // Open the preview, but only for a resolvable host path (same guard as the menu):
-  // skip on WSL panes / non-absolute paths so readFilePreview never gets a bad path.
+  // Open the preview. A WSL pane's path is an absolute Linux path (/home/…) → allowed;
+  // we carry the pane's WSL context so main reads it via the distro's UNC share.
   const preview = (abs: string, name: string) => {
-    if (getActiveWsl() || !isAbsoluteHostPath(abs)) return
-    useStore.getState().setPreview({ abs, name })
+    if (!isAbsoluteHostPath(abs)) return
+    useStore.getState().setPreview({ abs, name, wsl: getActiveWsl() })
   }
   // Double-click a folder → make it the panel root. setPaneRoot centralises the
   // host-path / WSL guard, so no need to repeat it here.

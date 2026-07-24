@@ -22,6 +22,7 @@ export function FilePreview() {
   const [html, setHtml] = useState<string | null>(null) // highlighted/escaped code HTML
 
   const abs = target?.abs
+  const wsl = target?.wsl // read a WSL pane's path via its UNC share (translated in main)
   const lang = useMemo(() => (abs ? languageForPath(abs) : null), [abs])
 
   // Load + (lazily) highlight whenever the target changes; ignore a stale resolve if
@@ -31,7 +32,7 @@ export function FilePreview() {
     let live = true
     setData(null)
     setHtml(null)
-    void ipc.readFilePreview(abs).then(async (d) => {
+    void ipc.readFilePreview(abs, wsl).then(async (d) => {
       if (!live) return
       setData(d)
       if (d.kind !== "text") return
@@ -42,7 +43,7 @@ export function FilePreview() {
     return () => {
       live = false
     }
-  }, [abs, lang])
+  }, [abs, lang, wsl])
 
   // Escape closes.
   useEffect(() => {
@@ -80,22 +81,28 @@ export function FilePreview() {
             </span>
           )}
           <span className="preview-actions">
-            <button
-              className="iconbtn"
-              style={{ width: 24, height: 24 }}
-              title="Open in editor"
-              onClick={() => ipc.openFile("", target.abs)}
-            >
-              <ArrowSquareOut size={14} />
-            </button>
-            <button
-              className="iconbtn"
-              style={{ width: 24, height: 24 }}
-              title="Reveal in file manager"
-              onClick={() => ipc.revealPath(target.abs)}
-            >
-              <FolderOpen size={14} />
-            </button>
+            {/* Open/Reveal act on the Windows host, which can't resolve a WSL Linux path —
+                hide them on a WSL preview until those are wired for WSL. */}
+            {!wsl && (
+              <>
+                <button
+                  className="iconbtn"
+                  style={{ width: 24, height: 24 }}
+                  title="Open in editor"
+                  onClick={() => ipc.openFile("", target.abs)}
+                >
+                  <ArrowSquareOut size={14} />
+                </button>
+                <button
+                  className="iconbtn"
+                  style={{ width: 24, height: 24 }}
+                  title="Reveal in file manager"
+                  onClick={() => ipc.revealPath(target.abs)}
+                >
+                  <FolderOpen size={14} />
+                </button>
+              </>
+            )}
             <button
               className="iconbtn"
               style={{ width: 24, height: 24 }}
@@ -114,12 +121,13 @@ export function FilePreview() {
           )}
           {data?.kind === "binary" && (
             <div className="preview-note status-faint">
-              Binary file — {formatSize(data.size)}. Use Open in editor or Reveal above.
+              Binary file — {formatSize(data.size)}.{!wsl && " Use Open in editor or Reveal above."}
             </div>
           )}
           {data?.kind === "too-large" && (
             <div className="preview-note status-faint">
-              Too large to preview ({formatSize(data.size)}). Use Open in editor or Reveal above.
+              Too large to preview ({formatSize(data.size)}).
+              {!wsl && " Use Open in editor or Reveal above."}
             </div>
           )}
           {data?.kind === "text" && html !== null && (

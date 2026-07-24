@@ -12,7 +12,7 @@ import type { GitStatus } from "./lib/ipc"
 import { isAbsoluteHostPath } from "./lib/file-actions"
 import type { EditorInfo } from "./lib/file-actions"
 import { normalizeRootPath } from "./lib/breadcrumb"
-import { wslContext } from "./lib/wsl"
+import { wslContext, type WslContext } from "./lib/wsl"
 import type { WorkspaceState } from "./lib/workspace"
 import { clampPanelWidth, RIGHT_PANEL_DEFAULT } from "./lib/right-panel"
 
@@ -59,13 +59,15 @@ interface AppState {
   home: string
   platform: string // process.platform ("darwin"|"win32"|"linux"); "" until fetched
   editor: EditorInfo | null // configured editor availability (file context menu)
-  preview: { abs: string; name: string } | null // file open in the preview popup (null = closed)
+  // file open in the preview popup (null = closed); wsl = the pane's distro so a WSL path
+  // is read via its UNC share (captured at open time — the active pane may change after).
+  preview: { abs: string; name: string; wsl?: WslContext } | null
   paneRoot: Record<string, string> // per-session Files-panel root override (absent = follow cwd)
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
   setEditor: (editor: EditorInfo) => void
-  setPreview: (preview: { abs: string; name: string } | null) => void
+  setPreview: (preview: { abs: string; name: string; wsl?: WslContext } | null) => void
   setPaneRoot: (sessionId: string, root: string) => void
   clearPaneRoot: (sessionId: string) => void
   setSessionOscTitle: (sessionId: string, title: string) => void

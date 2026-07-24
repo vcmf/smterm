@@ -5,8 +5,16 @@ import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
 import { allSessionIds } from "../lib/pane-tree"
 import { resetStore, testShell } from "../test/helpers"
+import type { ShellOption } from "../types"
+import { fireEvent } from "@testing-library/react"
 
 const st = () => useStore.getState()
+const wslShell: ShellOption = {
+  id: "wsl",
+  label: "WSL",
+  command: "wsl.exe",
+  args: ["-d", "Ubuntu"],
+}
 
 describe("FilesPanel", () => {
   beforeEach(() => {
@@ -35,5 +43,23 @@ describe("FilesPanel", () => {
     render(<FilesPanel />)
     await waitFor(() => expect(screen.getByText("src")).toBeInTheDocument())
     expect(screen.getByText("README.md")).toBeInTheDocument()
+  })
+
+  it("clicking a file on a WSL pane opens the preview with the pane's WSL context", async () => {
+    vi.mocked(ipc.readdir).mockResolvedValue({
+      entries: [{ name: "app.ts", isDir: false }],
+      truncated: false,
+    })
+    st().newTab(wslShell)
+    const id = allSessionIds(st().tabs[0]!.root)[0]!
+    st().setSessionCwd(id, "/home/me/wsltest") // a Linux path
+    render(<FilesPanel />)
+    const row = await waitFor(() => screen.getByText("app.ts"))
+    fireEvent.mouseDown(row, { button: 0 })
+    // No longer guarded out on WSL; the distro travels so main reads it via the UNC share.
+    expect(st().preview).toMatchObject({
+      abs: "/home/me/wsltest/app.ts",
+      wsl: { distro: "Ubuntu" },
+    })
   })
 })

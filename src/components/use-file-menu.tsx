@@ -50,6 +50,8 @@ export function useFileMenu(): {
   const dispatch = (id: FileActionId) => {
     if (!menu) return
     if (id === "preview")
+      // No wsl here: openFileMenu refuses to open the menu on a WSL pane (#21), so this
+      // path is native-only. WSL preview is the left-click path (files-panel).
       useStore.getState().setPreview({ abs: menu.abs, name: baseName(menu.abs) })
     else if (id === "setRoot") {
       const s = useStore.getState()
