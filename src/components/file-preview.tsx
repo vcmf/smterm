@@ -22,6 +22,7 @@ export function FilePreview() {
   const [html, setHtml] = useState<string | null>(null) // highlighted/escaped code HTML
 
   const abs = target?.abs
+  const wsl = target?.wsl // read a WSL pane's path via its UNC share (translated in main)
   const lang = useMemo(() => (abs ? languageForPath(abs) : null), [abs])
 
   // Load + (lazily) highlight whenever the target changes; ignore a stale resolve if
@@ -31,7 +32,7 @@ export function FilePreview() {
     let live = true
     setData(null)
     setHtml(null)
-    void ipc.readFilePreview(abs).then(async (d) => {
+    void ipc.readFilePreview(abs, wsl).then(async (d) => {
       if (!live) return
       setData(d)
       if (d.kind !== "text") return
@@ -42,7 +43,7 @@ export function FilePreview() {
     return () => {
       live = false
     }
-  }, [abs, lang])
+  }, [abs, lang, wsl])
 
   // Escape closes.
   useEffect(() => {

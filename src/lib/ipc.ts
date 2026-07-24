@@ -47,7 +47,8 @@ export interface Ipc {
   // path to a \\wsl.localhost\ UNC so the Windows host can list it.
   readdir: (dir: string, wsl?: WslContext) => Promise<DirListing>
 
-  readFilePreview: (path: string) => Promise<PreviewData> // read a file for the preview popup
+  // Read a file for the preview popup; `wsl` reads a WSL pane's Linux path via its UNC share.
+  readFilePreview: (path: string, wsl?: WslContext) => Promise<PreviewData>
   pickDirectory: (defaultPath?: string) => Promise<string | null> // native folder picker (Files root)
   pathIsDir: (p: string) => Promise<boolean> // validate a typed path is a directory
 

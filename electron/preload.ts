@@ -50,7 +50,8 @@ const api = {
   clipboardRead: () => ipcRenderer.invoke("clipboard:read") as Promise<string>,
   clipboardHasImage: () => ipcRenderer.invoke("clipboard:has-image") as Promise<boolean>,
   readdir: (dir: string, wsl?: WslContext) => ipcRenderer.invoke("fs:readdir", dir, wsl),
-  readFilePreview: (path: string) => ipcRenderer.invoke("fs:read-preview", path),
+  readFilePreview: (path: string, wsl?: WslContext) =>
+    ipcRenderer.invoke("fs:read-preview", path, wsl),
   pickDirectory: (defaultPath?: string) => ipcRenderer.invoke("dialog:pick-directory", defaultPath),
   pathIsDir: (p: string) => ipcRenderer.invoke("fs:is-dir", p),
 

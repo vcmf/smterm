@@ -50,7 +50,9 @@ export function useFileMenu(): {
   const dispatch = (id: FileActionId) => {
     if (!menu) return
     if (id === "preview")
-      useStore.getState().setPreview({ abs: menu.abs, name: baseName(menu.abs) })
+      useStore
+        .getState()
+        .setPreview({ abs: menu.abs, name: baseName(menu.abs), wsl: getActiveWsl() })
     else if (id === "setRoot") {
       const s = useStore.getState()
       const sid = s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId
