@@ -36,6 +36,7 @@ import { orderMacEditors, planEditor, type EditorPlan, type EditorInfo } from ".
 import { startHookReceiver } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { toDirListing } from "../src/lib/dir-listing"
+import { wslToUnc } from "./wsl-paths"
 import {
   classifyPreview,
   PREVIEW_READ_CAP,
@@ -414,9 +415,12 @@ function registerIpc() {
   // Files browser: list ONE directory (lazy — never a recursive walk). Sorting /
   // .git-filter / cap live in the pure, tested lib/dir-listing; here we just gather
   // entries (resolving symlinked dirs via stat so they browse, not open as files).
-  ipcMain.handle("fs:readdir", async (_e, dir: string) => {
+  ipcMain.handle("fs:readdir", async (_e, dir: string, wsl?: { distro?: string }) => {
+    // A WSL pane's dir is a Linux path the host can't see — read it through the distro's
+    // \\wsl.localhost\ share instead. Non-WSL panes read the host path directly.
+    const target = wsl ? (wslToUnc(wsl.distro, dir) ?? dir) : dir
     try {
-      const ents = await fs.promises.readdir(dir, { withFileTypes: true })
+      const ents = await fs.promises.readdir(target, { withFileTypes: true })
       const raw = await Promise.all(
         ents.map(async (e) => {
           let isDir = e.isDirectory()
@@ -424,7 +428,7 @@ function registerIpc() {
             // isDirectory() is false for a symlink even when it targets a dir — stat
             // the target so a symlinked directory expands instead of opening.
             try {
-              isDir = (await fs.promises.stat(path.join(dir, e.name))).isDirectory()
+              isDir = (await fs.promises.stat(path.join(target, e.name))).isDirectory()
             } catch {
               // dangling link → treat as a file
             }
@@ -434,7 +438,7 @@ function registerIpc() {
       )
       return toDirListing(raw)
     } catch {
-      return { entries: [], truncated: false } // unreadable / not-a-dir / WSL path → empty
+      return { entries: [], truncated: false } // unreadable / not-a-dir → empty
     }
   })
 

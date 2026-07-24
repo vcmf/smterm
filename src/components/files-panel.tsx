@@ -55,7 +55,11 @@ export function FilesPanel() {
   }, [])
   const load = useCallback(
     (key: string, dir: string) => {
-      void ipc.readdir(dir).then((listing) => apply(key, (s) => setListing(s, dir, listing)))
+      // Pass the focused pane's WSL context so a distro's Linux path is read via its
+      // \\wsl.localhost\ share (a stale read for a pane you've left is dropped by `apply`).
+      void ipc
+        .readdir(dir, getActiveWsl())
+        .then((listing) => apply(key, (s) => setListing(s, dir, listing)))
     },
     [apply],
   )
