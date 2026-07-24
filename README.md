@@ -101,16 +101,19 @@ in-app settings panel; a live watcher re-applies changes as you save.
 
 This is v0. I use it every day, and it will still surprise you sometimes.
 
-- macOS is Apple Silicon only for now. An Intel build is on the list.
-- Nothing is code-signed or notarized yet, so expect a security prompt if you go around the
-  installer. This is the next thing on the roadmap.
-- The "is this agent actually working or just sitting there" detection is a heuristic. It is
-  good, not psychic.
-- The Agents board is Claude Code specific right now (it reads Claude's own hook events). Other
-  agents will come; the underlying reducer is agent-agnostic.
-- Windows and WSL work but have had less real-world mileage than macOS and Linux.
-- Live processes do not survive a full quit yet. Your layout comes back, your running programs
-  do not.
+- On macOS it is Apple Silicon only for now. Intel is not built yet.
+- The app is not code-signed or notarized, so installing it outside the script gives you a
+  security prompt the first time.
+- Agent status comes from a heuristic (is the pane still producing output, or has it gone
+  quiet?), so it reads the state wrong once in a while.
+- The Agents board only knows about Claude Code today, since it reads Claude's hook events. The
+  code under it does not assume any particular agent, so others can plug in later.
+- Windows and WSL have had far less real-world use than macOS and Linux, so expect rougher edges
+  there.
+- After a full quit, your tabs and layout come back on relaunch, but running processes are not
+  restored yet.
+
+Most of these are already on the near-term roadmap, so they should not be rough for long.
 
 Found a bug? [Open an issue](https://github.com/vcmf/smterm/issues). What you did, what
 happened, and what you expected is all it takes for a useful report.
