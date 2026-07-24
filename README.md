@@ -20,9 +20,9 @@ that show you what the agents are actually doing: git diffs, files, and a live a
 works with Claude Code. If you have looked for an open-source Warp alternative, or a tmux built
 for coding agents, this is that.
 
-- 🔔 **Knows which session needs you.** Working, waiting for input, or done, shown as a dot on
-  the tab and in the sidebar, plus a native notification when a background pane wants you. No
-  more finding a finished agent an hour late.
+- 🔔 **Notifications when a session needs you.** Working, waiting for input, or done, shown as a
+  dot on the tab and in the sidebar, plus a native OS notification when a background pane wants
+  you. No more finding a finished agent an hour late.
 - 🔍 **Changes panel.** A git diff for the focused pane's working directory, so you can read
   what an agent just touched. Branch and ahead/behind show in the status bar.
 - 📁 **Files browser.** A lazy per-folder listing rooted at the focused pane's cwd, with git
@@ -70,16 +70,6 @@ Windows (PowerShell):
 irm https://raw.githubusercontent.com/vcmf/smterm/main/install.ps1 | iex
 ```
 
-Prefer to click things? Grab a build from the
-[releases page](https://github.com/vcmf/smterm/releases).
-
-smterm is not notarized by Apple yet, so a `.dmg` opened from a browser may hit a Gatekeeper
-warning. If macOS refuses to open it, this clears the quarantine flag:
-
-```
-xattr -dr com.apple.quarantine /Applications/smterm.app
-```
-
 ## Also
 
 Beyond the headline features above:
@@ -108,8 +98,7 @@ in-app settings panel; a live watcher re-applies changes as you save.
 
 ## What is still rough
 
-This is v0. It is genuinely useful and it will also occasionally surprise you. Honesty beats a
-pristine-looking README.
+This is v0. It is genuinely useful, and it will also occasionally surprise you.
 
 - macOS is Apple Silicon only for now. An Intel build is on the list.
 - Nothing is code-signed or notarized yet, so expect a security prompt if you go around the
@@ -122,8 +111,8 @@ pristine-looking README.
 - Live processes do not survive a full quit yet. Your layout comes back, your running programs
   do not.
 
-Found a bug? [Open an issue](https://github.com/vcmf/smterm/issues). A report that says "here
-is what I did, here is what happened, here is what I expected" is worth its weight in gold.
+Found a bug? [Open an issue](https://github.com/vcmf/smterm/issues). What you did, what
+happened, and what you expected is all it takes for a useful report.
 
 ## Build from source
 
