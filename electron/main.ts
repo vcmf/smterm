@@ -92,6 +92,14 @@ function defaultShell(): string {
   return process.env.SHELL ?? (process.platform === "win32" ? "powershell.exe" : "/bin/zsh")
 }
 
+// Host-fs targets for a path, in try order: for a WSL pane, the distro's UNC share
+// candidates (default distro resolved, both share forms); otherwise the path itself.
+// Shared by fs:readdir + fs:read-preview so the WSL translation lives in one place.
+function wslTargets(p: string, wsl?: WslContext): string[] {
+  const candidates = wsl ? wslUncCandidates(wsl.distro ?? defaultWslDistro(), p) : []
+  return candidates.length ? candidates : [p]
+}
+
 // The app icon. Packaged builds get it from the bundle (electron-builder → build/icon.*),
 // but in dev Electron shows its default icon unless we set it at runtime, so point at the
 // source PNG in build/ (app path = project root in dev). Returns null if not found.
@@ -409,10 +417,8 @@ function registerIpc() {
   // entries (resolving symlinked dirs via stat so they browse, not open as files).
   ipcMain.handle("fs:readdir", async (_e, dir: string, wsl?: WslContext) => {
     // A WSL pane's dir is a Linux path the host can't see — read it through the distro's
-    // UNC share (resolving the default distro's name when the pane has no explicit -d),
-    // trying \\wsl.localhost\ then legacy \\wsl$\. Non-WSL panes read the host path.
-    const candidates = wsl ? wslUncCandidates(wsl.distro ?? defaultWslDistro(), dir) : []
-    for (const target of candidates.length ? candidates : [dir]) {
+    // UNC share instead (wslTargets); non-WSL panes read the host path.
+    for (const target of wslTargets(dir, wsl)) {
       try {
         const ents = await fs.promises.readdir(target, { withFileTypes: true })
         const raw = await Promise.all(
@@ -444,10 +450,9 @@ function registerIpc() {
     "fs:read-preview",
     async (_e, p: string, wsl?: WslContext): Promise<PreviewData> => {
       // A WSL pane's path is a Linux path the host can't open — read it through the distro's
-      // UNC share instead (both share forms), like fs:readdir. Non-WSL reads the host path.
-      const candidates = wsl ? wslUncCandidates(wsl.distro ?? defaultWslDistro(), p) : []
+      // UNC share instead (wslTargets), like fs:readdir. Non-WSL reads the host path.
       let lastErr = "not found"
-      for (const target of candidates.length ? candidates : [p]) {
+      for (const target of wslTargets(p, wsl)) {
         try {
           const st = await fs.promises.stat(target)
           if (!st.isFile()) return { kind: "error", message: "Not a file" }
