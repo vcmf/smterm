@@ -2,7 +2,7 @@
   "name": "smterm",
   "productName": "smterm",
   "private": true,
-  "version": "0.1.18",
+  "version": "0.1.19",
   "type": "module",
   "description": "Cross-platform terminal for running coding agents — tabs, split panes, agent-aware notifications.",
   "author": "smterm authors",
