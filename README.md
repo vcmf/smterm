@@ -58,6 +58,31 @@ each is doing, its working directory, and the files it touched. It reads Claude 
 events, so there is zero setup and no global config to edit; smterm only wires the panes it
 launches. Agents started outside smterm do not show up.
 
+## A closer look
+
+<table>
+  <tr>
+    <td width="42%"><img src="docs/media/feat-notifications.png" width="100%" alt="Notification bell with an unread badge in the top bar" /></td>
+    <td><b>Notifications when a session needs you.</b> A dot on the tab and a native OS notification the moment a background pane wants input or finishes.</td>
+  </tr>
+  <tr>
+    <td width="42%"><img src="docs/media/feat-sessions.jpg" width="100%" alt="Sidebar tree of sessions and panes with status dots" /></td>
+    <td><b>Every session and pane at a glance.</b> The sidebar tree shows each session, its panes, and a status dot: running, needs input, or idle.</td>
+  </tr>
+  <tr>
+    <td width="42%"><img src="docs/media/feat-changes.jpg" width="100%" alt="Changes panel showing a git diff" /></td>
+    <td><b>Changes panel.</b> A live git diff for the focused pane's working directory, with per-file counts and the full unified diff.</td>
+  </tr>
+  <tr>
+    <td width="42%"><img src="docs/media/feat-files.jpg" width="100%" alt="Files browser with git decorations on changed files" /></td>
+    <td><b>Files browser.</b> A lazy per-folder listing rooted at the pane's cwd, with git decorations on changed files.</td>
+  </tr>
+  <tr>
+    <td width="42%"><img src="docs/media/feat-file-preview.jpg" width="100%" alt="Inline file preview open over the terminal" /></td>
+    <td><b>Open a file and read it.</b> Click a file to open an inline preview and read what an agent wrote, without leaving the terminal.</td>
+  </tr>
+</table>
+
 ## Install
 
 macOS and Linux:
