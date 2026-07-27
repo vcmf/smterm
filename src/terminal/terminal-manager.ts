@@ -317,6 +317,12 @@ function spawn(session: Session, entry: Entry) {
       shell: session.command,
       args: session.args,
       cwd: session.cwd, // inherited from the pane this was split/opened from
+      // → COLORFGBG so agents detect light/dark (fallback when the OSC-11 bg query can't
+      // complete, e.g. across the wsl.exe hop). Captured at spawn: a running shell's env
+      // can't be rewritten, so a later theme switch only affects newly-spawned panes. On
+      // native, OSC-11 self-corrects live; on WSL a pane opened before the switch keeps the
+      // stale value until it's replaced — acceptable vs. the complexity of a live re-signal.
+      bg: getTheme(useStore.getState().settings.theme).terminal.background,
     })
     .catch((e) => term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`))
 

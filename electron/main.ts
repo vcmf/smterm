@@ -39,6 +39,7 @@ import type { AgentEvent } from "../src/lib/agent-graph"
 import { buildHookSettings } from "./hook-writer"
 import { toDirListing } from "../src/lib/dir-listing"
 import { wslUncCandidates, winToMnt, uncToWslPath } from "./wsl-paths"
+import { colorfgbg } from "./color"
 import type { WslContext } from "../src/lib/wsl"
 import {
   classifyPreview,
@@ -251,6 +252,7 @@ function registerIpc() {
         shell: string
         args: string[]
         cwd?: string
+        bg?: string
       },
     ): { reattached: boolean } => {
       const existing = sessions.get(opts.id)
@@ -283,6 +285,11 @@ function registerIpc() {
       // so it crosses the boundary.)
       const spawnEnv = { ...process.env, ...(inj?.env ?? {}) } as Record<string, string>
       if (!shareHistoryEnabled()) spawnEnv.SMTERM_SHARE_HISTORY = "0"
+      // Tell agents (Claude Code, vim, …) our light/dark background via COLORFGBG — the
+      // fallback when the OSC-11 background query can't complete in time (notably across
+      // the wsl.exe hop). WSL forwards it over $WSLENV (listed in wslInjection).
+      const fgbg = opts.bg ? colorfgbg(opts.bg) : null
+      if (fgbg) spawnEnv.COLORFGBG = fgbg
       // Let the injected `claude` wrapper route through our scoped hook settings, and tag
       // this pane so the agents board knows which pane each session runs in (M6). WSL panes
       // use the /mnt/c-addressed variant; wslInjection forwards both vars over WSLENV (the

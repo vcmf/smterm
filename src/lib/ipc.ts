@@ -15,6 +15,7 @@ export interface SpawnOpts {
   shell: string
   args: string[]
   cwd?: string // start directory; falls back to $HOME in main if unset
+  bg?: string // theme terminal background hex → COLORFGBG so agents detect light/dark
 }
 
 export interface Ipc {

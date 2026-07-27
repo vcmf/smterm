@@ -86,6 +86,7 @@ describe("wslInjection", () => {
       "SMTERM_SHARE_HISTORY", // opt-out crosses the boundary
       "SMTERM_CLAUDE_SETTINGS/p", // hook settings path (path-translated)
       "SMTERM_PANE_ID", // agents-board pane tag
+      "COLORFGBG", // light/dark theme signal for agents in WSL
     ])
   })
 
@@ -98,6 +99,7 @@ describe("wslInjection", () => {
     expect(r?.wslenv).toContain("SMTERM_ZDOTDIR")
     expect(r?.wslenv).toContain("SMTERM_CLAUDE_SETTINGS/p") // hooks reach claude inside WSL
     expect(r?.wslenv).toContain("SMTERM_PANE_ID")
+    expect(r?.wslenv).toContain("COLORFGBG") // light/dark theme signal for agents in WSL
   })
 
   it("unsupported shells (fish) → null (plain shell, no integration)", () => {
