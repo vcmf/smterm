@@ -24,11 +24,11 @@ export function TerminalPane({ sessionId, tabId }: { sessionId: string; tabId: s
     return tab ? allSessionIds(tab.root).length > 1 : false
   })
 
-  // Quick split (cmux-style): split THIS pane, inheriting its shell + cwd.
+  // Quick split (cmux-style): split THIS pane, inheriting its shell + cwd. Targets this
+  // pane explicitly (not the active pane) so it can't split the wrong one when focus
+  // tracking is momentarily off — e.g. a click inside a mouse-mode agent TUI.
   const split = (direction: "row" | "column") => {
-    const store = useStore.getState()
-    store.setActivePane(tabId, sessionId)
-    store.splitActive(direction)
+    useStore.getState().splitPane(tabId, sessionId, direction)
   }
 
   useEffect(() => {

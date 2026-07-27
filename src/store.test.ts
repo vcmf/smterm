@@ -36,6 +36,22 @@ describe("store — tabs & panes", () => {
     expect(Object.keys(st().sessions)).toHaveLength(2)
   })
 
+  it("splitPane splits the CLICKED pane, not the active one", () => {
+    st().newTab(shell)
+    st().splitActive("row", shell) // A | B, B now active
+    const tab0 = firstTab()
+    const [a, b] = allSessionIds(tab0.root)
+    expect(tab0.activeSessionId).toBe(b) // active = the newest (B)
+
+    // Click A's split button while B is active → A must be the one that splits.
+    st().splitPane(tab0.id, a!, "row")
+    const ids = allSessionIds(firstTab().root)
+    expect(ids).toHaveLength(3)
+    // A's leaf became a split (A + new pane); B is untouched as a plain leaf.
+    expect(siblingOfLeaf(firstTab().root, a!)).toBe(firstTab().activeSessionId)
+    expect(siblingOfLeaf(firstTab().root, b!)).toBeNull()
+  })
+
   it("openFolderInSplit splits the active pane with a session rooted at the given cwd", () => {
     st().newTab(shell)
     st().openFolderInSplit("/some/worktree")

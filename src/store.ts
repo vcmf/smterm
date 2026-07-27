@@ -88,6 +88,13 @@ interface AppState {
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
   splitActive: (direction: "row" | "column", fallback?: ShellOption) => void
+  // split a specific pane (its own split button) — targets that pane, not the active one
+  splitPane: (
+    tabId: string,
+    sessionId: string,
+    direction: "row" | "column",
+    fallback?: ShellOption,
+  ) => void
   openFolderInSplit: (cwd: string, paneId?: string) => void // split active pane at cwd; shell from paneId
   closePane: (tabId: string, sessionId: string) => void
   setActivePane: (tabId: string, sessionId: string) => void
@@ -121,21 +128,30 @@ function seen(s: Session): Session {
 export const isSessionVisible = (sessionId: string): boolean =>
   isVisibleIn(useStore.getState(), sessionId)
 
-// Split the active tab's active pane with a new session (shell + cwd + direction).
-// Shared by splitActive (inherit the active pane) and openFolderInSplit (agents board);
-// each caller resolves its own shell/cwd, this owns the pane-tree mechanics.
-function splitActivePane(
+// Split a SPECIFIC pane (tabId + sourceId) with a new session, and focus the new pane +
+// its tab. Shared by splitActive (the active pane), splitPane (a clicked pane), and
+// openFolderInSplit. Splitting the explicit source — not laundering through activeSessionId
+// — is what makes a pane's split button always target that pane, regardless of which pane
+// the (focus-tracked) active state currently points at.
+function splitPaneWith(
   state: AppState,
-  opts: { shell: ShellOption; cwd?: string; direction: "row" | "column" },
+  opts: {
+    tabId: string
+    sourceId: string
+    shell: ShellOption
+    cwd?: string
+    direction: "row" | "column"
+  },
 ): Partial<AppState> {
-  const tab = state.tabs.find((t) => t.id === state.activeTabId)
-  if (!tab) return {}
+  const tab = state.tabs.find((t) => t.id === opts.tabId)
+  if (!tab || !allSessionIds(tab.root).includes(opts.sourceId)) return {}
   const session = makeSession(opts.shell, opts.cwd)
-  const root = splitNode(tab.root, tab.activeSessionId, opts.direction, session.id, newId())
+  const root = splitNode(tab.root, opts.sourceId, opts.direction, session.id, newId())
   return {
     sessions: { ...state.sessions, [session.id]: session },
+    activeTabId: opts.tabId,
     tabs: state.tabs.map((t) =>
-      t.id === tab.id ? { ...t, root, activeSessionId: session.id } : t,
+      t.id === opts.tabId ? { ...t, root, activeSessionId: session.id } : t,
     ),
   }
 }
@@ -268,7 +284,24 @@ export const useStore = create<AppState>((set, get) => ({
       const src = state.sessions[tab.activeSessionId]
       const shell = inheritShell(state.shells, src) ?? fallback
       if (!shell) return {}
-      return splitActivePane(state, { shell, cwd: src?.cwd, direction })
+      return splitPaneWith(state, {
+        tabId: tab.id,
+        sourceId: tab.activeSessionId,
+        shell,
+        cwd: src?.cwd,
+        direction,
+      })
+    }),
+
+  // Split a SPECIFIC pane (a pane's own split button) — targets that pane directly rather
+  // than the active pane, so it can't split the wrong one if focus tracking is momentarily
+  // off (e.g. a click inside a mouse-mode TUI).
+  splitPane: (tabId, sessionId, direction, fallback) =>
+    set((state) => {
+      const src = state.sessions[sessionId]
+      const shell = inheritShell(state.shells, src) ?? fallback ?? state.shells[0]
+      if (!shell) return {}
+      return splitPaneWith(state, { tabId, sourceId: sessionId, shell, cwd: src?.cwd, direction })
     }),
 
   // Open a folder (an agent's cwd / worktree from the board) as a split beside the active
@@ -282,7 +315,13 @@ export const useStore = create<AppState>((set, get) => ({
       const src = state.sessions[tab.activeSessionId]
       const shell = inheritShell(state.shells, agentSession ?? src) ?? state.shells[0]
       if (!shell) return {}
-      return splitActivePane(state, { shell, cwd, direction: "row" })
+      return splitPaneWith(state, {
+        tabId: tab.id,
+        sourceId: tab.activeSessionId,
+        shell,
+        cwd,
+        direction: "row",
+      })
     }),
 
   closePane: (tabId, sessionId) =>
