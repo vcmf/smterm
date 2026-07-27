@@ -317,6 +317,9 @@ function spawn(session: Session, entry: Entry) {
       shell: session.command,
       args: session.args,
       cwd: session.cwd, // inherited from the pane this was split/opened from
+      // → COLORFGBG so agents detect light/dark (fallback when the OSC-11 bg query can't
+      // complete, e.g. across the wsl.exe hop).
+      bg: getTheme(useStore.getState().settings.theme).terminal.background,
     })
     .catch((e) => term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`))
 

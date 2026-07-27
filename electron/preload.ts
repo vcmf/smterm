@@ -3,8 +3,15 @@ import type { AgentEvent } from "../src/lib/agent-graph"
 import type { WslContext } from "../src/lib/wsl"
 
 const api = {
-  ptySpawn: (opts: { id: string; cols: number; rows: number; shell: string; args: string[] }) =>
-    ipcRenderer.invoke("pty:spawn", opts),
+  ptySpawn: (opts: {
+    id: string
+    cols: number
+    rows: number
+    shell: string
+    args: string[]
+    cwd?: string
+    bg?: string
+  }) => ipcRenderer.invoke("pty:spawn", opts),
 
   onPtyData: (id: string, cb: (data: string) => void) => {
     const channel = `pty:data:${id}`

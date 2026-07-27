@@ -229,7 +229,8 @@ export function wslInjection(
       args: ["--", "bash", "--rcfile", `${wslBase}/bash/bashrc`, "-i"],
       env: {},
       // /p path-translates the (Windows) hook-settings path so claude-in-WSL can read it.
-      wslenv: ["SMTERM_SHARE_HISTORY", "SMTERM_CLAUDE_SETTINGS/p", "SMTERM_PANE_ID"],
+      // COLORFGBG crosses so agents in WSL can detect our light/dark theme.
+      wslenv: ["SMTERM_SHARE_HISTORY", "SMTERM_CLAUDE_SETTINGS/p", "SMTERM_PANE_ID", "COLORFGBG"],
     }
   }
   if (name === "zsh") {
@@ -250,6 +251,7 @@ export function wslInjection(
         "SMTERM_SHARE_HISTORY",
         "SMTERM_CLAUDE_SETTINGS/p", // /p path-translates it for claude-in-WSL to read
         "SMTERM_PANE_ID",
+        "COLORFGBG", // so agents in WSL can detect our light/dark theme
       ],
     }
   }
