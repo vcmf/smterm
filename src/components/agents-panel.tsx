@@ -14,6 +14,10 @@ const DOT: Record<AgentStatus, { cls: string; word: string }> = {
 
 const base = (p?: string) => (p ? (p.replace(/\/+$/, "").split(/[\\/]/).pop() ?? p) : "")
 
+// Tree connector class for a row hanging off the spine: every child carries a through-line
+// except the last, which ends the spine with an elbow only. Shared by sub-agents + worktrees.
+const treeChildClass = (isLast: boolean) => `tree-child${isLast ? "" : " through"}`
+
 function AgentRow({
   node,
   depth,
@@ -37,7 +41,7 @@ function AgentRow({
   const cls =
     "diff-file" +
     (spine ? " tree-parent" : "") +
-    (connect ? ` tree-child${connect === "through" ? " through" : ""}` : "")
+    (connect ? ` ${treeChildClass(connect === "end")}` : "")
   // The folder this row's subline represents (clickable → open a terminal there). Root: its
   // cwd. Sub-agent: only when its cwd differs from the root (e.g. a worktree) — otherwise the
   // subline keeps the more useful recent-file / last-message signal (the root's folder, shown
@@ -173,7 +177,7 @@ export function AgentsPanel() {
               {wts.map((w, j) => (
                 <div
                   key={w.path}
-                  className={`diff-file agent-worktree tree-child${j === wts.length - 1 ? "" : " through"}`}
+                  className={`diff-file agent-worktree ${treeChildClass(j === wts.length - 1)}`}
                   style={{ paddingLeft: 26 }}
                 >
                   <GitBranch size={12} color="var(--blue)" />
