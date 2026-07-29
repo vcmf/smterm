@@ -1,4 +1,3 @@
-import { Fragment } from "react"
 import { X, TreeStructure, GitBranch } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
@@ -21,16 +20,24 @@ function AgentRow({
   rootCwd,
   onFocusPane,
   onOpen,
+  spine,
+  connect,
 }: {
   node: AgentNode
   depth: number
   rootCwd?: string // the session root's cwd, so a sub-agent only shows its folder when it differs
   onFocusPane?: () => void
   onOpen: (cwd: string) => void
+  spine?: boolean // root with children → drop the tree spine down to the first child
+  connect?: "through" | "end" // child row: draw the elbow (+ through-line unless it's the last)
 }) {
   const d = DOT[node.status]
   const isRoot = node.agentType === "root"
   const primary = isRoot ? "session" : node.agentType
+  const cls =
+    "diff-file" +
+    (spine ? " tree-parent" : "") +
+    (connect ? ` tree-child${connect === "through" ? " through" : ""}` : "")
   // The folder this row's subline represents (clickable → open a terminal there). Root: its
   // cwd. Sub-agent: only when its cwd differs from the root (e.g. a worktree) — otherwise the
   // subline keeps the more useful recent-file / last-message signal (the root's folder, shown
@@ -41,7 +48,7 @@ function AgentRow({
     : (node.recentFiles[0] ? base(node.recentFiles[0]) : node.lastMessage?.slice(0, 40)) || "—"
   return (
     <div
-      className="diff-file"
+      className={cls}
       style={{ paddingLeft: 10 + depth * 16, cursor: onFocusPane ? "pointer" : undefined }}
       onMouseDown={onFocusPane}
       title={onFocusPane ? "Go to this pane" : undefined}
@@ -77,6 +84,8 @@ export function AgentsPanel() {
   const agents = useStore((s) => s.agents)
   const sessions = useStore((s) => s.sessions)
   const home = useStore((s) => s.home)
+  // The pane the user is currently in — used to box the matching session's agents.
+  const activePaneId = useStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId)
   const close = () => useStore.getState().setRightView(null)
 
   // Bring the pane that owns this session to the front (switch tab + focus terminal).
@@ -121,8 +130,21 @@ export function AgentsPanel() {
           const go = paneSession ? () => focusPane(root.paneId) : undefined
           // Every folder opened from this session uses the session's own pane shell context.
           const openForSession = (cwd: string) => openHere(cwd, root.paneId)
+          // Tree connectors: children then worktrees hang off the root. Only the very last
+          // row ends the spine (rounded elbow, no through-line).
+          const childNodes = root.childIds
+            .map((cid) => agents.nodes[cid])
+            .filter((c): c is AgentNode => !!c)
+          const wts = root.worktrees ?? []
+          const hasKids = childNodes.length > 0 || wts.length > 0
+          const lastChildIdx = wts.length ? -1 : childNodes.length - 1
+          const active = !!root.paneId && root.paneId === activePaneId
           return (
-            <Fragment key={rid}>
+            <div
+              key={rid}
+              className={`agent-session${active ? " active" : ""}`}
+              title={active ? "The pane you're in" : undefined}
+            >
               <div
                 className="agents-pane-label status-faint"
                 onMouseDown={go}
@@ -130,22 +152,30 @@ export function AgentsPanel() {
               >
                 <TreeStructure size={12} /> {paneLabel}
               </div>
-              <AgentRow node={root} depth={0} onFocusPane={go} onOpen={openForSession} />
-              {root.childIds.map((cid) => {
-                const child = agents.nodes[cid]
-                return child ? (
-                  <AgentRow
-                    key={cid}
-                    node={child}
-                    depth={1}
-                    rootCwd={root.cwd}
-                    onFocusPane={go}
-                    onOpen={openForSession}
-                  />
-                ) : null
-              })}
-              {root.worktrees?.map((w) => (
-                <div key={w.path} className="diff-file agent-worktree" style={{ paddingLeft: 26 }}>
+              <AgentRow
+                node={root}
+                depth={0}
+                onFocusPane={go}
+                onOpen={openForSession}
+                spine={hasKids}
+              />
+              {childNodes.map((child, i) => (
+                <AgentRow
+                  key={child.id}
+                  node={child}
+                  depth={1}
+                  rootCwd={root.cwd}
+                  onFocusPane={go}
+                  onOpen={openForSession}
+                  connect={i === lastChildIdx ? "end" : "through"}
+                />
+              ))}
+              {wts.map((w, j) => (
+                <div
+                  key={w.path}
+                  className={`diff-file agent-worktree tree-child${j === wts.length - 1 ? "" : " through"}`}
+                  style={{ paddingLeft: 26 }}
+                >
                   <GitBranch size={12} color="var(--blue)" />
                   <div className="tree-labels">
                     <span className="tree-primary">{w.branch ?? base(w.path)}</span>
@@ -159,7 +189,7 @@ export function AgentsPanel() {
                   </div>
                 </div>
               ))}
-            </Fragment>
+            </div>
           )
         })}
       </div>

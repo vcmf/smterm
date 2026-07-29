@@ -787,6 +787,54 @@ body.resizing-col {
   padding: 8px 10px 2px;
   font-size: 11px;
 }
+/* One session's block (pane header + root + its children/worktrees). */
+.agent-session {
+  margin: 2px 4px;
+  border-radius: 8px;
+}
+/* The pane the user is currently in: a soft ring so it's easy to find, no layout shift. */
+.agent-session.active {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--border2));
+}
+/* ── Tree connectors (Reddit-style curved spine) ──────────
+   Spine x = root dot centre (paddingLeft 10 + dot 7/2 ≈ 13.5). Children indent to 26,
+   so the elbow reaches ~16px right into their dot. Lines use the row's own box, which
+   is why tree-parent/tree-child are position:relative. */
+.diff-file.tree-parent,
+.diff-file.tree-child {
+  position: relative;
+}
+/* Root with children: drop the spine from its dot (mid) to the first child (bottom). */
+.diff-file.tree-parent::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  bottom: 0;
+  border-left: 1.5px solid var(--border2);
+}
+/* Each child: vertical drop from the row top to its dot, curving right into it. */
+.diff-file.tree-child::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 0;
+  height: 50%;
+  width: 15px;
+  border-left: 1.5px solid var(--border2);
+  border-bottom: 1.5px solid var(--border2);
+  border-bottom-left-radius: 9px;
+}
+/* Non-last child: continue the spine past the elbow to the next sibling. */
+.diff-file.tree-child.through::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  bottom: 0;
+  border-left: 1.5px solid var(--border2);
+}
 .diff-body {
   flex: 1 1 auto;
   overflow: auto;
