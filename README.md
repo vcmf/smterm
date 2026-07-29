@@ -41,6 +41,20 @@ for coding agents, this is that.
 - 🎨 **Themes and fonts.** Minimal Dark, Tokyo Night, Catppuccin, Gruvbox; bundled fonts and
   ligatures.
 
+## Install
+
+macOS and Linux:
+
+```
+curl -fsSL https://raw.githubusercontent.com/vcmf/smterm/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```
+irm https://raw.githubusercontent.com/vcmf/smterm/main/install.ps1 | iex
+```
+
 ## Why I built this
 
 I love the terminal, and the easiest way to put an agent like Claude Code to work is to launch
@@ -82,20 +96,6 @@ launches. Agents started outside smterm do not show up.
     <td><b>Open a file and read it.</b> Click a file to open an inline preview and read what an agent wrote, without leaving the terminal.</td>
   </tr>
 </table>
-
-## Install
-
-macOS and Linux:
-
-```
-curl -fsSL https://raw.githubusercontent.com/vcmf/smterm/main/install.sh | sh
-```
-
-Windows (PowerShell):
-
-```
-irm https://raw.githubusercontent.com/vcmf/smterm/main/install.ps1 | iex
-```
 
 ## Also
 
