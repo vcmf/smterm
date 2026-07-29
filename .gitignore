@@ -36,6 +36,3 @@ out
 
 # test coverage output
 coverage/
-
-# local scratch notes (not part of the app)
-ai-writing-patterns-to-avoid.md
