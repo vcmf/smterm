@@ -14,6 +14,10 @@
 
 <p align="center">If smterm looks useful to you, a ⭐ helps other people find it.</p>
 
+<p align="center">
+  <img src="docs/media/screenshot.jpg" alt="smterm running four agent sessions in split panes, with the Agents board on the right" width="100%" />
+</p>
+
 smterm is a fast, cross-platform terminal (tabs, split panes, real shells) for people who run
 coding agents all day. It stays out of your way like a normal terminal, then adds a few panels
 that show you what the agents are actually doing: git diffs, files, and a live agents board that
@@ -36,10 +40,6 @@ for coding agents, this is that.
 - ⌨️ **Command palette (⌘K).** New sessions, splits, theme switching, settings.
 - 🎨 **Themes and fonts.** Minimal Dark, Tokyo Night, Catppuccin, Gruvbox; bundled fonts and
   ligatures.
-
-<p align="center">
-  <img src="docs/media/screenshot.jpg" alt="smterm running four agent sessions in split panes, with the Agents board on the right" width="100%" />
-</p>
 
 ## Why I built this
 
