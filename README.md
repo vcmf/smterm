@@ -55,23 +55,6 @@ Windows (PowerShell):
 irm https://raw.githubusercontent.com/vcmf/smterm/main/install.ps1 | iex
 ```
 
-## Why I built this
-
-I love the terminal, and the easiest way to put an agent like Claude Code to work is to launch
-it from a CLI. My work moves between macOS and Linux a lot, and sometimes WSL on Windows, so a
-terminal that behaves the same on all three is a big deal for me. The other half is that I like
-reading the code an agent writes and making the edits myself, and a plain terminal makes that
-hard: you lose track of which session needs you, and you never really see what changed. So I
-built the terminal I wanted. It keeps the shell I already like and adds just enough to stay in
-the loop: the Changes, Files, and Agents panels show what happened, not just that something did.
-
-## Works with Claude Code
-
-Run `claude` in any pane and the Agents board lights up: the root session, its sub-agents, what
-each is doing, its working directory, and the files it touched. It reads Claude Code's own hook
-events, so there is zero setup and no global config to edit; smterm only wires the panes it
-launches. Agents started outside smterm do not show up.
-
 ## A closer look
 
 <table>
@@ -96,6 +79,23 @@ launches. Agents started outside smterm do not show up.
     <td><b>Open a file and read it.</b> Click a file to open an inline preview and read what an agent wrote, without leaving the terminal.</td>
   </tr>
 </table>
+
+## Works with Claude Code
+
+Run `claude` in any pane and the Agents board lights up: the root session, its sub-agents, what
+each is doing, its working directory, and the files it touched. It reads Claude Code's own hook
+events, so there is zero setup and no global config to edit; smterm only wires the panes it
+launches. Agents started outside smterm do not show up.
+
+## Why I built this
+
+I love the terminal, and the easiest way to put an agent like Claude Code to work is to launch
+it from a CLI. My work moves between macOS and Linux a lot, and sometimes WSL on Windows, so a
+terminal that behaves the same on all three is a big deal for me. The other half is that I like
+reading the code an agent writes and making the edits myself, and a plain terminal makes that
+hard: you lose track of which session needs you, and you never really see what changed. So I
+built the terminal I wanted. It keeps the shell I already like and adds just enough to stay in
+the loop: the Changes, Files, and Agents panels show what happened, not just that something did.
 
 ## Also
 
