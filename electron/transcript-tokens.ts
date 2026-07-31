@@ -47,7 +47,10 @@ export function addLine(acc: TokenUsage, line: string): TokenUsage {
 }
 
 const NL = 0x0a // '\n'
-const DEFAULT_CHUNK = 1 << 20 // 1 MiB read+parse slices
+// 256 KiB read+parse slices. Measured on a 90 MB / 30k-line transcript: the worst single
+// synchronous parse burst between event-loop yields is ~4.6 ms (vs ~13 ms at 1 MiB, ~318 ms
+// un-chunked) — comfortably under a frame, and only on the first read of a resumed session.
+const DEFAULT_CHUNK = 1 << 18
 
 /** Incremental per-transcript token accumulator. Keeps a byte offset + running total per file;
  *  each update reads only the newly-appended bytes, in chunks that yield between slices. Lives
