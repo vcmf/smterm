@@ -77,21 +77,17 @@ describe("AgentsPanel", () => {
     expect(container.querySelector(".agent-session.active")).toBeNull()
   })
 
-  it("shows a token badge on a session once usage is known, not before", () => {
-    const { rerender } = render(<AgentsPanel />)
-    expect(screen.queryByText(/tok$/)).toBeNull() // no tokens yet
+  it("shows a ↑context ↓output token badge once usage is known, not before", () => {
+    const { container, rerender } = render(<AgentsPanel />)
+    expect(container.querySelector(".tree-tokens")).toBeNull() // no tokens yet
     useStore.setState({
       agents: reduceAgentEvents([
         { event: "SessionStart", sessionId: "s", cwd: "/repo/app", paneId: "p" },
-        {
-          event: "TokenUsage",
-          sessionId: "s",
-          tokens: { input: 3000, output: 1200, cacheCreate: 500, cacheRead: 90000 },
-        },
+        { event: "TokenUsage", sessionId: "s", tokens: { context: 148_000, output: 1200 } },
       ]),
     })
     rerender(<AgentsPanel />)
-    expect(screen.getByText("4.7k tok")).toBeInTheDocument() // 3000 + 500 + 1200
+    expect(container.querySelector(".tree-tokens")?.textContent).toBe("↑148k ↓1.2k")
   })
 
   it("draws the tree spine: root is a parent, its last worktree ends the spine", () => {

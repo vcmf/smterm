@@ -149,7 +149,7 @@ describe("agent-graph — lifecycle (prune finished + evict sessions)", () => {
 })
 
 describe("agent-graph — token usage", () => {
-  const tk = { input: 100, output: 50, cacheCreate: 10, cacheRead: 9000 }
+  const tk = { context: 9110, output: 50 }
 
   it("attaches session tokens to the root and sub-agent tokens to the sub-agent", () => {
     const g = reduceAgentEvents([

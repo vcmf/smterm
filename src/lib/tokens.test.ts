@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { headlineTokens, formatTokens, tokenBreakdown } from "./tokens"
-
-describe("headlineTokens", () => {
-  it("is input + cacheCreate + output, excluding the cheap cache_read", () => {
-    expect(headlineTokens({ input: 100, output: 50, cacheCreate: 10, cacheRead: 99999 })).toBe(160)
-  })
-})
+import { formatTokens, tokenBreakdown } from "./tokens"
 
 describe("formatTokens", () => {
   it("formats across magnitudes", () => {
@@ -19,9 +13,9 @@ describe("formatTokens", () => {
 })
 
 describe("tokenBreakdown", () => {
-  it("lays out out / in / cache", () => {
-    expect(tokenBreakdown({ input: 3000, output: 1200, cacheCreate: 500, cacheRead: 20000 })).toBe(
-      "↓ 1.2k out · ↑ 3.5k in · 21k cache", // cache = 500 + 20000 = 20.5k → 21k
+  it("labels context and generated output", () => {
+    expect(tokenBreakdown({ context: 148_000, output: 7_400_000 })).toBe(
+      "↑ 148k context · ↓ 7.4M generated",
     )
   })
 })
