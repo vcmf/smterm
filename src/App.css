@@ -787,13 +787,18 @@ body.resizing-col {
   padding: 8px 10px 2px;
   font-size: 11px;
 }
-/* One session's block (pane header + root + its children/worktrees). */
+/* One session's block (pane header + root + its children/worktrees). The inner padding
+   lets each row's hover/selected background sit as an inset rounded pill (below) rather
+   than a full-bleed rectangle butting against the box edge. */
 .agent-session {
   margin: 2px 4px;
+  padding: 2px 4px;
   border-radius: 8px;
-  /* Clip row hover/selected backgrounds to the rounded box so they don't poke past
-     the corners (most visible inside the active session's ring). */
-  overflow: hidden;
+}
+/* Agents-board rows float as pills inside the session box — round the hover/selected
+   background so it doesn't clash with the rounded box (and the active ring). */
+.agent-session .diff-file {
+  border-radius: 6px;
 }
 /* The pane the user is currently in: a soft ring so it's easy to find, no layout shift. */
 .agent-session.active {
