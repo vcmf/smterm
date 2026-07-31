@@ -791,6 +791,9 @@ body.resizing-col {
 .agent-session {
   margin: 2px 4px;
   border-radius: 8px;
+  /* Clip row hover/selected backgrounds to the rounded box so they don't poke past
+     the corners (most visible inside the active session's ring). */
+  overflow: hidden;
 }
 /* The pane the user is currently in: a soft ring so it's easy to find, no layout shift. */
 .agent-session.active {
