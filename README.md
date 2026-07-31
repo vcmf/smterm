@@ -59,6 +59,10 @@ irm https://raw.githubusercontent.com/vcmf/smterm/main/install.ps1 | iex
 
 <table>
   <tr>
+    <td width="42%"><img src="docs/media/feat-agents.jpg" width="100%" alt="Agents board showing sessions, sub-agents, status, and token usage" /></td>
+    <td><b>Agents board.</b> A live tree of the Claude Code agents you launched: each session, its sub-agents, what they are doing, and token usage. Click one to jump to its pane.</td>
+  </tr>
+  <tr>
     <td width="42%"><img src="docs/media/feat-notifications.png" width="100%" alt="Notification bell with an unread badge in the top bar" /></td>
     <td><b>Notifications when a session needs you.</b> A dot on the tab and a native OS notification the moment a background pane wants input or finishes.</td>
   </tr>
