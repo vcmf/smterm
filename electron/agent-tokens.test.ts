@@ -3,10 +3,23 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { TranscriptTokens } from "./transcript-tokens"
-import { tokenEventsForBatch } from "./agent-tokens"
+import { tokenEventsForBatch, subagentTranscriptPath } from "./agent-tokens"
 
 const asst = (u: Record<string, number>) =>
   `${JSON.stringify({ type: "assistant", message: { role: "assistant", usage: u } })}\n`
+
+describe("subagentTranscriptPath", () => {
+  it("derives <session-without-.jsonl>/subagents/agent-<id>.jsonl", () => {
+    expect(subagentTranscriptPath("/p/proj/9c0c.jsonl", "a48b")).toBe(
+      "/p/proj/9c0c/subagents/agent-a48b.jsonl",
+    )
+  })
+
+  it("returns null without a session path or when it isn't a .jsonl", () => {
+    expect(subagentTranscriptPath(undefined, "a1")).toBeNull()
+    expect(subagentTranscriptPath("/p/proj/9c0c", "a1")).toBeNull()
+  })
+})
 
 describe("tokenEventsForBatch", () => {
   let dir: string
@@ -34,7 +47,7 @@ describe("tokenEventsForBatch", () => {
     ])
   })
 
-  it("prices a SubagentStop against the sub-agent's own transcript", async () => {
+  it("prices a SubagentStop against an explicit agentTranscriptPath when present", async () => {
     fs.writeFileSync(agentTx(), asst({ input_tokens: 5, output_tokens: 3 }))
     const out = await tokenEventsForBatch(new TranscriptTokens(), [
       { event: "SubagentStop", sessionId: "s", agentId: "a1", agentTranscriptPath: agentTx() },
@@ -47,6 +60,19 @@ describe("tokenEventsForBatch", () => {
         tokens: { input: 5, output: 3, cacheCreate: 0, cacheRead: 0 },
       },
     ])
+  })
+
+  it("derives the sub-agent transcript from the session path + agent id (no explicit field)", async () => {
+    // Claude's layout: <session-transcript-without-.jsonl>/subagents/agent-<id>.jsonl
+    const sessionPath = path.join(dir, "sess.jsonl")
+    const derived = path.join(dir, "sess", "subagents", "agent-a9.jsonl")
+    fs.mkdirSync(path.dirname(derived), { recursive: true })
+    fs.writeFileSync(derived, asst({ input_tokens: 12, output_tokens: 6 }))
+    const out = await tokenEventsForBatch(new TranscriptTokens(), [
+      // No agentTranscriptPath — only the session transcript_path, as real hooks send.
+      { event: "SubagentStop", sessionId: "s", agentId: "a9", transcriptPath: sessionPath },
+    ])
+    expect(out[0]!.tokens).toEqual({ input: 12, output: 6, cacheCreate: 0, cacheRead: 0 })
   })
 
   it("accumulates across turns incrementally (only new bytes each time)", async () => {
