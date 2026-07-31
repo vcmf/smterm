@@ -1,8 +1,9 @@
 // Token accounting from Claude Code transcripts. Hooks don't carry token counts, but every
 // hook payload references a transcript JSONL whose assistant lines each embed a `message.usage`
-// block. We sum those — incrementally (only the bytes appended since the last read) so a
+// block. We fold those — incrementally (only the bytes appended since the last read) so a
 // growing transcript never re-scans, and in bounded chunks that yield to the event loop so a
-// large first read (e.g. a `claude --resume`d 30 MB+ file) can't stall PTY forwarding.
+// large first read (e.g. a `claude --resume`d 30 MB+ file) can't stall PTY forwarding. The
+// result is `context` (the LATEST turn's input = current window fill) + cumulative `output`.
 //
 // NOTE (stability): Claude documents this JSONL as an INTERNAL format that may change between
 // releases. This parse is deliberately best-effort — if `message.usage` is renamed/reshaped a
@@ -14,12 +15,14 @@ import type { TokenUsage } from "../src/lib/agent-graph"
 
 export type { TokenUsage }
 
-export const emptyUsage: TokenUsage = { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 }
+export const emptyUsage: TokenUsage = { context: 0, output: 0 }
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0)
 
-/** Add one transcript line's usage into `acc` (pure). Non-assistant / unparseable lines are
- *  ignored, so a partial or malformed tail line is simply a no-op. */
+/** Fold one transcript line into `acc` (pure). `context` is OVERWRITTEN to this line's total
+ *  input (input + cache read + cache create) — so after folding a whole read it reflects the
+ *  LATEST assistant turn's context size; `output` ACCUMULATES. Non-assistant / unparseable
+ *  lines (incl. a partial tail line) are no-ops, leaving `context` at the last real turn. */
 export function addLine(acc: TokenUsage, line: string): TokenUsage {
   const t = line.trim()
   if (!t) return acc
@@ -37,22 +40,17 @@ export function addLine(acc: TokenUsage, line: string): TokenUsage {
   if (typeof u !== "object" || u === null) return acc
   const g = u as Record<string, unknown>
   return {
-    input: acc.input + num(g.input_tokens),
+    context:
+      num(g.input_tokens) + num(g.cache_read_input_tokens) + num(g.cache_creation_input_tokens),
     output: acc.output + num(g.output_tokens),
-    cacheCreate: acc.cacheCreate + num(g.cache_creation_input_tokens),
-    cacheRead: acc.cacheRead + num(g.cache_read_input_tokens),
   }
 }
 
-export const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
-  input: a.input + b.input,
-  output: a.output + b.output,
-  cacheCreate: a.cacheCreate + b.cacheCreate,
-  cacheRead: a.cacheRead + b.cacheRead,
-})
-
 const NL = 0x0a // '\n'
-const DEFAULT_CHUNK = 1 << 20 // 1 MiB read+parse slices
+// 256 KiB read+parse slices. Measured on a 90 MB / 30k-line transcript: the worst single
+// synchronous parse burst between event-loop yields is ~4.6 ms (vs ~13 ms at 1 MiB, ~318 ms
+// un-chunked) — comfortably under a frame, and only on the first read of a resumed session.
+const DEFAULT_CHUNK = 1 << 18
 
 /** Incremental per-transcript token accumulator. Keeps a byte offset + running total per file;
  *  each update reads only the newly-appended bytes, in chunks that yield between slices. Lives

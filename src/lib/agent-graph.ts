@@ -14,12 +14,13 @@
 
 export type AgentStatus = "working" | "waiting" | "idle" | "done"
 
-/** Cumulative token usage summed from a transcript (see electron/transcript-tokens.ts). */
+/** Token usage read from a transcript (see electron/transcript-tokens.ts).
+ *  `context` is the LATEST run's input (input + cache read + cache create) = how full the
+ *  context window is right now (bounded, ~≤ the model's window). `output` is cumulative
+ *  output generated across the session (a monotonic "how much this agent produced"). */
 export interface TokenUsage {
-  input: number
+  context: number
   output: number
-  cacheCreate: number
-  cacheRead: number
 }
 
 /** A hook event normalised down to the fields the graph needs. */
