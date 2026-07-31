@@ -18,7 +18,7 @@
   <img src="docs/media/screenshot.jpg" alt="smterm running four agent sessions in split panes, with the Agents board on the right" width="100%" />
 </p>
 
-smterm is a fast, cross-platform terminal (tabs, split panes, real shells) for people who run
+**smterm** is a fast, cross-platform terminal (tabs, split panes, real shells) for people who run
 coding agents all day. It stays out of your way like a normal terminal, then adds a few panels
 that show you what the agents are actually doing: git diffs, files, and a live agents board that
 works with Claude Code. If you have looked for an open-source Warp alternative, or a tmux built
