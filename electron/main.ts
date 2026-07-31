@@ -40,6 +40,8 @@ import { buildHookSettings } from "./hook-writer"
 import { toDirListing } from "../src/lib/dir-listing"
 import { wslUncCandidates, winToMnt, uncToWslPath } from "./wsl-paths"
 import { colorfgbg } from "./color"
+import { TranscriptTokens } from "./transcript-tokens"
+import { tokenEventsForBatch } from "./agent-tokens"
 import type { WslContext } from "../src/lib/wsl"
 import {
   classifyPreview,
@@ -76,6 +78,8 @@ let mainWindow: BrowserWindow | null = null
 let hookSettingsPath: string | null = null
 let hookSettingsPathWsl: string | null = null
 let hookWatcher: { close: () => Promise<void> } | null = null
+// Accumulates per-transcript token totals across hook batches (session + sub-agent).
+const agentTokens = new TranscriptTokens()
 let quitConfirmed = false
 
 // PTY output batching (see electron/coalescer.ts + docs/PERF.md).
@@ -183,7 +187,16 @@ async function startAgentObservability(): Promise<void> {
     fs.mkdirSync(eventsDir, { recursive: true })
     hookWatcher = await startHookWatcher({
       dir: eventsDir,
-      onBatch: (events: AgentEvent[]) => mainWindow?.webContents.send("agents:events", events),
+      onBatch: (events: AgentEvent[]) => {
+        // Forward the hook events immediately (keeps the board live), then price any
+        // finished turns/sub-agents from their transcripts asynchronously and forward the
+        // resulting token totals as a follow-up batch. The read is off the terminal hot
+        // path and incremental, so it never delays the events above or the agent's loop.
+        mainWindow?.webContents.send("agents:events", events)
+        void tokenEventsForBatch(agentTokens, events).then((tokenEvents) => {
+          if (tokenEvents.length) mainWindow?.webContents.send("agents:events", tokenEvents)
+        })
+      },
     })
     // Native settings: the drop dir as a host path.
     const nativePath = path.join(cfg, "claude-hooks.json")

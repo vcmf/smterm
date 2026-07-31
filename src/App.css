@@ -495,6 +495,20 @@ body {
   font-size: 10px;
   flex: 0 0 auto;
 }
+/* Right column of an agent row: status word + token count stacked, right-aligned. */
+.tree-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex: 0 0 auto;
+}
+.tree-tokens {
+  font-size: 10px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .legend {
   flex: 0 0 auto;
   border-top: 1px solid var(--border);

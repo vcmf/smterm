@@ -38,6 +38,8 @@ export function normalizeHookEvent(raw: unknown, paneId?: string): AgentEvent | 
     message: str(r.message) ?? str(r.last_assistant_message),
     worktreePath: str(r.worktree_path),
     baseBranch: str(r.base_branch),
+    transcriptPath: str(r.transcript_path),
+    agentTranscriptPath: str(r.agent_transcript_path),
   }
 }
 

@@ -148,6 +148,40 @@ describe("agent-graph — lifecycle (prune finished + evict sessions)", () => {
   })
 })
 
+describe("agent-graph — token usage", () => {
+  const tk = { input: 100, output: 50, cacheCreate: 10, cacheRead: 9000 }
+
+  it("attaches session tokens to the root and sub-agent tokens to the sub-agent", () => {
+    const g = reduceAgentEvents([
+      { event: "SessionStart", sessionId: S },
+      { event: "SubagentStart", sessionId: S, agentId: A, agentType: "Explore" },
+      { event: "TokenUsage", sessionId: S, tokens: tk },
+      { event: "TokenUsage", sessionId: S, agentId: A, tokens: { ...tk, output: 7 } },
+    ])
+    expect(g.nodes["root:sess-1"]!.tokens).toEqual(tk)
+    expect(g.nodes[A]!.tokens!.output).toBe(7)
+  })
+
+  it("ignores a late token total for an already-dropped sub-agent (no resurrection)", () => {
+    // Finish + prune the sub-agent, THEN a straggler TokenUsage arrives for it.
+    const g1 = reduceAgentEvents([
+      { event: "SessionStart", sessionId: S },
+      { event: "SubagentStart", sessionId: S, agentId: A, agentType: "Explore" },
+      { event: "SubagentStop", sessionId: S, agentId: A },
+      { event: "Stop", sessionId: S },
+      { event: "UserPromptSubmit", sessionId: S }, // prunes the finished sub-agent
+    ])
+    expect(g1.nodes[A]).toBeUndefined()
+    const g2 = reduceAgentEvent(g1, { event: "TokenUsage", sessionId: S, agentId: A, tokens: tk })
+    expect(g2.nodes[A]).toBeUndefined() // not recreated
+  })
+
+  it("ignores token totals for an unknown session (no root created)", () => {
+    const g = reduceAgentEvent(emptyGraph, { event: "TokenUsage", sessionId: S, tokens: tk })
+    expect(g).toBe(emptyGraph)
+  })
+})
+
 describe("agent-graph — attribution & edges", () => {
   it("a root tool call updates the root, not the sub-agent", () => {
     const g = reduceAgentEvents([
