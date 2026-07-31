@@ -26,6 +26,7 @@ import {
   wslCdArgs,
   buildWslInjection,
   defaultWslDistro,
+  parseWslDistroArg,
 } from "./shell-integration"
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
@@ -69,6 +70,7 @@ interface PtySession {
   sender: Electron.WebContents
   coalescer?: OutputCoalescer // absent only in the SMTERM_NO_COALESCE=1 A/B baseline
   shell: string
+  wslDistro?: string // for a WSL pane: the distro, so its Linux paths resolve to the right UNC share
 }
 const sessions = new Map<string, PtySession>()
 let mainWindow: BrowserWindow | null = null
@@ -105,12 +107,16 @@ function wslTargets(p: string, wsl?: WslContext): string[] {
   return candidates.length ? candidates : [p]
 }
 
-// Host-fs candidates for a transcript path a hook reported. Hook events don't carry a WSL
-// context, so we infer: on Windows a POSIX-absolute path came from a WSL `claude` → read it
-// via the (default) distro's UNC shares; otherwise it's already a host path. (Multi-distro
-// uses the default distro — same limitation as the rest of the WSL fs bridge.)
-const transcriptTargets = (p: string): string[] =>
-  process.platform === "win32" && p.startsWith("/") ? wslTargets(p, {}) : [p]
+// Host-fs candidates for a transcript path a hook reported. On Windows a POSIX-absolute path
+// came from a WSL `claude` → read it via that pane's distro's UNC shares (looked up by the
+// event's paneId, so non-default distros resolve correctly), falling back to the default
+// distro when the pane is unknown. Otherwise it's already a host path.
+const transcriptTargets = (p: string, paneId?: string): string[] => {
+  if (!(process.platform === "win32" && p.startsWith("/"))) return [p]
+  const distro = (paneId ? sessions.get(paneId)?.wslDistro : undefined) ?? defaultWslDistro()
+  const candidates = distro ? wslUncCandidates(distro, p) : []
+  return candidates.length ? candidates : [p]
+}
 
 // The app icon. Packaged builds get it from the bundle (electron-builder → build/icon.*),
 // but in dev Electron shows its default icon unless we set it at runtime, so point at the
@@ -334,6 +340,9 @@ function registerIpc() {
         buffer: new OutputBuffer(PTY_REPLAY_BYTES),
         sender: event.sender,
         shell: shellCmd,
+        // Remember a WSL pane's distro so a hook event tagged with this pane resolves its
+        // Linux transcript path against the right distro's UNC share (not just the default).
+        wslDistro: wsl ? (parseWslDistroArg(opts.args ?? []) ?? defaultWslDistro()) : undefined,
       }
       if (coalesce) {
         rec.coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, (d) => emit(rec, d))

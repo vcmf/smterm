@@ -206,6 +206,14 @@ export function wslCdArgs(cwd: string | undefined): string[] {
   return ["--cd", cwd && cwd.startsWith("/") ? cwd : "~"]
 }
 
+/** The distro a `wsl.exe` invocation targets, from its args (`-d`/`--distribution <name>`),
+ *  or undefined when unspecified (⇒ the default distro). Lets us translate a WSL pane's
+ *  Linux paths against the RIGHT distro's UNC share. Pure — tested. */
+export function parseWslDistroArg(args: string[]): string | undefined {
+  const i = args.findIndex((a) => a === "-d" || a === "--distribution")
+  return i >= 0 ? args[i + 1] : undefined
+}
+
 /** The login shell (last field) of a `getent passwd` line. Pure — tested. */
 export function parseLoginShell(getentLine: string): string {
   const f = getentLine.trim().split(":")
