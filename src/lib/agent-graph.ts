@@ -14,6 +14,14 @@
 
 export type AgentStatus = "working" | "waiting" | "idle" | "done"
 
+/** Cumulative token usage summed from a transcript (see electron/transcript-tokens.ts). */
+export interface TokenUsage {
+  input: number
+  output: number
+  cacheCreate: number
+  cacheRead: number
+}
+
 /** A hook event normalised down to the fields the graph needs. */
 export interface AgentEvent {
   event: string // hook_event_name (SessionStart, PreToolUse, SubagentStart, …)
@@ -27,6 +35,9 @@ export interface AgentEvent {
   message?: string // Notification message / last_assistant_message
   worktreePath?: string // worktree_path on WorktreeCreate/WorktreeRemove
   baseBranch?: string // base_branch on WorktreeCreate
+  transcriptPath?: string // transcript_path — the session's JSONL (token accounting)
+  agentTranscriptPath?: string // agent_transcript_path — a sub-agent's own JSONL
+  tokens?: TokenUsage // synthetic "TokenUsage" event: cumulative usage for the target node
 }
 
 /** A git worktree an agent created (WorktreeCreate), for the "open a terminal here" chip. */
@@ -46,6 +57,7 @@ export interface AgentNode {
   recentFiles: string[] // most-recent-first, capped
   worktrees?: Worktree[] // worktrees created in this session (WorktreeCreate), root only
   lastMessage?: string
+  tokens?: TokenUsage // cumulative token usage (session root or sub-agent), off-band via hooks
   parentId?: string // undefined for a root
   childIds: string[] // sub-agents, in order of appearance
 }
@@ -66,6 +78,16 @@ const withFile = (files: string[], path?: string): string[] =>
 
 /** Fold one hook event into the graph, returning a new graph (pure). */
 export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph {
+  // Synthetic token update (main computes it off-band from the transcript): a targeted
+  // set on an EXISTING node only — never create/resurrect a node, so a late total for a
+  // sub-agent already dropped at end-of-turn is silently ignored.
+  if (ev.event === "TokenUsage") {
+    const id = ev.agentId ?? rootId(ev.sessionId)
+    const node = graph.nodes[id]
+    if (!node || !ev.tokens) return graph
+    return { ...graph, nodes: { ...graph.nodes, [id]: { ...node, tokens: ev.tokens } } }
+  }
+
   const nodes = { ...graph.nodes }
   let rootIds = graph.rootIds
   const rid = rootId(ev.sessionId)

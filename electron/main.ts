@@ -26,6 +26,7 @@ import {
   wslCdArgs,
   buildWslInjection,
   defaultWslDistro,
+  parseWslDistroArg,
 } from "./shell-integration"
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
@@ -40,6 +41,8 @@ import { buildHookSettings } from "./hook-writer"
 import { toDirListing } from "../src/lib/dir-listing"
 import { wslUncCandidates, winToMnt, uncToWslPath } from "./wsl-paths"
 import { colorfgbg } from "./color"
+import { TranscriptTokens } from "./transcript-tokens"
+import { tokenEventsForBatch } from "./agent-tokens"
 import type { WslContext } from "../src/lib/wsl"
 import {
   classifyPreview,
@@ -67,6 +70,7 @@ interface PtySession {
   sender: Electron.WebContents
   coalescer?: OutputCoalescer // absent only in the SMTERM_NO_COALESCE=1 A/B baseline
   shell: string
+  wslDistro?: string // for a WSL pane: the distro, so its Linux paths resolve to the right UNC share
 }
 const sessions = new Map<string, PtySession>()
 let mainWindow: BrowserWindow | null = null
@@ -76,6 +80,8 @@ let mainWindow: BrowserWindow | null = null
 let hookSettingsPath: string | null = null
 let hookSettingsPathWsl: string | null = null
 let hookWatcher: { close: () => Promise<void> } | null = null
+// Accumulates per-transcript token totals across hook batches (session + sub-agent).
+const agentTokens = new TranscriptTokens()
 let quitConfirmed = false
 
 // PTY output batching (see electron/coalescer.ts + docs/PERF.md).
@@ -98,6 +104,17 @@ function defaultShell(): string {
 // Shared by fs:readdir + fs:read-preview so the WSL translation lives in one place.
 function wslTargets(p: string, wsl?: WslContext): string[] {
   const candidates = wsl ? wslUncCandidates(wsl.distro ?? defaultWslDistro(), p) : []
+  return candidates.length ? candidates : [p]
+}
+
+// Host-fs candidates for a transcript path a hook reported. On Windows a POSIX-absolute path
+// came from a WSL `claude` → read it via that pane's distro's UNC shares (looked up by the
+// event's paneId, so non-default distros resolve correctly), falling back to the default
+// distro when the pane is unknown. Otherwise it's already a host path.
+const transcriptTargets = (p: string, paneId?: string): string[] => {
+  if (!(process.platform === "win32" && p.startsWith("/"))) return [p]
+  const distro = (paneId ? sessions.get(paneId)?.wslDistro : undefined) ?? defaultWslDistro()
+  const candidates = distro ? wslUncCandidates(distro, p) : []
   return candidates.length ? candidates : [p]
 }
 
@@ -183,7 +200,16 @@ async function startAgentObservability(): Promise<void> {
     fs.mkdirSync(eventsDir, { recursive: true })
     hookWatcher = await startHookWatcher({
       dir: eventsDir,
-      onBatch: (events: AgentEvent[]) => mainWindow?.webContents.send("agents:events", events),
+      onBatch: (events: AgentEvent[]) => {
+        // Forward the hook events immediately (keeps the board live), then price any
+        // finished turns/sub-agents from their transcripts asynchronously and forward the
+        // resulting token totals as a follow-up batch. The read is off the terminal hot
+        // path and incremental, so it never delays the events above or the agent's loop.
+        mainWindow?.webContents.send("agents:events", events)
+        void tokenEventsForBatch(agentTokens, events, transcriptTargets).then((tokenEvents) => {
+          if (tokenEvents.length) mainWindow?.webContents.send("agents:events", tokenEvents)
+        })
+      },
     })
     // Native settings: the drop dir as a host path.
     const nativePath = path.join(cfg, "claude-hooks.json")
@@ -314,6 +340,9 @@ function registerIpc() {
         buffer: new OutputBuffer(PTY_REPLAY_BYTES),
         sender: event.sender,
         shell: shellCmd,
+        // Remember a WSL pane's distro so a hook event tagged with this pane resolves its
+        // Linux transcript path against the right distro's UNC share (not just the default).
+        wslDistro: wsl ? (parseWslDistroArg(opts.args ?? []) ?? defaultWslDistro()) : undefined,
       }
       if (coalesce) {
         rec.coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, (d) => emit(rec, d))

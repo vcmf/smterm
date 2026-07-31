@@ -5,6 +5,7 @@ import {
   buildInjection,
   isWslShell,
   wslCdArgs,
+  parseWslDistroArg,
   parseLoginShell,
   wslInjection,
   ZSH_ZSHRC,
@@ -63,6 +64,17 @@ describe("wslCdArgs", () => {
   })
   it("passes through a tracked Linux path", () => {
     expect(wslCdArgs("/home/me/proj")).toEqual(["--cd", "/home/me/proj"])
+  })
+})
+
+describe("parseWslDistroArg", () => {
+  it("reads the distro from -d / --distribution", () => {
+    expect(parseWslDistroArg(["-d", "Ubuntu"])).toBe("Ubuntu")
+    expect(parseWslDistroArg(["--distribution", "Debian", "--cd", "~"])).toBe("Debian")
+  })
+  it("is undefined when no distro flag is present", () => {
+    expect(parseWslDistroArg([])).toBeUndefined()
+    expect(parseWslDistroArg(["--cd", "~"])).toBeUndefined()
   })
 })
 
