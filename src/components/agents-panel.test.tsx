@@ -51,4 +51,39 @@ describe("AgentsPanel", () => {
     render(<AgentsPanel />)
     expect(screen.getByText(/No agents yet/)).toBeInTheDocument()
   })
+
+  it("boxes the session whose pane the user is currently in", () => {
+    useStore.setState({
+      activeTabId: "t",
+      tabs: [{ id: "t", title: "t", root: { type: "leaf", sessionId: "p" }, activeSessionId: "p" }],
+    })
+    const { container } = render(<AgentsPanel />)
+    expect(container.querySelector(".agent-session.active")).toBeInTheDocument()
+  })
+
+  it("does not box a session whose pane is not focused", () => {
+    useStore.setState({
+      activeTabId: "t",
+      tabs: [
+        {
+          id: "t",
+          title: "t",
+          root: { type: "leaf", sessionId: "other" },
+          activeSessionId: "other",
+        },
+      ],
+    })
+    const { container } = render(<AgentsPanel />)
+    expect(container.querySelector(".agent-session.active")).toBeNull()
+  })
+
+  it("draws the tree spine: root is a parent, its last worktree ends the spine", () => {
+    render(<AgentsPanel />)
+    const root = screen.getByText("session").closest(".diff-file")
+    expect(root?.classList.contains("tree-parent")).toBe(true)
+    // The single worktree is the last child → elbow only, no through-line.
+    const wt = screen.getByText("feat/x").closest(".diff-file")
+    expect(wt?.classList.contains("tree-child")).toBe(true)
+    expect(wt?.classList.contains("through")).toBe(false)
+  })
 })
