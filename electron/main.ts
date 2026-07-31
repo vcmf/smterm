@@ -105,6 +105,13 @@ function wslTargets(p: string, wsl?: WslContext): string[] {
   return candidates.length ? candidates : [p]
 }
 
+// Host-fs candidates for a transcript path a hook reported. Hook events don't carry a WSL
+// context, so we infer: on Windows a POSIX-absolute path came from a WSL `claude` → read it
+// via the (default) distro's UNC shares; otherwise it's already a host path. (Multi-distro
+// uses the default distro — same limitation as the rest of the WSL fs bridge.)
+const transcriptTargets = (p: string): string[] =>
+  process.platform === "win32" && p.startsWith("/") ? wslTargets(p, {}) : [p]
+
 // The app icon. Packaged builds get it from the bundle (electron-builder → build/icon.*),
 // but in dev Electron shows its default icon unless we set it at runtime, so point at the
 // source PNG in build/ (app path = project root in dev). Returns null if not found.
@@ -193,7 +200,7 @@ async function startAgentObservability(): Promise<void> {
         // resulting token totals as a follow-up batch. The read is off the terminal hot
         // path and incremental, so it never delays the events above or the agent's loop.
         mainWindow?.webContents.send("agents:events", events)
-        void tokenEventsForBatch(agentTokens, events).then((tokenEvents) => {
+        void tokenEventsForBatch(agentTokens, events, transcriptTargets).then((tokenEvents) => {
           if (tokenEvents.length) mainWindow?.webContents.send("agents:events", tokenEvents)
         })
       },

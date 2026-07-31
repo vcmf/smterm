@@ -69,36 +69,50 @@ export class TranscriptTokens {
   // updates can't read the same offset twice and double-count the appended bytes.
   private chains = new Map<string, Promise<TokenUsage>>()
 
-  /** Read new bytes of `path`, fold their usage in, and return the cumulative total. Reads
-   *  of the same path are serialized; any fs error yields the prior total (best-effort). */
-  update(path: string): Promise<TokenUsage> {
-    const next = (this.chains.get(path) ?? Promise.resolve(emptyUsage))
+  /** Read new bytes of the transcript, fold their usage in, and return the cumulative total.
+   *  `candidates` are try-in-order host paths for the same file (>1 only on WSL, where a
+   *  Linux path resolves to distro UNC shares); accumulator state is keyed by `key` so it's
+   *  stable regardless of which candidate wins. Reads of the same key are serialized; any fs
+   *  error yields the prior total (best-effort). */
+  update(key: string, candidates: string[] = [key]): Promise<TokenUsage> {
+    const next = (this.chains.get(key) ?? Promise.resolve(emptyUsage))
       .catch(() => emptyUsage)
-      .then(() => this.readOnce(path))
-    this.chains.set(path, next)
+      .then(() => this.readOnce(key, candidates))
+    this.chains.set(key, next)
     return next
   }
 
-  private async readOnce(path: string): Promise<TokenUsage> {
-    const prev = this.state.get(path) ?? { offset: 0, usage: emptyUsage }
+  private async readOnce(key: string, candidates: string[]): Promise<TokenUsage> {
+    const prev = this.state.get(key) ?? { offset: 0, usage: emptyUsage }
     let handle: fs.promises.FileHandle | undefined
     try {
-      const st = await fs.promises.stat(path)
+      // First candidate that exists on the host fs (WSL: the reachable UNC share).
+      let target: string | undefined
+      let st: fs.Stats | undefined
+      for (const c of candidates) {
+        try {
+          st = await fs.promises.stat(c)
+          target = c
+          break
+        } catch {
+          // try the next candidate
+        }
+      }
+      if (!target || !st) return prev.usage
       // Rotated/truncated (or a different file at this path) → re-sum from the start.
       const from = st.size < prev.offset ? 0 : prev.offset
       const base = from === 0 ? emptyUsage : prev.usage
       if (st.size <= from) {
-        const usage = base
-        this.state.set(path, { offset: from, usage })
-        return usage
+        this.state.set(key, { offset: from, usage: base })
+        return base
       }
-      handle = await fs.promises.open(path, "r")
+      handle = await fs.promises.open(target, "r")
       const len = st.size - from
       const buf = Buffer.allocUnsafe(len)
       const { bytesRead } = await handle.read(buf, 0, len, from)
       const { usage: delta, consumed } = parseUsageChunk(buf.toString("utf8", 0, bytesRead))
       const usage = addUsage(base, delta)
-      this.state.set(path, { offset: from + consumed, usage })
+      this.state.set(key, { offset: from + consumed, usage })
       return usage
     } catch {
       return prev.usage

@@ -6,13 +6,21 @@
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { TranscriptTokens } from "./transcript-tokens"
 
+/** Host-fs candidate paths for a transcript path the agent reported. Identity on same-OS
+ *  runs; on WSL the agent's Linux path resolves to the distro's UNC shares (see main). */
+export type ResolvePath = (transcriptPath: string) => string[]
+
+const identity: ResolvePath = (p) => [p]
+
 /** Which events to price, and which transcript to read for each:
  *   - Stop         → the session transcript  → the session root
  *   - SubagentStop → the sub-agent transcript → that sub-agent
- * SessionEnd frees the session transcript's accumulator. */
+ * SessionEnd frees the session transcript's accumulator. `resolve` maps the agent-reported
+ * path to reachable host paths (WSL translation); state stays keyed by the reported path. */
 export async function tokenEventsForBatch(
   tracker: TranscriptTokens,
   batch: AgentEvent[],
+  resolve: ResolvePath = identity,
 ): Promise<AgentEvent[]> {
   const out: AgentEvent[] = []
   for (const ev of batch) {
@@ -22,12 +30,12 @@ export async function tokenEventsForBatch(
     }
     // Session turn finished → price the session transcript against the root.
     if (ev.event === "Stop" && ev.transcriptPath) {
-      const tokens = await tracker.update(ev.transcriptPath)
+      const tokens = await tracker.update(ev.transcriptPath, resolve(ev.transcriptPath))
       out.push({ event: "TokenUsage", sessionId: ev.sessionId, tokens })
     }
     // Sub-agent finished → price its own transcript against that sub-agent.
     if (ev.event === "SubagentStop" && ev.agentId && ev.agentTranscriptPath) {
-      const tokens = await tracker.update(ev.agentTranscriptPath)
+      const tokens = await tracker.update(ev.agentTranscriptPath, resolve(ev.agentTranscriptPath))
       out.push({ event: "TokenUsage", sessionId: ev.sessionId, agentId: ev.agentId, tokens })
     }
   }
