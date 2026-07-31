@@ -2,7 +2,7 @@ import { X, TreeStructure, GitBranch } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { displaySessionTitle } from "../lib/session-label"
-import { formatTokens, headlineTokens, tokenBreakdown } from "../lib/tokens"
+import { formatTokens, tokenBreakdown } from "../lib/tokens"
 import type { AgentNode, AgentStatus } from "../lib/agent-graph"
 
 // AgentStatus → dot class (reusing App.css .dot.*) + a short word.
@@ -81,9 +81,9 @@ function AgentRow({
       </div>
       <div className="tree-right">
         <span className="status-faint">{d.word}</span>
-        {node.tokens && headlineTokens(node.tokens) > 0 && (
+        {node.tokens && (node.tokens.context > 0 || node.tokens.output > 0) && (
           <span className="tree-tokens" title={tokenBreakdown(node.tokens)}>
-            {formatTokens(headlineTokens(node.tokens))} tok
+            ↑{formatTokens(node.tokens.context)} ↓{formatTokens(node.tokens.output)}
           </span>
         )}
       </div>

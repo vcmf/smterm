@@ -42,7 +42,7 @@ describe("tokenEventsForBatch", () => {
       {
         event: "TokenUsage",
         sessionId: "s",
-        tokens: { input: 100, output: 40, cacheCreate: 0, cacheRead: 0 },
+        tokens: { context: 100, output: 40 },
       },
     ])
   })
@@ -57,7 +57,7 @@ describe("tokenEventsForBatch", () => {
         event: "TokenUsage",
         sessionId: "s",
         agentId: "a1",
-        tokens: { input: 5, output: 3, cacheCreate: 0, cacheRead: 0 },
+        tokens: { context: 5, output: 3 },
       },
     ])
   })
@@ -72,7 +72,7 @@ describe("tokenEventsForBatch", () => {
       // No agentTranscriptPath — only the session transcript_path, as real hooks send.
       { event: "SubagentStop", sessionId: "s", agentId: "a9", transcriptPath: sessionPath },
     ])
-    expect(out[0]!.tokens).toEqual({ input: 12, output: 6, cacheCreate: 0, cacheRead: 0 })
+    expect(out[0]!.tokens).toEqual({ context: 12, output: 6 })
   })
 
   it("accumulates across turns incrementally (only new bytes each time)", async () => {
@@ -81,14 +81,14 @@ describe("tokenEventsForBatch", () => {
     const first = await tokenEventsForBatch(tracker, [
       { event: "Stop", sessionId: "s", transcriptPath: sessionTx() },
     ])
-    expect(first[0]!.tokens!.input).toBe(10)
+    expect(first[0]!.tokens!.context).toBe(10)
 
     // Append a second turn; the next read should fold it onto the running total.
     fs.appendFileSync(sessionTx(), asst({ input_tokens: 20, output_tokens: 2 }))
     const second = await tokenEventsForBatch(tracker, [
       { event: "Stop", sessionId: "s", transcriptPath: sessionTx() },
     ])
-    expect(second[0]!.tokens).toEqual({ input: 30, output: 3, cacheCreate: 0, cacheRead: 0 })
+    expect(second[0]!.tokens).toEqual({ context: 20, output: 3 })
   })
 
   it("reads through the resolver's candidates (the WSL Linux→UNC translation seam)", async () => {
@@ -101,7 +101,7 @@ describe("tokenEventsForBatch", () => {
       [{ event: "Stop", sessionId: "s", transcriptPath: reported }],
       resolve,
     )
-    expect(out[0]!.tokens).toEqual({ input: 7, output: 8, cacheCreate: 0, cacheRead: 0 })
+    expect(out[0]!.tokens).toEqual({ context: 7, output: 8 })
   })
 
   it("emits a zeroed total when no candidate is reachable (graceful, no throw)", async () => {
@@ -110,7 +110,7 @@ describe("tokenEventsForBatch", () => {
       [{ event: "Stop", sessionId: "s", transcriptPath: "/gone.jsonl" }],
       () => ["/still/gone.jsonl"],
     )
-    expect(out[0]!.tokens).toEqual({ input: 0, output: 0, cacheCreate: 0, cacheRead: 0 })
+    expect(out[0]!.tokens).toEqual({ context: 0, output: 0 })
   })
 
   it("emits nothing for events without a transcript, and SessionEnd frees state", async () => {
