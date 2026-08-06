@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { HardDrives, Bell, GitBranch } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
-import type { UpdateStatus } from "../lib/version"
+import { applyUpdateResult, type UpdateStatus } from "../lib/version"
 
 const clockNow = () =>
   new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
@@ -15,15 +15,31 @@ export function StatusBar() {
   const [clock, setClock] = useState(clockNow)
   const [version, setVersion] = useState("")
   const [update, setUpdate] = useState<UpdateStatus | null>(null)
+  const lastCheck = useRef(0)
 
   useEffect(() => {
     void ipc.platformInfo().then((info) => setPlatform(info.label))
     void ipc.appVersion().then(setVersion)
-    // Check on launch, then re-check every 6h so a window left open for days still notices.
-    const check = () => void ipc.checkUpdate().then(setUpdate)
+    // Apply only a SUCCESSFUL check (latest !== null). A failed re-check returns latest:null;
+    // ignoring it keeps a real, still-valid update ping from vanishing on a transient offline blip.
+    const check = () => {
+      lastCheck.current = Date.now()
+      void ipc.checkUpdate().then((r) => setUpdate((prev) => applyUpdateResult(prev, r)))
+    }
     check()
-    const t = setInterval(check, 6 * 60 * 60 * 1000)
-    return () => clearInterval(t)
+    // Re-check on a slow interval, and when the window regains focus — the latter covers a
+    // laptop that slept through the interval (timers drift across sleep). Throttled so focus
+    // churn never hammers the API.
+    const REFRESH = 6 * 60 * 60 * 1000
+    const onFocus = () => {
+      if (Date.now() - lastCheck.current > REFRESH) check()
+    }
+    const t = setInterval(check, REFRESH)
+    window.addEventListener("focus", onFocus)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener("focus", onFocus)
+    }
   }, [])
 
   useEffect(() => {

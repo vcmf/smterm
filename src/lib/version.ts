@@ -60,3 +60,11 @@ export function compareVersions(a: string, b: string): number {
 /** Is `latest` a strictly newer version than `current`? */
 export const isNewer = (latest: string, current: string): boolean =>
   compareVersions(latest, current) > 0
+
+/** Fold a fresh check result into the displayed one. A FAILED check (latest === null) is
+ *  ignored so a transient offline blip can't clear a real, still-valid update ping; a
+ *  successful result always supersedes. */
+export const applyUpdateResult = (
+  prev: UpdateStatus | null,
+  next: UpdateStatus,
+): UpdateStatus | null => (next.latest !== null ? next : prev)

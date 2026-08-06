@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { compareVersions, isNewer } from "./version"
+import { compareVersions, isNewer, applyUpdateResult } from "./version"
 
 describe("compareVersions", () => {
   it("orders by major.minor.patch", () => {
@@ -38,5 +38,21 @@ describe("isNewer", () => {
     expect(isNewer("0.1.24", "0.1.24")).toBe(false)
     expect(isNewer("0.1.23", "0.1.24")).toBe(false)
     expect(isNewer("0.1.0-rc.1", "0.1.0")).toBe(false) // prerelease isn't "newer" than final
+  })
+})
+
+describe("applyUpdateResult", () => {
+  const ok = { current: "0.1.24", latest: "0.1.25", updateAvailable: true, url: "u" }
+  const noUpdate = { current: "0.1.24", latest: "0.1.24", updateAvailable: false, url: "" }
+  const failed = { current: "0.1.24", latest: null, updateAvailable: false, url: "" }
+
+  it("ignores a failed check so an existing ping isn't cleared by an offline blip", () => {
+    expect(applyUpdateResult(ok, failed)).toBe(ok) // keeps the prior update
+    expect(applyUpdateResult(null, failed)).toBeNull()
+  })
+
+  it("applies any successful result (update or up-to-date)", () => {
+    expect(applyUpdateResult(null, ok)).toBe(ok)
+    expect(applyUpdateResult(ok, noUpdate)).toBe(noUpdate) // a real 'no longer available' supersedes
   })
 })
