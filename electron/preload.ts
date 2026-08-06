@@ -44,6 +44,8 @@ const api = {
   },
 
   openExternal: (url: string) => ipcRenderer.send("open-external", url),
+  appVersion: () => ipcRenderer.invoke("app:version") as Promise<string>,
+  checkUpdate: () => ipcRenderer.invoke("app:check-update"),
   openPath: (p: string) => ipcRenderer.send("open-path", p),
   pathExists: (cwd: string, path: string) =>
     ipcRenderer.invoke("fs:path-exists", cwd, path) as Promise<boolean>,

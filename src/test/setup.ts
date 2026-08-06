@@ -59,6 +59,13 @@ const smtermStub = {
   writeWorkspace: vi.fn(),
   appMetrics: vi.fn(async () => []),
   perfMode: vi.fn(async () => false),
+  appVersion: vi.fn(async () => "0.1.24"),
+  checkUpdate: vi.fn(async () => ({
+    current: "0.1.24",
+    latest: null,
+    updateAvailable: false,
+    url: "",
+  })),
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { HardDrives, Bell, GitBranch } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
+import type { UpdateStatus } from "../lib/version"
 
 const clockNow = () =>
   new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
@@ -12,9 +13,17 @@ export function StatusBar() {
   const git = useStore((s) => s.git)
   const [platform, setPlatform] = useState("")
   const [clock, setClock] = useState(clockNow)
+  const [version, setVersion] = useState("")
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
 
   useEffect(() => {
     void ipc.platformInfo().then((info) => setPlatform(info.label))
+    void ipc.appVersion().then(setVersion)
+    // Check on launch, then re-check every 6h so a window left open for days still notices.
+    const check = () => void ipc.checkUpdate().then(setUpdate)
+    check()
+    const t = setInterval(check, 6 * 60 * 60 * 1000)
+    return () => clearInterval(t)
   }, [])
 
   useEffect(() => {
@@ -56,6 +65,21 @@ export function StatusBar() {
       </span>
       <span className="status-faint">UTF-8</span>
       <span className="status-faint">{clock}</span>
+      {version &&
+        (update?.updateAvailable ? (
+          // Update available: an accented, clickable ping → opens the release page.
+          <button
+            className="sb-version update"
+            title={`Update available — v${update.latest} (you have v${version}). Click to view.`}
+            onClick={() => ipc.openExternal(update.url)}
+          >
+            <span className="dot accent pulse" />v{update.latest}
+          </button>
+        ) : (
+          <span className="sb-version status-faint" title={`smterm v${version}`}>
+            smterm {version}
+          </span>
+        ))}
     </div>
   )
 }

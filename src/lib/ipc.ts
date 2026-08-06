@@ -4,6 +4,7 @@ import type { AgentEvent } from "./agent-graph"
 import type { DirListing } from "./dir-listing"
 import type { EditorInfo } from "./file-actions"
 import type { PreviewData } from "./file-preview"
+import type { UpdateStatus } from "./version"
 
 // The typed surface the preload exposes on window.smterm. Every renderer→main
 // call goes through this one seam (keeps components portable + is the insulation
@@ -67,6 +68,8 @@ export interface Ipc {
   writeWorkspace: (contents: string) => void
   appMetrics: () => Promise<ProcMetric[]>
   perfMode: () => Promise<boolean>
+  appVersion: () => Promise<string>
+  checkUpdate: () => Promise<UpdateStatus>
 }
 
 export interface ProcMetric {

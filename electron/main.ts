@@ -35,6 +35,7 @@ import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
 import { orderMacEditors, planEditor, type EditorPlan, type EditorInfo } from "./editor-detect"
+import { checkForUpdate } from "./update-check"
 import { startHookWatcher } from "./agent-hooks"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import { buildHookSettings } from "./hook-writer"
@@ -411,6 +412,10 @@ function registerIpc() {
     })),
   )
   ipcMain.handle("app:perf-mode", async () => process.env.SMTERM_PERF === "1")
+
+  // Version + best-effort update check for the status-bar badge (off any hot path).
+  ipcMain.handle("app:version", async () => app.getVersion())
+  ipcMain.handle("app:check-update", async () => checkForUpdate(app.getVersion()))
 
   // Platform label for the status bar (macOS / Windows / Linux).
   ipcMain.handle("platform:info", async () => {

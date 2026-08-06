@@ -939,6 +939,27 @@ body.resizing-col {
 .status-faint {
   color: var(--faint);
 }
+/* App version at the far-right of the status bar. Dim + silent by default; when an update
+   is available it becomes an accented, clickable ping (reusing .dot.pulse). */
+.sb-version {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sb-version.update {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.sb-version.update:hover {
+  text-decoration: underline;
+}
 
 /* ── Command palette (⌘K) ────────────────────────────── */
 .palette-overlay {
