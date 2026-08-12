@@ -233,7 +233,57 @@ motivating example.
 
 ---
 
-## 13. References
+## 13. Complexity & effort estimate
+
+> Rough, for scoping only — **±40%** given the novelty. Calibrated to the current codebase
+> (~7.9k prod + ~4.2k test LoC; dense — `output-buffer.ts` is 45 lines). Not a commitment.
+
+| Stage / component | Prod LoC | Test LoC | Complexity | Key risk |
+|---|---|---|---|---|
+| Shared: protocol + framing | 120–180 | 120 | Med | partial-read/frame edges |
+| **Stage 1 — pty-host child + screen model** | | | **High** | |
+| · host process (socket server + pty map; mostly relocated) | 250–400 | 150 | Med-High | backpressure, disconnects |
+| · headless emulator per session (`@xterm/headless` + serialize) | 120–200 | 100 | Med-High | **fidelity wildcard** |
+| · client side in app (main proxies to socket) | 200–300 | 120 | Med | rewire the `ipc.ts` seam |
+| · fork + socket lifecycle (app-owned; kills on quit) | 80–150 | 60 | Med | **native-module-in-child packaging** |
+| · snapshot→reattach + perf validation | 100–200 | 60 | Low-Med | measure the hop |
+| **Stage 2 — detach it (M5 headline)** | | | **High** | |
+| · detached lifecycle (pidfile, discover-or-spawn, unref, handshake, reap) | 200–350 | 150 | High | **cross-platform detach** |
+| · auto-reattach on relaunch + fallback | 150–250 | 100 | Med-High | layout↔session mapping |
+| · quit-UX (keep/close, indicators, status hint) | 150–250 | 100 | Med | low |
+| · security (0600 socket / pipe ACL) + auto-update drain | 120–230 | 100 | Med-High | Windows ACL, drain policy |
+| **Stage 3 — remote (wrap tmux/mosh)** | | | **Med** | |
+| · remote-session command builder + UX | 200–350 | 120 | Med | ssh auth / host-key prompts |
+| · reconnect ergonomics | 100–200 | 60 | Med | detect exit vs detach |
+
+**Totals by scope:**
+- **Stage 1 only** (refactor + screen model, no survival yet): **~1,800–2,300 LoC**.
+- **Stage 1 + 2** (app-side survival — the headline): **~3,000–4,000 LoC**.
+- **Stage 1 + 2 + 3** (full "ssh survives everything"): **~3,500–4,800 LoC** — ~**+30–40%** on the
+  current codebase. A new subsystem, not a feature.
+
+**LoC undersells it — the risk concentrates in ~500 lines of glue.** Three wildcards drive the real
+effort:
+1. **Screen-model fidelity** (Stage 1). `@xterm/headless` + `addon-serialize` is purpose-built for
+   this so it'll _mostly_ work fast; the last mile — alt-screen apps (vim/htop/**Claude's TUI**),
+   mouse modes, reflow-on-resize — is where "reattach repaints slightly wrong" bugs live. Hard to
+   unit-test; needs a **manual TUI matrix**. Biggest single uncertainty.
+2. **Cross-platform detached lifecycle** (Stage 2). Outliving the app + reconnecting differs on
+   Windows (named pipes; no Unix `unref`-to-daemon trick) vs Unix; stale sockets, two-instance races.
+3. **Native-module packaging for the helper** (Stage 1). `node-pty` prebuilt + loaded in a
+   *separately-spawned* process (not Electron main), through electron-builder, on three platforms — a
+   known rabbit hole.
+
+**De-risks it:** Stage 0 done (the seam); `output-buffer`/`coalescer` already factored; Stage 1 keeps
+app-lifetime so the emulator + perf are validated *before* the detached-lifecycle work.
+**Blows it up:** headless fidelity forcing a custom VT layer (unlikely), or deep Windows detach
+issues. For scale: the whole token feature (#43/#44) was ~500 LoC — this is ~7–10× the code and much
+higher in novelty/risk. Stage 1 = most novel work / low external risk; Stage 2 = less code, highest
+bug risk; Stage 3 = most code-for-least-risk (tmux does the hard part).
+
+---
+
+## 14. References
 
 - `../ARCHITECTURE.md` Appendix A (the original sketch this supersedes), §8/§11 (the `ipc.ts` seam).
 - `GOTCHAS.md#session-survival` (current PTY lifetime + reload-reattach).
