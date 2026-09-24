@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, createEvent } from "@testing-library/react"
 import { TerminalPane } from "./terminal-pane"
 import { useStore } from "../store"
 import { allSessionIds } from "../lib/pane-tree"
@@ -182,5 +182,95 @@ describe("TerminalPane — hidden surfaces keep running", () => {
     expect(leaf().sessionIds).toHaveLength(1)
     fireEvent.mouseDown(screen.getByTitle(/New terminal/), { button: 0 })
     expect(leaf().sessionIds).toHaveLength(2)
+  })
+})
+
+describe("TerminalPane — drag & drop", () => {
+  const dt = () => ({ setData: vi.fn(), effectAllowed: "", dropEffect: "" })
+  const rect = { left: 0, top: 0, width: 400, height: 200, right: 400, bottom: 200 }
+  // jsdom has no DragEvent, so coordinates passed to fireEvent are dropped — set them.
+  const drag = (type: "dragOver" | "drop", el: HTMLElement, x: number, y = 0) => {
+    const ev = createEvent[type](el, { dataTransfer: dt() })
+    Object.defineProperty(ev, "clientX", { value: x })
+    Object.defineProperty(ev, "clientY", { value: y })
+    fireEvent(el, ev)
+  }
+
+  /** Two surfaces in one pane, the first being dragged; returns the rendered view. */
+  const startDrag = () => {
+    const { tabId, id: first } = mountPane()
+    st().newSurface()
+    const view = renderPane(tabId)
+    // A real drag starts with a mousedown, which selects the dragged tab.
+    fireEvent.mouseDown(screen.getAllByRole("tab")[0]!, { button: 0 })
+    fireEvent.dragStart(screen.getAllByRole("tab")[0]!, { dataTransfer: dt() })
+    view.rerender()
+    return { tabId, first, view }
+  }
+
+  it("dragging a surface tab turns the drop overlay on (and dragend turns it off)", () => {
+    const { tabId, first, view } = startDrag()
+    expect(st().dragging).toEqual({ tabId, sessionId: first })
+    expect(view.container.querySelector(".drop-overlay")).toBeInTheDocument()
+    fireEvent.dragEnd(screen.getAllByRole("tab")[0]!)
+    view.rerender()
+    expect(st().dragging).toBeNull()
+    expect(view.container.querySelector(".drop-overlay")).not.toBeInTheDocument()
+  })
+
+  it("dropping on the pane's right edge splits the surface off into a new pane", () => {
+    const { first, view } = startDrag()
+    const overlay = view.container.querySelector(".drop-overlay") as HTMLElement
+    overlay.getBoundingClientRect = () => rect as DOMRect
+    drag("dragOver", overlay, 390, 100)
+    expect(view.container.querySelector(".drop-hint.right")).toBeInTheDocument()
+    drag("drop", overlay, 390, 100)
+    const root = st().tabs[0]!.root
+    expect(root.type).toBe("split")
+    if (root.type !== "split") return
+    expect(root.children[1]).toMatchObject({ sessionIds: [first] })
+    expect(st().tabs[0]!.activeSessionId).toBe(first)
+    expect(st().dragging).toBeNull()
+  })
+
+  it("no hint (and no move) where the drop would change nothing", () => {
+    const { tabId } = mountPane() // a single surface
+    const view = renderPane(tabId)
+    fireEvent.dragStart(screen.getAllByRole("tab")[0]!, { dataTransfer: dt() })
+    view.rerender()
+    const overlay = view.container.querySelector(".drop-overlay") as HTMLElement
+    overlay.getBoundingClientRect = () => rect as DOMRect
+    drag("dragOver", overlay, 390, 100) // own edge
+    expect(view.container.querySelector(".drop-hint")).not.toBeInTheDocument()
+    const before = st().tabs[0]!.root
+    drag("drop", overlay, 390, 100)
+    expect(st().tabs[0]!.root).toBe(before)
+  })
+
+  it("dropping on the tab strip reorders the surfaces", () => {
+    const { first, view } = startDrag()
+    const strip = view.container.querySelector(".surface-tabs") as HTMLElement
+    const tabs = screen.getAllByRole("tab")
+    tabs.forEach((t, i) => {
+      t.getBoundingClientRect = () => ({ left: i * 100, width: 100 }) as DOMRect
+    })
+    drag("dragOver", strip, 190) // past the 2nd tab's midpoint → slot 2 (the end)
+    view.rerender()
+    expect(tabs[1]).toHaveClass("insert-after")
+    drag("drop", strip, 190)
+    expect(leaf().sessionIds[1]).toBe(first)
+    expect(leaf().activeSessionId).toBe(first)
+  })
+
+  it("dropping before the first tab of its own slot shows no marker", () => {
+    const { view } = startDrag()
+    const strip = view.container.querySelector(".surface-tabs") as HTMLElement
+    const tabs = screen.getAllByRole("tab")
+    tabs.forEach((t, i) => {
+      t.getBoundingClientRect = () => ({ left: i * 100, width: 100 }) as DOMRect
+    })
+    drag("dragOver", strip, 10) // slot 0 = where the dragged (first) tab already is
+    view.rerender()
+    expect(tabs[0]).not.toHaveClass("insert-before")
   })
 })

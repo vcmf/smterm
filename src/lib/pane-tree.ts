@@ -1,4 +1,4 @@
-import type { PaneLeaf, PaneNode } from "../types"
+import type { DropZone, PaneLeaf, PaneNode } from "../types"
 
 // Pure pane-tree ops. A leaf is a pane holding one or more terminals (surfaces);
 // IDs are passed in (not generated) to keep everything pure and testable. Ops return
@@ -55,13 +55,103 @@ export function splitNode(
   )
 }
 
-/** Append `sessionId` as a new surface of pane `paneId` and make it the active one. */
-export function addSurface(node: PaneNode, paneId: string, sessionId: string): PaneNode {
-  return mapLeaves(node, (leaf) =>
-    leaf.id === paneId && !leaf.sessionIds.includes(sessionId)
-      ? { ...leaf, sessionIds: [...leaf.sessionIds, sessionId], activeSessionId: sessionId }
-      : leaf,
-  )
+/** Add `sessionId` as the active surface of pane `paneId`, at `index` (default: the end). */
+export function addSurface(
+  node: PaneNode,
+  paneId: string,
+  sessionId: string,
+  index?: number,
+): PaneNode {
+  return mapLeaves(node, (leaf) => {
+    if (leaf.id !== paneId || leaf.sessionIds.includes(sessionId)) return leaf
+    const sessionIds = [...leaf.sessionIds]
+    sessionIds.splice(index ?? sessionIds.length, 0, sessionId)
+    return { ...leaf, sessionIds, activeSessionId: sessionId }
+  })
+}
+
+/** Split pane `paneId` on `side`, putting `leaf` there (left/top → first child). */
+function splitPaneAt(
+  node: PaneNode,
+  paneId: string,
+  side: Exclude<DropZone, "center">,
+  leaf: PaneLeaf,
+  splitId: string,
+): PaneNode {
+  return mapLeaves(node, (target) => {
+    if (target.id !== paneId) return target
+    const first = side === "left" || side === "top"
+    return {
+      type: "split",
+      id: splitId,
+      direction: side === "left" || side === "right" ? "row" : "column",
+      children: first ? [leaf, target] : [target, leaf],
+    }
+  })
+}
+
+/** A drop target: a pane's zone (edge = new split, centre = join) or a slot in its tab strip. */
+export type MoveTarget = { paneId: string; zone: DropZone } | { paneId: string; index: number }
+
+/** Whether moving a surface to `target` would change the layout (drives the drop hints). */
+export function canMove(node: PaneNode, sessionId: string, target: MoveTarget): boolean {
+  const src = findPane(node, sessionId)
+  const dst = findPaneById(node, target.paneId)
+  if (!src || !dst) return false
+  const samePane = src.id === dst.id
+  if ("index" in target) {
+    if (!samePane) return true
+    const from = src.sessionIds.indexOf(sessionId)
+    return target.index !== from && target.index !== from + 1 // either side of itself = stay
+  }
+  if (target.zone === "center") return !samePane
+  return !(samePane && src.sessionIds.length === 1) // can't split its only surface off itself
+}
+
+/** Move a surface to `target` (it becomes visible there); same reference if nothing changes. */
+export function moveSurface(
+  node: PaneNode,
+  sessionId: string,
+  target: MoveTarget,
+  ids: { splitId: string; paneId: string },
+): PaneNode {
+  const src = findPane(node, sessionId)
+  const dst = findPaneById(node, target.paneId)
+  if (!src || !dst) return node
+  const samePane = src.id === dst.id
+
+  if ("index" in target) {
+    if (samePane) {
+      // `index` is a slot in the strip as rendered (moved tab included): account for its removal.
+      const from = src.sessionIds.indexOf(sessionId)
+      const to = Math.max(
+        0,
+        Math.min(target.index > from ? target.index - 1 : target.index, src.sessionIds.length - 1),
+      )
+      if (to === from) return selectSurface(node, sessionId)
+      const sessionIds = src.sessionIds.filter((id) => id !== sessionId)
+      sessionIds.splice(to, 0, sessionId)
+      return mapLeaves(node, (leaf) =>
+        leaf.id === src.id ? { ...leaf, sessionIds, activeSessionId: sessionId } : leaf,
+      )
+    }
+    const rest = removeNode(node, sessionId)! // dst survives: it's a different pane
+    return addSurface(
+      rest,
+      dst.id,
+      sessionId,
+      Math.max(0, Math.min(target.index, dst.sessionIds.length)),
+    )
+  }
+
+  if (target.zone === "center") {
+    if (samePane) return node
+    return addSurface(removeNode(node, sessionId)!, dst.id, sessionId)
+  }
+  // Edge: a pane's only surface can't be split off beside itself.
+  if (samePane && src.sessionIds.length === 1) return node
+  const rest = removeNode(node, sessionId)! // dst survives: different pane, or it kept others
+  return splitPaneAt(rest, dst.id, target.zone, makeLeaf(ids.paneId, sessionId), ids.splitId)
 }
 
 /** Make `sessionId` the visible surface of whichever pane holds it. */

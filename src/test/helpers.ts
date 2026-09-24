@@ -21,5 +21,6 @@ export function resetStore() {
     git: null,
     paneRoot: {},
     closePaneConfirm: null,
+    dragging: null,
   })
 }
