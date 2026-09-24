@@ -55,7 +55,14 @@ describe("AgentsPanel", () => {
   it("boxes the session whose pane the user is currently in", () => {
     useStore.setState({
       activeTabId: "t",
-      tabs: [{ id: "t", title: "t", root: { type: "leaf", sessionId: "p" }, activeSessionId: "p" }],
+      tabs: [
+        {
+          id: "t",
+          title: "t",
+          root: { type: "leaf", id: "pp", sessionIds: ["p"], activeSessionId: "p" },
+          activeSessionId: "p",
+        },
+      ],
     })
     const { container } = render(<AgentsPanel />)
     expect(container.querySelector(".agent-session.active")).toBeInTheDocument()
@@ -68,7 +75,7 @@ describe("AgentsPanel", () => {
         {
           id: "t",
           title: "t",
-          root: { type: "leaf", sessionId: "other" },
+          root: { type: "leaf", id: "po", sessionIds: ["other"], activeSessionId: "other" },
           activeSessionId: "other",
         },
       ],

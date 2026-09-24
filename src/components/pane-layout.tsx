@@ -6,7 +6,7 @@ import { TerminalPane } from "./terminal-pane"
 /** Recursively render a pane tree into resizable split panels. */
 export function PaneLayout({ node, tabId }: { node: PaneNode; tabId: string }) {
   if (node.type === "leaf") {
-    return <TerminalPane sessionId={node.sessionId} tabId={tabId} />
+    return <TerminalPane pane={node} tabId={tabId} />
   }
 
   const [first, second] = node.children

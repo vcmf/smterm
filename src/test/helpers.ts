@@ -19,5 +19,7 @@ export function resetStore() {
     rightView: null,
     sidebarCollapsed: false,
     git: null,
+    paneRoot: {},
+    closePaneConfirm: null,
   })
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { keyAction, type TermKeyEvent } from "./terminal-keys"
+import { appShortcut, keyAction, type TermKeyEvent } from "./terminal-keys"
 
 const ev = (over: Partial<TermKeyEvent>): TermKeyEvent => ({
   key: "a",
@@ -87,5 +87,27 @@ describe("keyAction — Shift+Enter newline", () => {
     expect(run(ev({ key: "Enter", shiftKey: true, ctrlKey: true }))).toBeNull()
     expect(run(ev({ key: "Enter", shiftKey: true, metaKey: true }))).toBeNull()
     expect(run(ev({ key: "Enter", shiftKey: true, altKey: true }))).toBeNull()
+  })
+})
+
+describe("appShortcut — new surface", () => {
+  const mac = { isMac: true }
+  const pc = { isMac: false }
+
+  it("⌘T on macOS", () => {
+    expect(appShortcut(ev({ key: "t", metaKey: true }), mac)).toBe("new-surface")
+    expect(appShortcut(ev({ key: "t", ctrlKey: true }), mac)).toBeNull() // ⌃T → shell
+    expect(appShortcut(ev({ key: "T", metaKey: true, shiftKey: true }), mac)).toBeNull()
+  })
+
+  it("Ctrl+Shift+T on Linux/Windows; plain Ctrl+T stays with the shell", () => {
+    expect(appShortcut(ev({ key: "T", ctrlKey: true, shiftKey: true }), pc)).toBe("new-surface")
+    expect(appShortcut(ev({ key: "t", ctrlKey: true }), pc)).toBeNull()
+    expect(appShortcut(ev({ key: "t", metaKey: true }), pc)).toBeNull()
+  })
+
+  it("ignores other keys and Alt combos", () => {
+    expect(appShortcut(ev({ key: "k", metaKey: true }), mac)).toBeNull()
+    expect(appShortcut(ev({ key: "t", metaKey: true, altKey: true }), mac)).toBeNull()
   })
 })

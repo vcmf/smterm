@@ -3,7 +3,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { SearchAddon, type ISearchOptions } from "@xterm/addon-search"
-import type { Session } from "../types"
+import type { PaneLeaf, Session } from "../types"
 import { useStore } from "../store"
 import { notify } from "../lib/notify"
 import { ipc } from "../lib/ipc"
@@ -11,21 +11,20 @@ import { getTheme } from "../settings/themes"
 import type { Settings } from "../settings/schema"
 import { ligatureRanges } from "./ligatures"
 import { displaySessionTitle } from "../lib/session-label"
-import { allSessionIds } from "../lib/pane-tree"
+import { allPanes, visibleSessionIds } from "../lib/pane-tree"
 import { webglPanes, shouldRebuildAtlas } from "../lib/renderer-policy"
-import { keyAction } from "../lib/terminal-keys"
+import { appShortcut, keyAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
-
-const isMac = /mac/i.test(navigator.userAgent)
-const isWindows = /win/i.test(navigator.userAgent)
+import { isMac, isWindows } from "../lib/platform"
 
 interface Entry {
   term: Terminal
   fit: FitAddon
   search: SearchAddon
   host: HTMLDivElement
-  opened: boolean
+  opened: boolean // xterm mounted into a DOM host (first time on-screen)
+  spawned: boolean // PTY spawned/reattached + output listeners wired (may precede `opened`)
   offData?: () => void
   joinerId?: number
   idleTimer?: ReturnType<typeof setTimeout>
@@ -102,7 +101,11 @@ function pasteInto(term: Terminal) {
 /** Give this pane a WebGL context if it doesn't have one. Returns true if a context
  *  was newly created (so the caller can rebuild the shared atlas across panes). */
 function acquireWebgl(entry: Entry): boolean {
+  // Only once mounted in a pane: a store change reconciles BEFORE React re-attaches the host
+  // (it may still be parked), and moving a live canvas can lose its context. attach()
+  // reconciles again once the host is in its pane.
   if (entry.webgl || entry.webglFailed || !entry.opened) return false
+  if (!entry.host.isConnected || entry.host.parentElement === parking) return false
   try {
     const webgl = new WebglAddon()
     webgl.onContextLoss(() => {
@@ -169,7 +172,8 @@ function releaseWebgl(entry: Entry) {
 function reconcileRenderers() {
   const state = useStore.getState()
   const tab = state.tabs.find((t) => t.id === state.activeTabId)
-  const visible = tab ? allSessionIds(tab.root) : []
+  // Each pane's active surface only — a surface hidden behind another holds no context.
+  const visible = tab ? visibleSessionIds(tab.root) : []
   // Which panes get a live GPU context. Default (`auto`) is the focused pane only —
   // one context can't corrupt itself, so the multi-pane split garble is impossible
   // by construction (see GOTCHAS #renderer). `webgl` = all visible; `dom` = none.
@@ -236,6 +240,9 @@ function build(): Entry {
   // paste). Everything else (incl. ⌃C SIGINT) passes straight through to the PTY.
   term.attachCustomKeyEventHandler((e) => {
     if (e.type !== "keydown") return true
+    // App shortcuts (⌘T / Ctrl+Shift+T) are handled by the window listener; don't also
+    // let xterm send the key to the PTY (Ctrl+Shift+T would otherwise type ^T).
+    if (appShortcut(e, { isMac })) return false
     const action = keyAction(e, { isMac, isWindows, hasSelection: term.hasSelection() })
     if (!action) return true
     if (action === "copy") {
@@ -259,7 +266,7 @@ function build(): Entry {
     e.preventDefault()
     return false
   })
-  return { term, fit, search, host, opened: false }
+  return { term, fit, search, host, opened: false, spawned: false }
 }
 
 // Search match highlighting — amber for all matches, orange for the active one
@@ -290,6 +297,8 @@ function applyLigatures(entry: Entry, on: boolean) {
 }
 
 function spawn(session: Session, entry: Entry) {
+  if (entry.spawned) return
+  entry.spawned = true
   const { term } = entry
   const store = useStore.getState()
 
@@ -432,43 +441,119 @@ function syncSize(id: string, entry: Entry) {
   }
 }
 
+// Off-screen parking for every terminal that isn't on screen (hidden surfaces, background
+// tabs). In the document, so xterm can open + measure (themes, OSC 10/11 colour replies,
+// ligatures all need an opened terminal), but outside the viewport — xterm pauses rendering
+// for a non-intersecting terminal, so parked output costs no paint — and `inert`, so Tab
+// can't focus a parked terminal's textarea.
+let parking: HTMLDivElement | null = null
+function parkingLot(): HTMLDivElement {
+  if (!parking) {
+    parking = document.createElement("div")
+    parking.inert = true
+    parking.style.cssText =
+      "position:fixed;left:-100000px;top:0;width:1000px;height:600px;overflow:hidden;pointer-events:none"
+    document.body.appendChild(parking)
+  }
+  return parking
+}
+
+/** Open an entry's xterm into its (already connected) host + wire its focus signal. */
+function openEntry(session: Session, entry: Entry) {
+  entry.term.open(entry.host) // DOM renderer by default; WebGL added by reconcile
+  entry.opened = true
+  // Make this pane active whenever its terminal actually gains focus (click or
+  // keyboard). This is the reliable signal: a mousedown handler on the pane
+  // container misses clicks inside an agent TUI (mouse-tracking on), because
+  // xterm's selection service stopPropagation()s those mousedowns — which left
+  // the active pane stuck on the last-added one, so splits targeted the wrong pane.
+  entry.term.textarea?.addEventListener("focus", () => {
+    if (suppressFocusSignal) return
+    useStore.getState().focusSession(session.id)
+  })
+  applyLigatures(entry, useStore.getState().settings.font.ligatures)
+}
+
+function entryFor(id: string): Entry {
+  let entry = entries.get(id)
+  if (!entry) {
+    entry = build()
+    entries.set(id, entry)
+  }
+  return entry
+}
+
 export const TerminalManager = {
+  /** Run a hidden surface off-screen (PTY + status/cwd wiring), sized like `sizeLike`. */
+  ensureRunning(session: Session, sizeLike?: string) {
+    const entry = entryFor(session.id)
+    if (entry.spawned) return
+    if (!entry.opened) {
+      parkingLot().appendChild(entry.host)
+      openEntry(session, entry)
+    }
+    if (sizeLike) TerminalManager.followSize(session.id, sizeLike)
+    spawn(session, entry)
+  },
+
+  /** Hidden surfaces of `pane` (all panes if omitted) take their pane's visible grid. */
+  syncHiddenSizes(pane?: PaneLeaf) {
+    const panes = pane ? [pane] : useStore.getState().tabs.flatMap((t) => allPanes(t.root))
+    for (const p of panes) {
+      for (const id of p.sessionIds) {
+        if (id !== p.activeSessionId) TerminalManager.followSize(id, p.activeSessionId)
+      }
+    }
+  },
+
+  /** Give a hidden surface its pane's grid (it can't self-fit); PTY resized only on change. */
+  followSize(id: string, likeId: string) {
+    const entry = entries.get(id)
+    const like = entries.get(likeId)
+    if (!entry || !like?.opened) return
+    const { cols, rows } = like.term
+    if (!gridChanged(entry.lastGrid, cols, rows)) return
+    try {
+      entry.term.resize(cols, rows)
+    } catch {
+      return // invalid size — keep the current grid
+    }
+    entry.lastGrid = { cols, rows }
+    if (entry.spawned) ipc.ptyResize(id, cols, rows) // else spawn() sends this size
+  },
+
   /** Mount a session's terminal into `container`, creating + spawning on first use. */
   attach(session: Session, container: HTMLElement) {
-    let entry = entries.get(session.id)
-    if (!entry) {
-      entry = build()
-      entries.set(session.id, entry)
-    }
+    const entry = entryFor(session.id)
     container.appendChild(entry.host)
     if (!entry.opened) {
-      entry.term.open(entry.host) // DOM renderer by default; WebGL added by reconcile
-      entry.opened = true
-      // Make this pane active whenever its terminal actually gains focus (click or
-      // keyboard). This is the reliable signal: a mousedown handler on the pane
-      // container misses clicks inside an agent TUI (mouse-tracking on), because
-      // xterm's selection service stopPropagation()s those mousedowns — which left
-      // the active pane stuck on the last-added one, so splits targeted the wrong pane.
-      entry.term.textarea?.addEventListener("focus", () => {
-        if (suppressFocusSignal) return
-        useStore.getState().focusSession(session.id)
-      })
-      applyLigatures(entry, useStore.getState().settings.font.ligatures)
+      openEntry(session, entry)
       syncSize(session.id, entry)
       spawn(session, entry)
     } else {
-      syncSize(session.id, entry)
+      syncSize(session.id, entry) // re-attach (incl. a parked surface): fit + resize its PTY
+      spawn(session, entry) // no-op when already running
     }
     reconcileRenderers() // this pane is now on-screen — (re)acquire WebGL if apt
-    // Programmatic focus on (re)attach — don't let it change the active pane (a split
-    // or tab-switch mounts several panes; the store already knows which is active).
-    suppressFocusSignal = true
-    entry.term.focus()
-    suppressFocusSignal = false
+    // Keyboard focus follows the STORE's focus: only the tab's focused session takes it on
+    // (re)attach — a split/tab-switch mount storm, or a surface revealed in an unfocused
+    // pane, must not pull keystrokes away from the pane the user is driving.
+    const st = useStore.getState()
+    if (st.tabs.find((t) => t.id === st.activeTabId)?.activeSessionId === session.id) {
+      suppressFocusSignal = true
+      entry.term.focus()
+      suppressFocusSignal = false
+    }
     // Reparenting the host (e.g. on split) moves the live WebGL canvas, which then
     // shows stale/garbled pixels until the next draw. Repaint on the next frame,
     // once the moved canvas has laid out. (This is the trigger PR #3's repair missed.)
     requestAnimationFrame(() => repairRenderers())
+  },
+
+  /** Park a terminal off-screen, unless it has since been attached to another container. */
+  detach(id: string, container: HTMLElement) {
+    const entry = entries.get(id)
+    if (entry && entry.host.parentElement === container) parkingLot().appendChild(entry.host)
   },
 
   reconcileRenderers,
@@ -529,9 +614,12 @@ export const TerminalManager = {
       o.cursorBlink = settings.cursorBlink
       o.scrollback = settings.scrollback
       o.theme = theme
+      if (!entry.opened) continue // joiner registration throws on an unopened xterm
       applyLigatures(entry, settings.font.ligatures)
-      if (entry.opened) syncSize(id, entry)
+      if (entry.host.parentElement !== parking) syncSize(id, entry)
     }
+    // Hidden surfaces can't refit off-screen — give them their pane's new grid.
+    TerminalManager.syncHiddenSizes()
     // A `renderer` change (webgl ↔ dom) takes effect live: acquire/release WebGL to
     // match, on the current visible panes.
     reconcileRenderers()
@@ -539,7 +627,9 @@ export const TerminalManager = {
 
   dispose(id: string) {
     const entry = entries.get(id)
-    if (!entry) return
+    // No entry = never started in this renderer (e.g. a hidden surface after a reload), but
+    // main may still hold its PTY — always kill (an unknown id is a no-op there).
+    if (!entry) return ipc.ptyKill(id)
     clearTimeout(entry.idleTimer)
     releaseWebgl(entry)
     entry.offData?.()

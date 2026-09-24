@@ -8,12 +8,14 @@ import {
   Palette,
   GearSix,
   FileText,
+  Terminal,
   X,
 } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { THEMES } from "../settings/themes"
 import { openSettingsFile, saveSettings } from "../settings/io"
 import { resolveDefaultShell } from "../lib/shells"
+import { newSurfaceKey } from "../lib/platform"
 
 interface Command {
   group: string
@@ -59,6 +61,13 @@ export function CommandPalette() {
         })
       }
       list.push(
+        {
+          group: "Session",
+          label: "New terminal in pane",
+          sub: newSurfaceKey,
+          icon: <Terminal size={16} />,
+          run: () => store.newSurface(shell),
+        },
         {
           group: "Session",
           label: "Split pane right",

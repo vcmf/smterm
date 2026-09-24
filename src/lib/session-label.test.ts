@@ -24,7 +24,7 @@ const mk = (over: Partial<Session> = {}): Session => ({
 const tab = (title: string, activeSessionId = "s"): Tab => ({
   id: "t",
   title,
-  root: { type: "leaf", sessionId: activeSessionId },
+  root: { type: "leaf", id: "p", sessionIds: [activeSessionId], activeSessionId },
   activeSessionId,
 })
 

@@ -46,11 +46,11 @@ describe("store — tabs & panes", () => {
     expect(st().sessions[tab.activeSessionId]!.cwd).toBe("/some/worktree")
   })
 
-  it("closePane collapses a split back to a single leaf", () => {
+  it("closeSurface on a single-terminal pane collapses the split back to a leaf", () => {
     st().newTab(shell)
     st().splitActive("row", shell)
     const [firstId] = allSessionIds(firstTab().root)
-    st().closePane(firstTab().id, firstId!)
+    st().closeSurface(firstTab().id, firstId!)
     expect(firstTab().root.type).toBe("leaf")
     expect(Object.keys(st().sessions)).toHaveLength(1)
   })
@@ -58,7 +58,7 @@ describe("store — tabs & panes", () => {
   it("closing the last pane removes the tab, its session, and clears active", () => {
     st().newTab(shell)
     const [only] = allSessionIds(firstTab().root)
-    st().closePane(firstTab().id, only!)
+    st().closeSurface(firstTab().id, only!)
     expect(st().tabs).toHaveLength(0)
     expect(Object.keys(st().sessions)).toHaveLength(0)
     expect(st().activeTabId).toBeNull()
@@ -116,8 +116,10 @@ describe("store — tabs & panes", () => {
 function siblingOfLeaf(node: import("./types").PaneNode, target: string): string | null {
   if (node.type === "leaf") return null
   const [x, y] = node.children
-  if (x.type === "leaf" && x.sessionId === target && y.type === "leaf") return y.sessionId
-  if (y.type === "leaf" && y.sessionId === target && x.type === "leaf") return x.sessionId
+  if (x.type === "leaf" && x.activeSessionId === target && y.type === "leaf")
+    return y.activeSessionId
+  if (y.type === "leaf" && y.activeSessionId === target && x.type === "leaf")
+    return x.activeSessionId
   return siblingOfLeaf(x, target) ?? siblingOfLeaf(y, target)
 }
 
@@ -324,7 +326,12 @@ describe("store — cwd & UI toggles", () => {
         x: { id: "x", title: "t", command: "/bin/zsh", args: [], status: "idle", unread: false },
       },
       tabs: [
-        { id: "tb", title: "t", root: { type: "leaf", sessionId: "x" }, activeSessionId: "x" },
+        {
+          id: "tb",
+          title: "t",
+          root: { type: "leaf", id: "px", sessionIds: ["x"], activeSessionId: "x" },
+          activeSessionId: "x",
+        },
       ],
       activeTabId: "tb",
     })
@@ -375,14 +382,14 @@ describe("store — paneRoot (Files-panel root override)", () => {
     st().clearPaneRoot(sid)
     expect(st().paneRoot[sid]).toBeUndefined()
   })
-  it("closePane drops the closed pane's override, keeps the sibling's", () => {
+  it("closeSurface drops the closed pane's override, keeps the sibling's", () => {
     st().newTab(shell)
     st().splitActive("row", shell)
     const tab = firstTab()
     const [a, b] = allSessionIds(tab.root)
     st().setPaneRoot(a!, "/Users/me/a")
     st().setPaneRoot(b!, "/Users/me/b")
-    st().closePane(tab.id, a!)
+    st().closeSurface(tab.id, a!)
     expect(st().paneRoot[a!]).toBeUndefined()
     expect(st().paneRoot[b!]).toBe("/Users/me/b")
   })
@@ -393,5 +400,167 @@ describe("store — paneRoot (Files-panel root override)", () => {
     st().setPaneRoot(sid, "/Users/me/proj")
     st().closeTab(tab.id)
     expect(st().paneRoot[sid]).toBeUndefined()
+  })
+})
+
+describe("store — surfaces (terminal tabs inside a pane)", () => {
+  beforeEach(resetStore)
+
+  const pane = () => {
+    const root = firstTab().root
+    if (root.type !== "leaf") throw new Error("expected a single pane")
+    return root
+  }
+
+  it("newSurface adds a terminal to the focused pane and focuses it", () => {
+    st().newTab(shell)
+    const first = firstTab().activeSessionId
+    st().setSessionCwd(first, "/proj")
+    st().newSurface()
+    const p = pane()
+    expect(p.sessionIds).toHaveLength(2)
+    expect(p.activeSessionId).toBe(firstTab().activeSessionId)
+    expect(firstTab().activeSessionId).not.toBe(first)
+    // inherits the source terminal's shell + cwd
+    expect(st().sessions[p.activeSessionId]).toMatchObject({ command: shell.command, cwd: "/proj" })
+  })
+
+  it("newSurface inherits a WSL shell (not the list's first entry)", () => {
+    st().newTab(wslShell)
+    st().newSurface()
+    expect(st().sessions[firstTab().activeSessionId]!.command).toBe("wsl.exe")
+  })
+
+  it("newSurface targets only the focused pane of a split", () => {
+    st().newTab(shell)
+    st().splitActive("row", shell) // A | B, B focused
+    const [a] = allSessionIds(firstTab().root)
+    st().setActivePane(firstTab().id, a!)
+    st().newSurface()
+    const root = firstTab().root
+    if (root.type !== "split") throw new Error("expected split")
+    expect(root.children[0]).toMatchObject({ sessionIds: [a, firstTab().activeSessionId] })
+    expect(root.children[1]).toMatchObject({ sessionIds: [expect.any(String)] })
+  })
+
+  it("focusing a hidden surface makes it the pane's visible one", () => {
+    st().newTab(shell)
+    const first = firstTab().activeSessionId
+    st().newSurface()
+    st().focusSession(first)
+    expect(pane().activeSessionId).toBe(first)
+    st().newSurface()
+    st().setActivePane(firstTab().id, first)
+    expect(pane().activeSessionId).toBe(first)
+  })
+
+  it("closeSurface of the visible terminal hands focus to its neighbour, keeps the pane", () => {
+    st().newTab(shell)
+    st().newSurface()
+    st().newSurface()
+    const [a, b, c] = pane().sessionIds
+    st().setActivePane(firstTab().id, b!)
+    st().closeSurface(firstTab().id, b!)
+    expect(pane().sessionIds).toEqual([a, c])
+    expect(firstTab().activeSessionId).toBe(c)
+    expect(pane().activeSessionId).toBe(c)
+    expect(st().sessions[b!]).toBeUndefined()
+  })
+
+  it("closeSurface of a hidden terminal keeps focus where it is", () => {
+    st().newTab(shell)
+    st().newSurface()
+    const [a, b] = pane().sessionIds
+    st().closeSurface(firstTab().id, a!)
+    expect(firstTab().activeSessionId).toBe(b)
+    expect(pane().sessionIds).toEqual([b])
+  })
+
+  it("closeSurface of the last terminal of a pane in a split removes the pane", () => {
+    st().newTab(shell)
+    st().splitActive("row", shell)
+    const b = firstTab().activeSessionId
+    st().closeSurface(firstTab().id, b)
+    expect(firstTab().root.type).toBe("leaf")
+    expect(firstTab().activeSessionId).not.toBe(b)
+  })
+
+  it("requestClosePane closes a single-terminal pane immediately", () => {
+    st().newTab(shell)
+    st().splitActive("row", shell)
+    const root = firstTab().root
+    if (root.type !== "split") throw new Error("expected split")
+    st().requestClosePane(firstTab().id, root.children[1].id)
+    expect(st().closePaneConfirm).toBeNull()
+    expect(firstTab().root.type).toBe("leaf")
+  })
+
+  it("requestClosePane on a multi-terminal pane asks first; cancel keeps it", () => {
+    st().newTab(shell)
+    st().newSurface()
+    const p = pane()
+    st().requestClosePane(firstTab().id, p.id)
+    expect(st().closePaneConfirm).toEqual({ tabId: firstTab().id, paneId: p.id, count: 2 })
+    expect(pane().sessionIds).toHaveLength(2) // nothing closed yet
+    st().cancelClosePane()
+    expect(st().closePaneConfirm).toBeNull()
+    expect(pane().sessionIds).toHaveLength(2)
+  })
+
+  it("closePane closes every terminal in the pane and clears the dialog", () => {
+    st().newTab(shell)
+    st().splitActive("row", shell) // A | B
+    st().newSurface() // B pane: [B, B2]
+    const root = firstTab().root
+    if (root.type !== "split") throw new Error("expected split")
+    const right = root.children[1]
+    if (right.type !== "leaf") throw new Error("expected leaf")
+    st().setPaneRoot(right.sessionIds[0]!, "/Users/me/b")
+    st().requestClosePane(firstTab().id, right.id)
+    st().closePane(firstTab().id, right.id)
+    expect(st().closePaneConfirm).toBeNull()
+    expect(firstTab().root.type).toBe("leaf")
+    for (const id of right.sessionIds) expect(st().sessions[id]).toBeUndefined()
+    expect(st().paneRoot[right.sessionIds[0]!]).toBeUndefined()
+    expect(allSessionIds(firstTab().root)).toContain(firstTab().activeSessionId)
+  })
+
+  it("closePane on the only pane removes the tab", () => {
+    st().newTab(shell)
+    st().newSurface()
+    st().closePane(firstTab().id, pane().id)
+    expect(st().tabs).toHaveLength(0)
+    expect(Object.keys(st().sessions)).toHaveLength(0)
+  })
+
+  it("revealing a tab doesn't clear attention on a hidden surface", () => {
+    st().newTab(shell)
+    const hidden = firstTab().activeSessionId
+    st().newSurface() // `hidden` is now behind the new surface
+    st().signalSession(hidden, { type: "attention", detail: "approve?" })
+    expect(st().sessions[hidden]!.status).toBe("attention")
+    st().revealTab(firstTab().id)
+    expect(st().sessions[hidden]!.status).toBe("attention")
+    st().focusSession(hidden) // actually looking at it clears it
+    expect(st().sessions[hidden]!.status).not.toBe("attention")
+  })
+
+  it("a focus click on the already-focused pane leaves `tabs` identity alone", () => {
+    st().newTab(shell)
+    st().splitActive("row", shell)
+    const tabs = st().tabs
+    st().setActivePane(firstTab().id, firstTab().activeSessionId)
+    st().focusSession(firstTab().activeSessionId)
+    expect(st().tabs).toBe(tabs)
+  })
+
+  it("closing the focused surface marks the revealed one seen", () => {
+    st().newTab(shell)
+    const hidden = firstTab().activeSessionId
+    st().newSurface()
+    st().signalSession(hidden, { type: "attention", detail: "approve?" })
+    st().closeSurface(firstTab().id, firstTab().activeSessionId)
+    expect(firstTab().activeSessionId).toBe(hidden)
+    expect(st().sessions[hidden]!.status).not.toBe("attention")
   })
 })

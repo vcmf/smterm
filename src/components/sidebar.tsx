@@ -2,7 +2,7 @@ import { useState } from "react"
 import { CaretDown, CaretRight, Plus, Terminal } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
-import { allSessionIds } from "../lib/pane-tree"
+import { allPanes } from "../lib/pane-tree"
 import { resolveDefaultShell } from "../lib/shells"
 import { statusUi } from "../lib/status-ui"
 import {
@@ -69,7 +69,10 @@ export function Sidebar() {
 
       <div className="tree">
         {tabs.map((tab) => {
-          const ids = allSessionIds(tab.root)
+          const panes = allPanes(tab.root) // one walk → ids, pane count, visible set
+          const ids = panes.flatMap((p) => p.sessionIds)
+          const paneCount = panes.length
+          const visible = new Set(panes.map((p) => p.activeSessionId))
           const open = !collapsed.has(tab.id)
           const active = tab.id === activeTabId
           const focused = sessions[tab.activeSessionId]
@@ -98,7 +101,7 @@ export function Sidebar() {
                   {groupSub && <span className="tree-sub">{groupSub}</span>}
                 </div>
                 <span className="tree-meta status-faint">
-                  {ids.length} {ids.length === 1 ? "pane" : "panes"}
+                  {paneCount} {paneCount === 1 ? "pane" : "panes"}
                 </span>
               </div>
 
@@ -111,7 +114,8 @@ export function Sidebar() {
                   return (
                     <div
                       key={id}
-                      className={`tree-row${isActive ? " active" : ""}`}
+                      // A surface hidden behind another in its pane reads dimmer.
+                      className={`tree-row${isActive ? " active" : ""}${visible.has(id) ? "" : " surface-hidden"}`}
                       style={{ paddingLeft: 32 }}
                       onMouseDown={() => focusPane(tab.id, id)}
                     >

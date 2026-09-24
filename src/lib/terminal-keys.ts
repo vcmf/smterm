@@ -55,3 +55,13 @@ export function keyAction(
   }
   return null
 }
+
+export type AppShortcut = "new-surface" | null
+
+/** App shortcuts kept from the PTY: ⌘T (mac) / Ctrl+Shift+T (plain Ctrl+T stays the shell's). */
+export function appShortcut(e: TermKeyEvent, opts: { isMac: boolean }): AppShortcut {
+  const key = e.key.toLowerCase()
+  if (key !== "t" || e.altKey) return null
+  if (opts.isMac) return e.metaKey && !e.ctrlKey && !e.shiftKey ? "new-surface" : null
+  return e.ctrlKey && e.shiftKey && !e.metaKey ? "new-surface" : null
+}
