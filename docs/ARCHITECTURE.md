@@ -209,8 +209,14 @@ Output stream: main → renderer via `webContents.send('pty:data:'+id, Uint8Arra
 
 - **Stores (Zustand):** `Session { id, title, cwd, shell, status, unread }`, a per-tab binary
   **pane tree**, and `settings`.
-- **Layout model:** each tab holds a binary pane tree — leaf (one terminal) or split
-  (`row`/`column`, two children). Resizable dividers; each leaf resize → fit → `pty:resize`.
+- **Layout model:** each tab holds a binary pane tree — leaf or split (`row`/`column`, two
+  children). A leaf is a **pane** holding one or more terminals (**surfaces**, cmux-style) shown
+  as tabs in its header (`{id, sessionIds, activeSessionId}`); only the active surface is
+  mounted. Resizable dividers; each leaf resize → fit → `pty:resize`. Hidden surfaces keep
+  running: their xterm is opened in an off-screen, `inert` **parking** element (xterm pauses
+  rendering off-viewport, so no paint cost) and takes its pane's grid via `followSize`.
+  `workspace.json` v2 persists surfaces (v1 leaves migrate; each v2 leaf also writes a legacy
+  `sessionId` so older builds still restore).
 - **`terminal-manager.ts`:** owns xterm instances **outside the React tree**, keyed by session id, so
   splits/tab-switches re-attach (never respawn). Loads addons (webgl, fit, web-links); registers the
   ligature character-joiner; wires OSC 9 / OSC 133.

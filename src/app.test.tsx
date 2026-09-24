@@ -8,6 +8,9 @@ import { resetStore, testShell } from "./test/helpers"
 vi.mock("./terminal/terminal-manager", () => ({
   TerminalManager: {
     attach: vi.fn(),
+    detach: vi.fn(),
+    ensureRunning: vi.fn(),
+    followSize: vi.fn(),
     fit: vi.fn(),
     focus: vi.fn(),
     dispose: vi.fn(),

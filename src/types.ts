@@ -20,9 +20,17 @@ export interface Session {
   detail?: string // why it needs attention (OSC-9 message / "needs input")
 }
 
-/** A tab's layout: a binary tree of leaves (terminals) and splits. */
+/** A pane: terminals ("surfaces") stacked as tabs; stable `id`, only the active one shows. */
+export interface PaneLeaf {
+  type: "leaf"
+  id: string
+  sessionIds: string[]
+  activeSessionId: string
+}
+
+/** A tab's layout: a binary tree of panes (leaves) and splits. */
 export type PaneNode =
-  | { type: "leaf"; sessionId: string }
+  | PaneLeaf
   | {
       type: "split"
       id: string

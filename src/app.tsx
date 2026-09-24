@@ -11,6 +11,7 @@ import { FilesPanel } from "./components/files-panel"
 import { PaneLayout } from "./components/pane-layout"
 import { SettingsPanel } from "./components/settings-panel"
 import { FilePreview } from "./components/file-preview"
+import { ClosePaneDialog } from "./components/close-pane-dialog"
 import { RightPanelResizer } from "./components/right-panel-resizer"
 import { useActiveCwd, getActiveWsl } from "./lib/use-active-cwd"
 import { TerminalManager } from "./terminal/terminal-manager"
@@ -18,10 +19,17 @@ import { useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
 import { loadSettings } from "./settings/io"
 import { applyThemeVars, getTheme } from "./settings/themes"
-import { parseWorkspace, serializeToJson } from "./lib/workspace"
+import { readWorkspaceFile, serializeToJson } from "./lib/workspace"
+import { appShortcut } from "./lib/terminal-keys"
+import { resolveDefaultShell } from "./lib/shells"
+import { isMac } from "./lib/platform"
 import type { ShellOption } from "./types"
 import "@xterm/xterm/css/xterm.css"
 import "./App.css"
+
+// Set when workspace.json was written by a NEWER build: we can't read it, so we must not
+// overwrite it either (a downgrade would otherwise wipe the saved layout).
+let persistBlocked = false
 
 function App() {
   const tabs = useStore((s) => s.tabs)
@@ -54,13 +62,18 @@ function App() {
       if (store.tabs.length === 0) {
         let restored = null
         try {
-          restored = parseWorkspace(await ipc.readWorkspace())
+          const file = readWorkspaceFile(await ipc.readWorkspace())
+          persistBlocked = file.newer
+          restored = file.state
         } catch {
           // no/invalid workspace — start fresh
         }
         if (cancelled) return
-        if (restored) store.restoreWorkspace(restored)
-        else if (shells[0]) store.newTab(shells[0])
+        if (restored) {
+          store.restoreWorkspace(restored)
+          // After a renderer reload main still holds PTYs for sessions the restore dropped.
+          for (const id of restored.pruned ?? []) ipc.ptyKill(id)
+        } else if (shells[0]) store.newTab(shells[0])
       }
     })()
     return () => {
@@ -74,6 +87,7 @@ function App() {
     let last = ""
     let timer: ReturnType<typeof setTimeout> | undefined
     const save = () => {
+      if (persistBlocked) return
       const s = useStore.getState()
       const json = serializeToJson({
         sessions: s.sessions,
@@ -244,12 +258,25 @@ function App() {
     })
   }, [])
 
-  // Global shortcuts: ⌘K/Ctrl-K = command palette; ⌘F (mac) / Ctrl+Shift+F = find.
-  // Plain Ctrl+F is left for the shell (readline forward-char).
+  // Global shortcuts: ⌘K/Ctrl-K = command palette; ⌘F (mac) / Ctrl+Shift+F = find;
+  // ⌘T (mac) / Ctrl+Shift+T = new terminal in the focused pane. Plain Ctrl+F / Ctrl+T
+  // are left for the shell (readline forward-char / transpose-chars).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
-      if ((e.metaKey || e.ctrlKey) && k === "k") {
+      // The close-pane dialog is modal: no palette / find / new terminal behind it.
+      if (useStore.getState().closePaneConfirm) return
+      if (appShortcut(e, { isMac }) === "new-surface") {
+        e.preventDefault()
+        if (e.repeat) return // holding the chord must not spawn a shell per key-repeat
+        const s = useStore.getState()
+        // Not from an overlay or a text field (palette, settings, rename, root path): a
+        // new terminal would steal their focus. xterm's own textarea is the exception.
+        const t = e.target as HTMLElement | null
+        const typing = t?.closest?.("input, select, textarea:not(.xterm-helper-textarea)")
+        if (s.paletteOpen || s.settingsOpen || s.preview || typing) return
+        s.newSurface(resolveDefaultShell(s.shells, s.settings.defaultShell))
+      } else if ((e.metaKey || e.ctrlKey) && k === "k") {
         e.preventDefault()
         const s = useStore.getState()
         s.setPaletteOpen(!s.paletteOpen)
@@ -309,6 +336,7 @@ function App() {
       {paletteOpen && <CommandPalette />}
       {settingsOpen && <SettingsPanel />}
       <FilePreview />
+      <ClosePaneDialog />
     </div>
   )
 }

@@ -1,6 +1,18 @@
 import { create } from "zustand"
 import type { Session, ShellOption, Tab } from "./types"
-import { allSessionIds, firstSessionId, makeLeaf, removeNode, splitNode } from "./lib/pane-tree"
+import {
+  addSurface,
+  allSessionIds,
+  findPane,
+  findPaneById,
+  firstSessionId,
+  makeLeaf,
+  removeNode,
+  removePane,
+  selectSurface,
+  splitNode,
+  visibleSessionIds,
+} from "./lib/pane-tree"
 import { inheritShell } from "./lib/shells"
 import { reduceSignals } from "./lib/session-status"
 import type { SignalEvent } from "./lib/session-status"
@@ -41,6 +53,13 @@ function focusedCwd(state: AppState): string | undefined {
  *  share one panel — the top-bar icons switch it (click the active one to hide). */
 export type RightView = "files" | "changes" | "agents" | null
 
+/** A pane close awaiting confirmation (the pane holds several terminals). */
+export interface ClosePaneConfirm {
+  tabId: string
+  paneId: string
+  count: number
+}
+
 interface AppState {
   sessions: Record<string, Session>
   tabs: Tab[]
@@ -63,6 +82,7 @@ interface AppState {
   // is read via its UNC share (captured at open time — the active pane may change after).
   preview: { abs: string; name: string; wsl?: WslContext } | null
   paneRoot: Record<string, string> // per-session Files-panel root override (absent = follow cwd)
+  closePaneConfirm: ClosePaneConfirm | null // multi-surface pane close awaiting the dialog
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
@@ -89,7 +109,11 @@ interface AppState {
   renameTab: (tabId: string, title: string) => void
   splitActive: (direction: "row" | "column", fallback?: ShellOption) => void
   openFolderInSplit: (cwd: string, paneId?: string) => void // split active pane at cwd; shell from paneId
-  closePane: (tabId: string, sessionId: string) => void
+  newSurface: (fallback?: ShellOption) => void // new terminal tab in the focused pane
+  closeSurface: (tabId: string, sessionId: string) => void // one terminal; last one closes the pane
+  closePane: (tabId: string, paneId: string) => void // the pane with all its terminals
+  requestClosePane: (tabId: string, paneId: string) => void // confirms first if several terminals
+  cancelClosePane: () => void
   setActivePane: (tabId: string, sessionId: string) => void
   focusSession: (sessionId: string) => void
   setWindowFocused: (focused: boolean) => void
@@ -131,13 +155,64 @@ function splitActivePane(
   const tab = state.tabs.find((t) => t.id === state.activeTabId)
   if (!tab) return {}
   const session = makeSession(opts.shell, opts.cwd)
-  const root = splitNode(tab.root, tab.activeSessionId, opts.direction, session.id, newId())
+  const root = splitNode(
+    tab.root,
+    tab.activeSessionId,
+    opts.direction,
+    session.id,
+    newId(),
+    newId(),
+  )
   return {
     sessions: { ...state.sessions, [session.id]: session },
     tabs: state.tabs.map((t) =>
       t.id === tab.id ? { ...t, root, activeSessionId: session.id } : t,
     ),
   }
+}
+
+/** Make `sessionId` the tab's focus and its pane's visible surface (same tab if unchanged). */
+function focusIn(tab: Tab, sessionId: string): Tab {
+  const root = selectSurface(tab.root, sessionId)
+  if (root === tab.root && tab.activeSessionId === sessionId) return tab
+  return { ...tab, root, activeSessionId: sessionId }
+}
+
+/** Apply `fn` to one tab; the SAME array when unchanged (keeps `tabs` subscribers quiet). */
+function replaceTab(tabs: Tab[], tabId: string, fn: (t: Tab) => Tab): Tab[] {
+  const i = tabs.findIndex((t) => t.id === tabId)
+  if (i === -1) return tabs
+  const next = fn(tabs[i]!)
+  if (next === tabs[i]) return tabs
+  const out = tabs.slice()
+  out[i] = next
+  return out
+}
+
+/** Sessions map with `sessionId` marked seen; the same map when nothing changes. */
+function markSeen(sessions: Record<string, Session>, sessionId: string): Record<string, Session> {
+  const s = sessions[sessionId]
+  const next = s && seen(s)
+  return next && next !== s ? { ...sessions, [sessionId]: next } : sessions
+}
+
+/** Drop sessions (and their Files-panel root overrides) from the store maps. */
+function dropSessions(state: AppState, ids: string[]): Pick<AppState, "sessions" | "paneRoot"> {
+  const sessions = { ...state.sessions }
+  const paneRoot = { ...state.paneRoot }
+  for (const id of ids) {
+    delete sessions[id]
+    delete paneRoot[id] // don't leak the pane's root override
+  }
+  return { sessions, paneRoot }
+}
+
+/** Remove a tab; if it was active, the last remaining tab takes over. */
+function withoutTab(state: AppState, tabId: string): Pick<AppState, "tabs" | "activeTabId"> {
+  const tabs = state.tabs.filter((t) => t.id !== tabId)
+  const activeTabId =
+    state.activeTabId === tabId ? (tabs[tabs.length - 1]?.id ?? null) : state.activeTabId
+  return { tabs, activeTabId }
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -160,6 +235,7 @@ export const useStore = create<AppState>((set, get) => ({
   editor: null,
   preview: null,
   paneRoot: {},
+  closePaneConfirm: null,
 
   setHome: (home) => set({ home }),
   setPlatform: (platform) => set({ platform }),
@@ -224,7 +300,7 @@ export const useStore = create<AppState>((set, get) => ({
       const tab: Tab = {
         id: newId(),
         title: "", // unpinned — display derives from the focused pane's live title
-        root: makeLeaf(session.id),
+        root: makeLeaf(newId(), session.id),
         activeSessionId: session.id,
       }
       return {
@@ -238,16 +314,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => {
       const tab = state.tabs.find((t) => t.id === tabId)
       if (!tab) return {}
-      const sessions = { ...state.sessions }
-      const paneRoot = { ...state.paneRoot }
-      for (const id of allSessionIds(tab.root)) {
-        delete sessions[id]
-        delete paneRoot[id] // don't leak the pane's root override
-      }
-      const tabs = state.tabs.filter((t) => t.id !== tabId)
-      const activeTabId =
-        state.activeTabId === tabId ? (tabs[tabs.length - 1]?.id ?? null) : state.activeTabId
-      return { sessions, tabs, activeTabId, paneRoot }
+      return { ...dropSessions(state, allSessionIds(tab.root)), ...withoutTab(state, tabId) }
     }),
 
   setActiveTab: (tabId) => {
@@ -285,39 +352,85 @@ export const useStore = create<AppState>((set, get) => ({
       return splitActivePane(state, { shell, cwd, direction: "row" })
     }),
 
-  closePane: (tabId, sessionId) =>
+  // New terminal as a tab (surface) of the focused pane, inheriting its shell + cwd.
+  newSurface: (fallback) =>
     set((state) => {
-      const tab = state.tabs.find((t) => t.id === tabId)
+      const tab = state.tabs.find((t) => t.id === state.activeTabId)
       if (!tab) return {}
-      const sessions = { ...state.sessions }
-      delete sessions[sessionId]
-      const paneRoot = { ...state.paneRoot }
-      delete paneRoot[sessionId] // don't leak the closed pane's root override
-      const root = removeNode(tab.root, sessionId)
-      if (root === null) {
-        const tabs = state.tabs.filter((t) => t.id !== tabId)
-        const activeTabId =
-          state.activeTabId === tabId ? (tabs[tabs.length - 1]?.id ?? null) : state.activeTabId
-        return { sessions, tabs, activeTabId, paneRoot }
-      }
-      const activeSessionId =
-        tab.activeSessionId === sessionId ? firstSessionId(root) : tab.activeSessionId
+      const pane = findPane(tab.root, tab.activeSessionId)
+      if (!pane) return {}
+      const src = state.sessions[tab.activeSessionId]
+      const shell = inheritShell(state.shells, src) ?? fallback
+      if (!shell) return {}
+      const session = makeSession(shell, src?.cwd)
+      const root = addSurface(tab.root, pane.id, session.id)
       return {
-        sessions,
-        paneRoot,
-        tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, root, activeSessionId } : t)),
+        sessions: { ...state.sessions, [session.id]: session },
+        tabs: replaceTab(state.tabs, tab.id, (t) => ({ ...t, root, activeSessionId: session.id })),
       }
     }),
 
-  setActivePane: (tabId, sessionId) =>
+  closeSurface: (tabId, sessionId) =>
     set((state) => {
-      const session = state.sessions[sessionId]
+      const tab = state.tabs.find((t) => t.id === tabId)
+      const pane = tab && findPane(tab.root, sessionId)
+      if (!tab || !pane) return {}
+      const dropped = dropSessions(state, [sessionId])
+      const root = removeNode(tab.root, sessionId)
+      if (root === null) return { ...dropped, ...withoutTab(state, tabId) }
+      // Closing the focused terminal: focus moves to the surface its pane now shows,
+      // or (the pane is gone) to the leftmost pane.
+      const survivor = findPaneById(root, pane.id)
+      const activeSessionId =
+        tab.activeSessionId === sessionId
+          ? (survivor?.activeSessionId ?? firstSessionId(root))
+          : tab.activeSessionId
       return {
-        tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, activeSessionId: sessionId } : t)),
-        // Focusing a pane = you've seen it: clear its attention/unread/reason.
-        sessions: session ? { ...state.sessions, [sessionId]: seen(session) } : state.sessions,
+        ...dropped,
+        // The surface revealed in its place is now being looked at.
+        sessions: markSeen(dropped.sessions, activeSessionId),
+        tabs: replaceTab(state.tabs, tabId, (t) => ({ ...t, root, activeSessionId })),
       }
     }),
+
+  closePane: (tabId, paneId) =>
+    set((state) => {
+      const tab = state.tabs.find((t) => t.id === tabId)
+      const pane = tab && findPaneById(tab.root, paneId)
+      if (!tab || !pane) return { closePaneConfirm: null }
+      const dropped = dropSessions(state, pane.sessionIds)
+      const root = removePane(tab.root, paneId)
+      if (root === null) return { ...dropped, ...withoutTab(state, tabId), closePaneConfirm: null }
+      const activeSessionId = pane.sessionIds.includes(tab.activeSessionId)
+        ? firstSessionId(root)
+        : tab.activeSessionId
+      return {
+        ...dropped,
+        sessions: markSeen(dropped.sessions, activeSessionId),
+        closePaneConfirm: null,
+        tabs: replaceTab(state.tabs, tabId, (t) => ({ ...t, root, activeSessionId })),
+      }
+    }),
+
+  requestClosePane: (tabId, paneId) => {
+    const tab = get().tabs.find((t) => t.id === tabId)
+    const pane = tab && findPaneById(tab.root, paneId)
+    if (!pane) return
+    if (pane.sessionIds.length > 1) {
+      set({ closePaneConfirm: { tabId, paneId, count: pane.sessionIds.length } })
+    } else {
+      get().closePane(tabId, paneId)
+    }
+  },
+
+  cancelClosePane: () => set({ closePaneConfirm: null }),
+
+  setActivePane: (tabId, sessionId) =>
+    set((state) => ({
+      tabs: replaceTab(state.tabs, tabId, (t) => focusIn(t, sessionId)),
+      // Focusing a pane = you've seen it: clear its attention/unread/reason.
+      sessions: markSeen(state.sessions, sessionId),
+    })),
 
   // The terminal itself gained focus (click/keyboard) — make its pane active. This is
   // the authoritative focus signal: a click handler on the pane container misses clicks
@@ -327,11 +440,10 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => {
       const tab = state.tabs.find((t) => allSessionIds(t.root).includes(sessionId))
       if (!tab) return {}
-      const session = state.sessions[sessionId]
       return {
         activeTabId: tab.id,
-        tabs: state.tabs.map((t) => (t.id === tab.id ? { ...t, activeSessionId: sessionId } : t)),
-        sessions: session ? { ...state.sessions, [sessionId]: seen(session) } : state.sessions,
+        tabs: replaceTab(state.tabs, tab.id, (t) => focusIn(t, sessionId)),
+        sessions: markSeen(state.sessions, sessionId),
       }
     }),
 
@@ -374,7 +486,9 @@ export const useStore = create<AppState>((set, get) => ({
       if (!tab) return {}
       const sessions = { ...state.sessions }
       let changed = false
-      for (const id of allSessionIds(tab.root)) {
+      // Only what's actually on screen — a surface hidden behind another in its pane
+      // hasn't been seen, so it keeps its attention.
+      for (const id of visibleSessionIds(tab.root)) {
         const s = sessions[id]
         if (!s) continue
         const status = s.status === "attention" ? (s.running ? "working" : "idle") : s.status
