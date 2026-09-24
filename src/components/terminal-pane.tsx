@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useShallow } from "zustand/react/shallow"
-import { Terminal, X, Columns, Rows, Plus } from "@phosphor-icons/react"
+import { Terminal, TerminalWindow, X, Columns, Rows } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
 import { canMove, findPaneById, type MoveTarget } from "../lib/pane-tree"
@@ -264,12 +264,14 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
           className="iconbtn"
           style={{ width: 22, height: 22 }}
           title={`New terminal (${newSurfaceKey})`}
+          aria-label={`New terminal (${newSurfaceKey})`}
           onMouseDown={(e) => {
             e.stopPropagation()
             if (e.button === 0) addSurface()
           }}
         >
-          <Plus size={13} />
+          {/* cmux-style: a boxed ">_" terminal glyph. */}
+          <TerminalWindow size={13} />
         </button>
         <button
           className="iconbtn"
