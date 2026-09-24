@@ -564,3 +564,67 @@ describe("store — surfaces (terminal tabs inside a pane)", () => {
     expect(st().sessions[hidden]!.status).not.toBe("attention")
   })
 })
+
+describe("store — drag & drop surfaces", () => {
+  beforeEach(resetStore)
+
+  it("moveSurface to another pane's edge splits it and focuses the moved terminal", () => {
+    st().newTab(shell)
+    st().newSurface() // pane: [a, b]
+    const root = firstTab().root
+    if (root.type !== "leaf") throw new Error("expected leaf")
+    const [a] = root.sessionIds
+    st().setDragging({ tabId: firstTab().id, sessionId: a! })
+    st().moveSurface(firstTab().id, a!, { paneId: root.id, zone: "right" })
+    const after = firstTab().root
+    expect(after.type).toBe("split")
+    expect(firstTab().activeSessionId).toBe(a)
+    expect(st().dragging).toBeNull()
+    expect(st().sessions[a!]).toBeDefined() // same session — not respawned
+  })
+
+  it("a no-op drop keeps `tabs` identity and just clears the drag", () => {
+    st().newTab(shell)
+    const root = firstTab().root
+    if (root.type !== "leaf") throw new Error("expected leaf")
+    const tabs = st().tabs
+    st().setDragging({ tabId: firstTab().id, sessionId: root.activeSessionId })
+    st().moveSurface(firstTab().id, root.activeSessionId, { paneId: root.id, zone: "left" })
+    expect(st().tabs).toBe(tabs)
+    expect(st().dragging).toBeNull()
+  })
+
+  it("the dropped terminal is marked seen", () => {
+    st().newTab(shell)
+    const hidden = firstTab().activeSessionId
+    st().newSurface()
+    st().splitActive("row", shell)
+    const target = findRightPane()
+    st().signalSession(hidden, { type: "attention", detail: "approve?" })
+    st().moveSurface(firstTab().id, hidden, { paneId: target, zone: "center" })
+    expect(st().sessions[hidden]!.status).not.toBe("attention")
+  })
+})
+
+describe("store — stale drops", () => {
+  beforeEach(resetStore)
+  it("a drop whose surface or target pane is gone only ends the drag", () => {
+    st().newTab(shell)
+    const root = firstTab().root
+    if (root.type !== "leaf") throw new Error("expected leaf")
+    const tabs = st().tabs
+    st().setDragging({ tabId: firstTab().id, sessionId: "gone" })
+    st().moveSurface(firstTab().id, "gone", { paneId: root.id, zone: "center" })
+    expect(st().tabs).toBe(tabs) // focus not pointed at a missing session
+    expect(st().dragging).toBeNull()
+    st().moveSurface(firstTab().id, root.activeSessionId, { paneId: "gone", zone: "left" })
+    expect(st().tabs).toBe(tabs)
+  })
+})
+
+/** The id of the right-hand pane of the first tab's top split. */
+function findRightPane(): string {
+  const root = firstTab().root
+  if (root.type !== "split") throw new Error("expected split")
+  return root.children[1].id
+}

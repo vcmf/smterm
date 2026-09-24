@@ -217,6 +217,10 @@ Output stream: main → renderer via `webContents.send('pty:data:'+id, Uint8Arra
   rendering off-viewport, so no paint cost) and takes its pane's grid via `followSize`.
   `workspace.json` v2 persists surfaces (v1 leaves migrate; each v2 leaf also writes a legacy
   `sessionId` so older builds still restore).
+- **Drag & drop:** a surface tab drags onto another pane's edge (new split on that side),
+  centre (join), or a slot in any pane's header strip (reorder / join there). Pure
+  `dropZone`/`insertIndex` (geometry) + `canMove`/`moveSurface` (pane-tree); a transparent
+  overlay covers the terminal only while dragging (xterm's canvas swallows drag events).
 - **`terminal-manager.ts`:** owns xterm instances **outside the React tree**, keyed by session id, so
   splits/tab-switches re-attach (never respawn). Loads addons (webgl, fit, web-links); registers the
   ligature character-joiner; wires OSC 9 / OSC 133.

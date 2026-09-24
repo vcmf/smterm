@@ -7,6 +7,7 @@ import {
   findPaneById,
   firstSessionId,
   makeLeaf,
+  moveSurface,
   removeNode,
   removePane,
   selectSurface,
@@ -26,6 +27,7 @@ import type { EditorInfo } from "./lib/file-actions"
 import { normalizeRootPath } from "./lib/breadcrumb"
 import type { WslContext } from "./lib/wsl"
 import type { WorkspaceState } from "./lib/workspace"
+import type { MoveTarget } from "./lib/pane-tree"
 import { clampPanelWidth, RIGHT_PANEL_DEFAULT } from "./lib/right-panel"
 
 const newId = () => crypto.randomUUID()
@@ -83,6 +85,7 @@ interface AppState {
   preview: { abs: string; name: string; wsl?: WslContext } | null
   paneRoot: Record<string, string> // per-session Files-panel root override (absent = follow cwd)
   closePaneConfirm: ClosePaneConfirm | null // multi-surface pane close awaiting the dialog
+  dragging: { tabId: string; sessionId: string } | null // surface being dragged (drop hints on)
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
@@ -114,6 +117,8 @@ interface AppState {
   closePane: (tabId: string, paneId: string) => void // the pane with all its terminals
   requestClosePane: (tabId: string, paneId: string) => void // confirms first if several terminals
   cancelClosePane: () => void
+  setDragging: (dragging: { tabId: string; sessionId: string } | null) => void
+  moveSurface: (tabId: string, sessionId: string, target: MoveTarget) => void // drag & drop
   setActivePane: (tabId: string, sessionId: string) => void
   focusSession: (sessionId: string) => void
   setWindowFocused: (focused: boolean) => void
@@ -236,6 +241,7 @@ export const useStore = create<AppState>((set, get) => ({
   preview: null,
   paneRoot: {},
   closePaneConfirm: null,
+  dragging: null,
 
   setHome: (home) => set({ home }),
   setPlatform: (platform) => set({ platform }),
@@ -424,6 +430,29 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   cancelClosePane: () => set({ closePaneConfirm: null }),
+
+  setDragging: (dragging) => set({ dragging }),
+
+  // Drop a dragged surface: the terminal keeps its session (re-attaches, no respawn),
+  // becomes visible where it lands and takes focus.
+  moveSurface: (tabId, sessionId, target) =>
+    set((state) => {
+      const tab = state.tabs.find((t) => t.id === tabId)
+      // Stale drop (the surface or target pane went away mid-drag): just end the drag.
+      if (!tab || !findPane(tab.root, sessionId) || !findPaneById(tab.root, target.paneId)) {
+        return { dragging: null }
+      }
+      const root = moveSurface(tab.root, sessionId, target, { splitId: newId(), paneId: newId() })
+      return {
+        dragging: null,
+        tabs: replaceTab(state.tabs, tabId, (t) =>
+          root === t.root && t.activeSessionId === sessionId
+            ? t
+            : { ...t, root, activeSessionId: sessionId },
+        ),
+        sessions: markSeen(state.sessions, sessionId),
+      }
+    }),
 
   setActivePane: (tabId, sessionId) =>
     set((state) => ({

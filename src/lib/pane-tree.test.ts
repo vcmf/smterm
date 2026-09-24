@@ -6,7 +6,9 @@ import {
   findPane,
   findPaneById,
   firstSessionId,
+  canMove,
   makeLeaf,
+  moveSurface,
   removeNode,
   removePane,
   selectSurface,
@@ -180,6 +182,133 @@ describe("paneTree", () => {
       expect(firstSessionId(tree)).toBe("a")
       const hiddenFirst = addSurface(makeLeaf("p", "solo"), "p", "solo2")
       expect(firstSessionId(hiddenFirst)).toBe("solo2")
+    })
+  })
+
+  describe("moveSurface", () => {
+    const ids = { splitId: "ns", paneId: "np" }
+    // pa: [a, a2] (a2 visible) | pb: [b]
+    const base = (): PaneNode =>
+      splitNode(addSurface(makeLeaf("pa", "a"), "pa", "a2"), "a", "row", "b", "s1", "pb")
+    const panes = (n: PaneNode) => allPanes(n).map((p) => [p.id, p.sessionIds, p.activeSessionId])
+
+    it("centre: joins another pane as its visible surface", () => {
+      expect(panes(moveSurface(base(), "a", { paneId: "pb", zone: "center" }, ids))).toEqual([
+        ["pa", ["a2"], "a2"],
+        ["pb", ["b", "a"], "a"],
+      ])
+    })
+
+    it("centre: moving a pane's only surface out collapses that pane", () => {
+      const moved = moveSurface(base(), "b", { paneId: "pa", zone: "center" }, ids)
+      expect(moved).toEqual({
+        type: "leaf",
+        id: "pa",
+        sessionIds: ["a", "a2", "b"],
+        activeSessionId: "b",
+      })
+    })
+
+    it("centre on its own pane is a no-op (same reference)", () => {
+      const tree = base()
+      expect(moveSurface(tree, "a", { paneId: "pa", zone: "center" }, ids)).toBe(tree)
+    })
+
+    it("edge: splits the target pane on that side with a new pane", () => {
+      const right = moveSurface(base(), "a", { paneId: "pb", zone: "right" }, ids)
+      expect(panes(right)).toEqual([
+        ["pa", ["a2"], "a2"],
+        ["pb", ["b"], "b"],
+        ["np", ["a"], "a"],
+      ])
+      const top = moveSurface(base(), "a", { paneId: "pb", zone: "top" }, ids)
+      if (top.type !== "split" || top.children[1].type !== "split") throw new Error("shape")
+      expect(top.children[1]).toMatchObject({ id: "ns", direction: "column" })
+      expect(top.children[1].children[0]).toMatchObject({ id: "np", sessionIds: ["a"] })
+    })
+
+    it("edge: left/top put the new pane first, right/bottom second", () => {
+      const left = moveSurface(base(), "a", { paneId: "pb", zone: "left" }, ids)
+      expect(allPanes(left).map((p) => p.id)).toEqual(["pa", "np", "pb"])
+      const bottom = moveSurface(base(), "a", { paneId: "pb", zone: "bottom" }, ids)
+      expect(allPanes(bottom).map((p) => p.id)).toEqual(["pa", "pb", "np"])
+    })
+
+    it("edge of its own pane: splits a surface off beside the rest", () => {
+      const moved = moveSurface(base(), "a2", { paneId: "pa", zone: "bottom" }, ids)
+      expect(panes(moved)).toEqual([
+        ["pa", ["a"], "a"],
+        ["np", ["a2"], "a2"],
+        ["pb", ["b"], "b"],
+      ])
+    })
+
+    it("edge of its own pane with a single surface is a no-op", () => {
+      const tree = base()
+      expect(moveSurface(tree, "b", { paneId: "pb", zone: "left" }, ids)).toBe(tree)
+    })
+
+    it("moving the only surface of a pane to another pane's edge collapses the source", () => {
+      const moved = moveSurface(base(), "b", { paneId: "pa", zone: "top" }, ids)
+      expect(moved).toMatchObject({ type: "split", id: "ns", direction: "column" })
+      expect(allPanes(moved).map((p) => p.id)).toEqual(["np", "pa"])
+    })
+
+    it("index in its own strip reorders (slot counts the moved tab)", () => {
+      const tree = addSurface(base(), "pa", "a3") // pa: [a, a2, a3]
+      const toEnd = moveSurface(tree, "a", { paneId: "pa", index: 3 }, ids)
+      expect(findPaneById(toEnd, "pa")).toMatchObject({
+        sessionIds: ["a2", "a3", "a"],
+        activeSessionId: "a",
+      })
+      const toStart = moveSurface(tree, "a3", { paneId: "pa", index: 0 }, ids)
+      expect(findPaneById(toStart, "pa")?.sessionIds).toEqual(["a3", "a", "a2"])
+    })
+
+    it("index at its own slot only selects it", () => {
+      const tree = base() // pa: [a, a2], a2 visible
+      const moved = moveSurface(tree, "a", { paneId: "pa", index: 1 }, ids) // just after itself
+      expect(findPaneById(moved, "pa")).toMatchObject({
+        sessionIds: ["a", "a2"],
+        activeSessionId: "a",
+      })
+    })
+
+    it("index in another pane's strip inserts there", () => {
+      const moved = moveSurface(base(), "b", { paneId: "pa", index: 1 }, ids)
+      expect(moved).toMatchObject({ id: "pa", sessionIds: ["a", "b", "a2"], activeSessionId: "b" })
+    })
+
+    it("unknown surface or pane is a no-op", () => {
+      const tree = base()
+      expect(moveSurface(tree, "zzz", { paneId: "pb", zone: "center" }, ids)).toBe(tree)
+      expect(moveSurface(tree, "a", { paneId: "zzz", zone: "center" }, ids)).toBe(tree)
+    })
+  })
+
+  describe("canMove", () => {
+    // pa: [a, a2] | pb: [b]
+    const tree = splitNode(addSurface(makeLeaf("pa", "a"), "pa", "a2"), "a", "row", "b", "s1", "pb")
+    it("agrees with moveSurface on every zone of every pane", () => {
+      const ids = { splitId: "x", paneId: "y" }
+      for (const sid of ["a", "a2", "b"]) {
+        for (const paneId of ["pa", "pb"]) {
+          for (const zone of ["left", "right", "top", "bottom", "center"] as const) {
+            const moved = moveSurface(tree, sid, { paneId, zone }, ids) !== tree
+            expect(canMove(tree, sid, { paneId, zone }), `${sid}→${paneId}:${zone}`).toBe(moved)
+          }
+        }
+      }
+    })
+    it("own strip: either side of itself is no move; elsewhere is", () => {
+      expect(canMove(tree, "a", { paneId: "pa", index: 0 })).toBe(false)
+      expect(canMove(tree, "a", { paneId: "pa", index: 1 })).toBe(false)
+      expect(canMove(tree, "a", { paneId: "pa", index: 2 })).toBe(true)
+      expect(canMove(tree, "b", { paneId: "pa", index: 0 })).toBe(true)
+    })
+    it("unknown surface or pane → false", () => {
+      expect(canMove(tree, "zzz", { paneId: "pa", zone: "center" })).toBe(false)
+      expect(canMove(tree, "a", { paneId: "zzz", zone: "center" })).toBe(false)
     })
   })
 })

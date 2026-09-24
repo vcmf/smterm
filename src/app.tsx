@@ -258,6 +258,39 @@ function App() {
     })
   }, [])
 
+  // Surface drag lifecycle. A drag can end without reaching a target (Esc, dropped
+  // outside); and if the source tab remounts mid-drag its dragend goes to a detached node
+  // and never reaches window — so while dragging, the first mouse move with no button held
+  // also ends it. Whenever a drag ends, keyboard focus returns to the focused terminal
+  // (the tab's mousedown blurred it and the drag swallowed the pane's mouseup refocus).
+  useEffect(() => {
+    const end = () => {
+      if (useStore.getState().dragging) useStore.getState().setDragging(null)
+    }
+    const onMove = (e: MouseEvent) => {
+      if (e.buttons === 0) end()
+    }
+    const unsub = useStore.subscribe((state, prev) => {
+      if (!prev.dragging && state.dragging) window.addEventListener("mousemove", onMove)
+      if (prev.dragging && !state.dragging) {
+        window.removeEventListener("mousemove", onMove)
+        requestAnimationFrame(() => {
+          const s = useStore.getState()
+          const sid = s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId
+          if (sid) TerminalManager.focus(sid)
+        })
+      }
+    })
+    window.addEventListener("dragend", end)
+    window.addEventListener("drop", end)
+    return () => {
+      unsub()
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("dragend", end)
+      window.removeEventListener("drop", end)
+    }
+  }, [])
+
   // Global shortcuts: ⌘K/Ctrl-K = command palette; ⌘F (mac) / Ctrl+Shift+F = find;
   // ⌘T (mac) / Ctrl+Shift+T = new terminal in the focused pane. Plain Ctrl+F / Ctrl+T
   // are left for the shell (readline forward-char / transpose-chars).

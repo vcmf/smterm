@@ -3,12 +3,13 @@ import { useShallow } from "zustand/react/shallow"
 import { Terminal, X, Columns, Rows, Plus } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { useStore } from "../store"
-import { findPaneById } from "../lib/pane-tree"
+import { canMove, findPaneById, type MoveTarget } from "../lib/pane-tree"
+import { dropZone, insertIndex } from "../lib/drop-zone"
 import { displaySessionTitle, shellType } from "../lib/session-label"
 import { statusUi } from "../lib/status-ui"
 import { newSurfaceKey } from "../lib/platform"
 import { resolveDefaultShell } from "../lib/shells"
-import type { PaneLeaf } from "../types"
+import type { DropZone, PaneLeaf } from "../types"
 
 /** A pane: a strip of terminal tabs (surfaces) + a mount point for the visible one.
  *  Terminals live in TerminalManager, so switching surfaces re-attaches (no respawn). */
@@ -32,6 +33,14 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
     return tab ? tab.root.type === "split" : false
   })
   const multi = pane.sessionIds.length > 1
+  // A surface of THIS tab is being dragged → show drop targets (overlay + strip markers).
+  const dragging = useStore((s) => (s.dragging?.tabId === tabId ? s.dragging : null))
+  const [dropHint, setDropHint] = useState<DropZone | null>(null)
+  const [stripSlot, setStripSlot] = useState<number | null>(null)
+  // Last raw zone/slot under the cursor: dragover fires ~20×/s even when still, so only
+  // re-evaluate (canMove + setState) when it actually changes.
+  const lastZone = useRef<DropZone | null>(null)
+  const lastSlot = useRef<number | null>(null)
 
   // The visible surface read at event time (the render closure can be a frame stale).
   const visibleNow = () => {
@@ -93,6 +102,31 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
       ?.scrollIntoView?.({ block: "nearest", inline: "nearest" })
   }, [activeId, idsKey])
 
+  // Would dropping here change anything? (e.g. a pane's only surface onto its own edge: no.)
+  const wouldMove = (target: MoveTarget) => {
+    const s = useStore.getState()
+    const tab = s.tabs.find((t) => t.id === tabId)
+    return !!tab && !!s.dragging && canMove(tab.root, s.dragging.sessionId, target)
+  }
+  const clearDropState = () => {
+    lastZone.current = null
+    lastSlot.current = null
+    setDropHint(null)
+    setStripSlot(null)
+  }
+  const drop = (target: MoveTarget) => {
+    const d = useStore.getState().dragging
+    clearDropState()
+    if (d) useStore.getState().moveSurface(tabId, d.sessionId, target)
+  }
+  // Hint + marker only live during a drag (it can end anywhere, e.g. Esc or another pane).
+  useEffect(() => {
+    if (!dragging) clearDropState()
+  }, [dragging])
+  // Drag events that leave for a child of the same element aren't a real leave.
+  const leftFor = (e: React.DragEvent) =>
+    !(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))
+
   const railClass = !isSplit ? "" : focused ? " focused" : status === "attention" ? " waiting" : ""
 
   // Right-click clipboard menu. Copy is disabled without a selection.
@@ -116,7 +150,40 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
       onMouseUp={() => TerminalManager.focus(visibleNow())}
       onContextMenu={openMenu}
     >
-      <div className="pane-header">
+      <div
+        className="pane-header"
+        // The whole header is the strip's drop area: a slot between tabs reorders / joins
+        // this pane there; past the last tab (incl. the empty header space) = the end.
+        onDragOver={(e) => {
+          if (!dragging) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = "move"
+          const strip = stripRef.current
+          if (!strip) return
+          // Auto-scroll an overflowing strip when hovering near its edges.
+          const r = strip.getBoundingClientRect()
+          if (e.clientX < r.left + 24) strip.scrollLeft -= 12
+          else if (e.clientX > r.right - 24 && e.clientX < r.right) strip.scrollLeft += 12
+          const tabs = [...strip.querySelectorAll(".surface-tab")]
+          const slot = insertIndex(
+            tabs.map((t) => t.getBoundingClientRect()),
+            e.clientX,
+          )
+          if (slot === lastSlot.current) return
+          lastSlot.current = slot
+          setStripSlot(wouldMove({ paneId: pane.id, index: slot }) ? slot : null)
+        }}
+        onDragLeave={(e) => {
+          if (!leftFor(e)) return
+          lastSlot.current = null
+          setStripSlot(null)
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          if (stripSlot !== null) drop({ paneId: pane.id, index: stripSlot })
+          else clearDropState()
+        }}
+      >
         <div
           className="surface-tabs"
           role="tablist"
@@ -135,8 +202,23 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
                 key={id}
                 role="tab"
                 aria-selected={active}
-                className={`surface-tab${active ? " active" : ""}${multi ? " multi" : ""}`}
+                className={
+                  `surface-tab${active ? " active" : ""}${multi ? " multi" : ""}` +
+                  (dragging?.sessionId === id ? " dragging" : "") +
+                  (stripSlot === i ? " insert-before" : "") +
+                  (stripSlot === pane.sessionIds.length && i === pane.sessionIds.length - 1
+                    ? " insert-after"
+                    : "")
+                }
                 title={displaySessionTitle(s, home)}
+                // Drag a surface to another pane's edge (split), centre (join) or strip slot.
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move"
+                  e.dataTransfer.setData("application/x-smterm-surface", id)
+                  useStore.getState().setDragging({ tabId, sessionId: id })
+                }}
+                onDragEnd={() => useStore.getState().setDragging(null)}
                 // Left-click selects; the pane's onMouseUp then focuses the new terminal.
                 onMouseDown={(e) => {
                   if (e.button === 0) useStore.getState().setActivePane(tabId, id)
@@ -227,6 +309,34 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
         </button>
       </div>
       <div className="terminal-mount" ref={mountRef} />
+      {/* While dragging: a transparent layer over the terminal (xterm's canvas would swallow
+          the drag events) that shows where the surface would land. No animation — it sits
+          over a WebGL canvas. */}
+      {dragging && (
+        <div
+          className="drop-overlay"
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = "move"
+            const zone = dropZone(e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY)
+            if (zone === lastZone.current) return
+            lastZone.current = zone
+            setDropHint(wouldMove({ paneId: pane.id, zone }) ? zone : null)
+          }}
+          onDragLeave={(e) => {
+            if (!leftFor(e)) return
+            lastZone.current = null
+            setDropHint(null)
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            if (dropHint) drop({ paneId: pane.id, zone: dropHint })
+            else clearDropState()
+          }}
+        >
+          {dropHint && <div className={`drop-hint ${dropHint}`} />}
+        </div>
+      )}
       {menu && (
         <>
           <div

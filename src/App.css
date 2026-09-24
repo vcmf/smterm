@@ -684,6 +684,59 @@ body {
 .surface-tab:hover .surface-close {
   visibility: visible;
 }
+/* Drag & drop surfaces. Static (no transitions): these sit over a WebGL canvas. */
+.surface-tab.dragging {
+  opacity: 0.45;
+}
+/* .surface-tabs prefix: must beat `.surface-tab.multi.active` (the active tab's border). */
+.surface-tabs .surface-tab.insert-before {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.surface-tabs .surface-tab.insert-after {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+.drop-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 32px; /* below .pane-header */
+  bottom: 0;
+  z-index: 5;
+}
+.drop-hint {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.drop-hint.center {
+  inset: 4px;
+}
+.drop-hint.left,
+.drop-hint.right {
+  top: 4px;
+  bottom: 4px;
+  width: calc(50% - 6px);
+}
+.drop-hint.left {
+  left: 4px;
+}
+.drop-hint.right {
+  right: 4px;
+}
+.drop-hint.top,
+.drop-hint.bottom {
+  left: 4px;
+  right: 4px;
+  height: calc(50% - 6px);
+}
+.drop-hint.top {
+  top: 4px;
+}
+.drop-hint.bottom {
+  bottom: 4px;
+}
 .tree-row.surface-hidden .tree-labels {
   opacity: 0.6;
 }

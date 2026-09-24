@@ -28,6 +28,9 @@ export interface PaneLeaf {
   activeSessionId: string
 }
 
+/** Where a dragged surface lands in a pane: an edge (new split) or the centre (join). */
+export type DropZone = "left" | "right" | "top" | "bottom" | "center"
+
 /** A tab's layout: a binary tree of panes (leaves) and splits. */
 export type PaneNode =
   | PaneLeaf
