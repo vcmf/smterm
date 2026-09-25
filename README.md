@@ -119,7 +119,8 @@ in-app settings panel; a live watcher re-applies changes as you save.
 ```jsonc
 {
   "font": { "family": "JetBrains Mono", "size": 13, "ligatures": true, "lineHeight": 1.2 },
-  "theme": "minimal-dark",
+  "theme": "catppuccin", // minimal | tokyo-night | catppuccin | gruvbox
+  "appearance": "system", // dark | light | system (follow the OS)
   "cursorBlink": true,
   "scrollback": 5000,
 }

@@ -44,4 +44,15 @@ describe("App (integration)", () => {
     useStore.getState().setSessionCwd(id, "/repo")
     await waitFor(() => expect(ipc.gitStatus).toHaveBeenCalledWith("/repo", undefined)) // no WSL ctx for a native shell
   })
+
+  it("loads settings before restoring, then paints the theme once (no default-theme flash)", async () => {
+    vi.mocked(ipc.readSettings).mockResolvedValue('{"theme":"gruvbox","appearance":"light"}')
+    render(<App />)
+    await waitFor(() => expect(useStore.getState().tabs).toHaveLength(1))
+    expect(useStore.getState().settings).toMatchObject({ theme: "gruvbox", appearance: "light" })
+    // Only the loaded (light) theme ever reached the window — never the dark default.
+    expect(ipc.setWindowBackground).toHaveBeenCalledWith("#f9f5d7")
+    expect(ipc.setWindowBackground).not.toHaveBeenCalledWith("#0b0b0d")
+    expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#f9f5d7")
+  })
 })

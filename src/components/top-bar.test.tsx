@@ -81,4 +81,20 @@ describe("TopBar", () => {
     expect(st().tabs.length).toBe(before + 1)
     expect(container.querySelector(".shell-menu")).toBeFalsy() // menu closed
   })
+
+  it("the sun/moon button flips the current theme between dark and light", () => {
+    render(<TopBar />)
+    fireEvent.click(screen.getByLabelText("Switch to light theme"))
+    expect(st().settings.appearance).toBe("light")
+    fireEvent.click(screen.getByLabelText("Switch to dark theme"))
+    expect(st().settings.appearance).toBe("dark")
+  })
+
+  it("from System, it switches to the opposite of what the OS shows", () => {
+    st().setSystemDark(false)
+    st().setSettings({ ...st().settings, appearance: "system" })
+    render(<TopBar />)
+    fireEvent.click(screen.getByLabelText("Switch to dark theme"))
+    expect(st().settings.appearance).toBe("dark")
+  })
 })

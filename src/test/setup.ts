@@ -34,6 +34,7 @@ const smtermStub = {
   editorInfo: vi.fn(async () => ({ available: false, name: "" })),
   notify: vi.fn(),
   minimizeWindow: vi.fn(),
+  setWindowBackground: vi.fn(),
   maximizeWindow: vi.fn(),
   closeWindow: vi.fn(),
   isMaximized: vi.fn(async () => false),

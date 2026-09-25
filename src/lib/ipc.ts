@@ -57,6 +57,7 @@ export interface Ipc {
   pathIsDir: (p: string, wsl?: WslContext) => Promise<boolean>
 
   minimizeWindow: () => void
+  setWindowBackground: (color: string) => void // native bg follows the theme (persisted)
   maximizeWindow: () => void
   closeWindow: () => void
   isMaximized: () => Promise<boolean>

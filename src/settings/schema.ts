@@ -1,3 +1,5 @@
+import { DEFAULT_THEME_FAMILY, themeFamilyName, variantOf, type Appearance } from "./themes"
+
 export interface Settings {
   font: {
     family: string
@@ -5,7 +7,8 @@ export interface Settings {
     ligatures: boolean
     lineHeight: number
   }
-  theme: string
+  theme: string // theme family ("minimal", "tokyo-night", …) — each has a dark + light variant
+  appearance: Appearance // which variant: "dark" | "light" | "system" (follow the OS)
   // GPU acceleration (like VS Code's gpuAcceleration): "webgl" = WebGL on every visible
   // pane (default; crisp glyphs everywhere); "dom" = no GPU (fallback for GPUs/drivers
   // that can't hold multiple contexts cleanly).
@@ -28,7 +31,8 @@ export const defaultSettings: Settings = {
   // remnants → garbled glyphs with multiple panes (xterm.js #3303). Opt in if you
   // don't hit it. See ARCHITECTURE §9a / the rendering notes.
   font: { family: "FiraCode Nerd Font Mono", size: 13, ligatures: false, lineHeight: 1.2 },
-  theme: "minimal-dark",
+  theme: DEFAULT_THEME_FAMILY,
+  appearance: "dark",
   renderer: "webgl",
   cursorBlink: true,
   scrollback: 5000,
@@ -56,6 +60,8 @@ export function mergeSettings(input: unknown): Settings {
   const o = asObject(input)
   const f = asObject(o.font)
   const d = defaultSettings
+  // A variant name ("gruvbox-light") picks its family and — unless set explicitly — its scheme.
+  const variant = typeof o.theme === "string" ? variantOf(o.theme) : null
   return {
     font: {
       family: str(f.family, d.font.family),
@@ -63,7 +69,11 @@ export function mergeSettings(input: unknown): Settings {
       ligatures: bool(f.ligatures, d.font.ligatures),
       lineHeight: num(f.lineHeight, d.font.lineHeight, 1, 3),
     },
-    theme: str(o.theme, d.theme),
+    theme: themeFamilyName(str(o.theme, d.theme)), // legacy "minimal-dark" → "minimal"
+    appearance:
+      o.appearance === "light" || o.appearance === "system" || o.appearance === "dark"
+        ? o.appearance
+        : (variant?.scheme ?? d.appearance),
     renderer: o.renderer === "dom" ? "dom" : "webgl",
     cursorBlink: bool(o.cursorBlink, d.cursorBlink),
     scrollback: num(o.scrollback, d.scrollback, 0, 1_000_000),

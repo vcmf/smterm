@@ -140,7 +140,7 @@ function createWindow() {
     minWidth: 640,
     minHeight: 420,
     title: "smterm",
-    backgroundColor: "#0b0b0d",
+    backgroundColor: readWindowBg(), // last theme's bg — a light theme mustn't open dark
     frame: false, // frameless — the app draws its own top bar + window controls
     ...(icon ? { icon } : {}), // window/taskbar icon (win/linux; macOS uses the dock icon)
     webPreferences: {
@@ -244,6 +244,22 @@ function configDir(): string {
   return process.platform === "win32"
     ? path.join(process.env.APPDATA ?? os.homedir(), "smterm")
     : path.join(os.homedir(), ".config", "smterm")
+}
+
+// The window's native background (shown before the renderer paints and in unpainted
+// areas while resizing) follows the theme; persisted so the NEXT launch opens right.
+const DEFAULT_WINDOW_BG = "#0b0b0d"
+const isHexColor = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)
+function windowBgPath(): string {
+  return path.join(configDir(), "window-bg")
+}
+function readWindowBg(): string {
+  try {
+    const v = fs.readFileSync(windowBgPath(), "utf8").trim()
+    return isHexColor(v) ? v : DEFAULT_WINDOW_BG
+  } catch {
+    return DEFAULT_WINDOW_BG
+  }
 }
 
 function workspacePath(): string {
@@ -392,6 +408,18 @@ function registerIpc() {
     else mainWindow.maximize()
   })
   ipcMain.on("window:close", () => app.quit()) // single-window app: close ⇒ quit (guarded)
+  ipcMain.on("window:set-background", (_e, color: unknown) => {
+    if (!isHexColor(color)) return
+    mainWindow?.setBackgroundColor(color)
+    try {
+      if (readWindowBg() !== color) {
+        fs.mkdirSync(configDir(), { recursive: true })
+        fs.writeFileSync(windowBgPath(), color)
+      }
+    } catch {
+      // best-effort — the next launch just opens with the default bg
+    }
+  })
   ipcMain.handle("window:is-maximized", async () => mainWindow?.isMaximized() ?? false)
 
   // Git — working-tree status + per-file diff for the changes panel.

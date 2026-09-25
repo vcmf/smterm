@@ -15,10 +15,10 @@ import { ClosePaneDialog } from "./components/close-pane-dialog"
 import { RightPanelResizer } from "./components/right-panel-resizer"
 import { useActiveCwd, getActiveWsl } from "./lib/use-active-cwd"
 import { TerminalManager } from "./terminal/terminal-manager"
-import { useStore } from "./store"
+import { activeTheme, useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
 import { loadSettings } from "./settings/io"
-import { applyThemeVars, getTheme } from "./settings/themes"
+import { applyThemeVars } from "./settings/themes"
 import { readWorkspaceFile, serializeToJson } from "./lib/workspace"
 import { appShortcut } from "./lib/terminal-keys"
 import { resolveDefaultShell } from "./lib/shells"
@@ -35,6 +35,8 @@ function App() {
   const tabs = useStore((s) => s.tabs)
   const activeTabId = useStore((s) => s.activeTabId)
   const settings = useStore((s) => s.settings)
+  const settingsLoaded = useStore((s) => s.settingsLoaded)
+  const theme = useStore(activeTheme) // stable object per variant — changes only on a real switch
   const settingsOpen = useStore((s) => s.settingsOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
   const searchOpen = useStore((s) => s.searchOpen)
@@ -43,17 +45,22 @@ function App() {
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
   const activeCwd = useActiveCwd()
 
-  // Load shells, then restore the saved workspace (VS Code-style) or open a tab.
+  // Load shells + settings, then restore the saved workspace (VS Code-style) or open a tab.
+  // Settings first: a restored pane spawns with the theme's bg (COLORFGBG light/dark), and
+  // the theme must not be painted from defaults before settings.json is read.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       let shells: ShellOption[] = []
+      const settingsP = loadSettings()
       try {
         shells = await ipc.listShells()
       } catch {
         // Running without a backend (e.g. plain browser) — fall through.
       }
+      const loaded = await settingsP
       if (cancelled) return
+      useStore.getState().setSettings(loaded)
       if (shells.length === 0) {
         shells = [{ id: "default", label: "shell", command: "", args: [] }]
       }
@@ -116,11 +123,9 @@ function App() {
     }
   }, [])
 
-  // Load settings.json, and re-load whenever the file changes (GUI or hand-edit).
+  // Re-load settings.json whenever the file changes (GUI or hand-edit). The first load
+  // happens in the startup effect, before any terminal spawns.
   useEffect(() => {
-    void (async () => {
-      useStore.getState().setSettings(await loadSettings())
-    })()
     const unlisten = ipc.onSettingsChanged(async () => {
       useStore.getState().setSettings(await loadSettings())
       void ipc.editorInfo().then((e) => useStore.getState().setEditor(e)) // openPath may have changed
@@ -144,11 +149,29 @@ function App() {
     return () => unlisten()
   }, [])
 
-  // Apply settings to CSS theme + all terminals whenever they change.
+  // Paint the resolved theme (CSS vars + native window bg) — only after settings.json has
+  // loaded (else the defaults would overwrite main.tsx's cached light theme: a dark flash),
+  // and only when the variant actually changes (not on every settings edit / OS toggle).
   useEffect(() => {
-    applyThemeVars(getTheme(settings.theme))
-    TerminalManager.applySettings(settings)
-  }, [settings])
+    if (!settingsLoaded) return
+    applyThemeVars(theme)
+    ipc.setWindowBackground(theme.ui.bg)
+  }, [theme, settingsLoaded])
+
+  // Push settings (font, cursor, scrollback, renderer, theme palette) to every terminal.
+  useEffect(() => {
+    if (settingsLoaded) TerminalManager.applySettings(settings)
+  }, [settings, theme, settingsLoaded])
+
+  // Follow the OS light/dark preference live (used by appearance: "system").
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return // absent in jsdom/tests
+    const mq = window.matchMedia("(prefers-color-scheme: dark)")
+    const sync = () => useStore.getState().setSystemDark(mq.matches)
+    sync()
+    mq.addEventListener?.("change", sync)
+    return () => mq.removeEventListener?.("change", sync)
+  }, [])
 
   // Notification permission + window focus tracking (drives focus-aware badges).
   useEffect(() => {

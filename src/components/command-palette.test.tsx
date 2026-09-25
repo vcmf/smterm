@@ -17,7 +17,7 @@ describe("CommandPalette", () => {
     st().newTab(testShell)
     render(<CommandPalette />)
     expect(screen.getByText("Session")).toBeInTheDocument()
-    expect(screen.getByText("Appearance")).toBeInTheDocument()
+    expect(screen.getByText("Appearance", { selector: ".palette-group" })).toBeInTheDocument()
     expect(screen.getAllByText("New session").length).toBeGreaterThan(0)
     expect(screen.getByText("Split pane right")).toBeInTheDocument()
   })
@@ -56,5 +56,12 @@ describe("CommandPalette", () => {
     render(<CommandPalette />)
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "zzznope" } })
     expect(screen.getByText(/No matching commands/i)).toBeInTheDocument()
+  })
+
+  it("offers appearance switches and applies one", () => {
+    render(<CommandPalette />)
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "appearance light" } })
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" })
+    expect(st().settings.appearance).toBe("light")
   })
 })

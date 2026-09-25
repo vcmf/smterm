@@ -65,6 +65,7 @@ const api = {
   pathIsDir: (p: string, wsl?: WslContext) => ipcRenderer.invoke("fs:is-dir", p, wsl),
 
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
+  setWindowBackground: (color: string) => ipcRenderer.send("window:set-background", color),
   maximizeWindow: () => ipcRenderer.send("window:maximize"),
   closeWindow: () => ipcRenderer.send("window:close"),
   isMaximized: () => ipcRenderer.invoke("window:is-maximized") as Promise<boolean>,

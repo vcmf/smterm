@@ -19,7 +19,9 @@ import { reduceSignals } from "./lib/session-status"
 import type { SignalEvent } from "./lib/session-status"
 import { reduceAgentEvent, emptyGraph } from "./lib/agent-graph"
 import type { AgentEvent, AgentGraph } from "./lib/agent-graph"
-import { defaultSettings } from "./settings/schema"
+import { defaultSettings, mergeSettings } from "./settings/schema"
+import { saveSettings } from "./settings/io"
+import { resolveTheme, type Theme } from "./settings/themes"
 import type { Settings } from "./settings/schema"
 import type { GitStatus } from "./lib/ipc"
 import { isAbsoluteHostPath } from "./lib/file-actions"
@@ -68,6 +70,7 @@ interface AppState {
   activeTabId: string | null
   shells: ShellOption[]
   windowFocused: boolean
+  systemDark: boolean // OS prefers a dark colour scheme (drives appearance: "system")
   settings: Settings
   settingsOpen: boolean
   paletteOpen: boolean
@@ -103,6 +106,8 @@ interface AppState {
   setSidebarCollapsed: (collapsed: boolean) => void
   setSettingsOpen: (open: boolean) => void
   setSettings: (settings: Settings) => void
+  updateSettings: (next: Settings) => void // validate + apply + persist (every UI entry point)
+  settingsLoaded: boolean // settings.json read at least once (gates theming + first spawns)
   setShells: (shells: ShellOption[]) => void
   restoreWorkspace: (ws: WorkspaceState) => void
   setRightPanelWidth: (px: number, maxAvail?: number) => void
@@ -122,6 +127,7 @@ interface AppState {
   setActivePane: (tabId: string, sessionId: string) => void
   focusSession: (sessionId: string) => void
   setWindowFocused: (focused: boolean) => void
+  setSystemDark: (dark: boolean) => void
   signalSession: (sessionId: string, ev: SignalEvent) => void
   revealTab: (tabId: string) => void
 }
@@ -146,6 +152,10 @@ function seen(s: Session): Session {
     detail: undefined,
   }
 }
+
+/** The theme to render now: the settings' family in its dark/light variant (OS for "system"). */
+export const activeTheme = (s: Pick<AppState, "settings" | "systemDark">): Theme =>
+  resolveTheme(s.settings.theme, s.settings.appearance, s.systemDark)
 
 export const isSessionVisible = (sessionId: string): boolean =>
   isVisibleIn(useStore.getState(), sessionId)
@@ -226,7 +236,13 @@ export const useStore = create<AppState>((set, get) => ({
   activeTabId: null,
   shells: [],
   windowFocused: true,
+  // Seeded from the OS now (not after an effect) so "system" never starts on the wrong scheme.
+  systemDark:
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+      : true,
   settings: defaultSettings,
+  settingsLoaded: false,
   settingsOpen: false,
   paletteOpen: false,
   searchOpen: false,
@@ -288,7 +304,12 @@ export const useStore = create<AppState>((set, get) => ({
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
-  setSettings: (settings) => set({ settings }),
+  setSettings: (settings) => set({ settings, settingsLoaded: true }),
+  updateSettings: (next) => {
+    const validated = mergeSettings(next)
+    set({ settings: validated, settingsLoaded: true })
+    void saveSettings(validated)
+  },
   setShells: (shells) => set({ shells }),
 
   restoreWorkspace: (ws) =>
@@ -481,6 +502,8 @@ export const useStore = create<AppState>((set, get) => ({
     const { activeTabId, revealTab } = get()
     if (focused && activeTabId) revealTab(activeTabId)
   },
+
+  setSystemDark: (systemDark) => set({ systemDark }),
 
   signalSession: (sessionId, ev) =>
     set((state) => {
