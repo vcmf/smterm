@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest"
-import { fileMenuItems, clampMenuPosition, revealLabel, isAbsoluteHostPath } from "./file-actions"
+import {
+  fileMenuItems,
+  folderMenuItems,
+  clampMenuPosition,
+  revealLabel,
+  isAbsoluteHostPath,
+} from "./file-actions"
 
 const base = { editorName: "VS Code", editorAvailable: true, revealLabel: "Reveal in Finder" }
 
@@ -68,5 +74,17 @@ describe("clampMenuPosition", () => {
   })
   it("clamps to the pad when near the top-left edge", () => {
     expect(clampMenuPosition(0, 0, 200, 150, 1000, 800)).toEqual({ x: 6, y: 6 })
+  })
+})
+
+describe("folderMenuItems", () => {
+  it("copy, open a terminal there, reveal — reveal disabled for a WSL path", () => {
+    expect(folderMenuItems("Reveal in Finder", true).map((i) => i.label)).toEqual([
+      "Copy path",
+      "Open terminal here",
+      "Reveal in Finder",
+    ])
+    const wsl = folderMenuItems("Reveal in Explorer", false)[2]
+    expect(wsl).toMatchObject({ disabled: true, hint: "WSL path" })
   })
 })

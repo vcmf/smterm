@@ -24,7 +24,8 @@ export function revealLabel(platform: string): string {
   return "Show in File Manager"
 }
 
-export type FileActionId = "preview" | "open" | "setRoot" | "reveal" | "copyPath" | "copyRel"
+export type FileActionId =
+  "preview" | "open" | "setRoot" | "reveal" | "copyPath" | "copyRel" | "openHere"
 
 export interface MenuItemSpec {
   id: FileActionId
@@ -60,6 +61,21 @@ export function fileMenuItems(input: FileMenuInput): MenuItemSpec[] {
   items.push({ id: "copyPath", label: "Copy path", separatorBefore: true })
   items.push({ id: "copyRel", label: "Copy relative path" })
   return items
+}
+
+/** The sidebar's folder-line menu. Reveal needs a host path (not a WSL one). */
+export function folderMenuItems(revealLabel: string, canReveal: boolean): MenuItemSpec[] {
+  return [
+    { id: "copyPath", label: "Copy path" },
+    { id: "openHere", label: "Open terminal here" },
+    {
+      id: "reveal",
+      label: revealLabel,
+      disabled: !canReveal,
+      hint: canReveal ? undefined : "WSL path",
+      separatorBefore: true,
+    },
+  ]
 }
 
 /** Clamp a menu's top-left so it stays fully inside the viewport (flip/nudge in). */

@@ -180,3 +180,46 @@ describe("Sidebar — from / in folders", () => {
     expect(st().paneGit[`${id}@in`]).toBeUndefined()
   })
 })
+
+describe("Sidebar — folder lines: full path + right-click menu", () => {
+  const setup = () => {
+    st().newTab(testShell)
+    const id = st().tabs[0]!.activeSessionId
+    st().setSessionCwd(id, "/Users/test/work/term")
+    return id
+  }
+
+  it("every folder line shows its full path on hover (one line, and from / in)", () => {
+    const id = setup()
+    const { unmount, container } = render(<Sidebar />)
+    const line = container.querySelector(".tree-dir")!
+    expect(line).toHaveAttribute("title", "/Users/test/work/term")
+    unmount()
+    st().applyAgentEvents([{ event: "SessionStart", sessionId: "c", paneId: id, cwd: "/w/api" }])
+    st().setPaneGit({ [`${id}@in`]: { real: "/w/api", forCwd: "/w/api" } }, [])
+    render(<Sidebar />)
+    expect(screen.getByText("from").parentElement).toHaveAttribute(
+      "title",
+      expect.stringContaining("/Users/test/work/term"),
+    )
+    expect(screen.getByText("in").parentElement).toHaveAttribute(
+      "title",
+      expect.stringContaining("/w/api"),
+    )
+  })
+
+  it("right-click: copy the path, or open a terminal there beside that pane", async () => {
+    const { ipc } = await import("../lib/ipc")
+    const id = setup()
+    const split = vi.fn()
+    useStore.setState({ openFolderInSplit: split })
+    const { container } = render(<Sidebar />)
+    const line = () => container.querySelector(".tree-dir")!
+    fireEvent.contextMenu(line())
+    fireEvent.mouseDown(screen.getByText("Copy path"))
+    expect(ipc.clipboardWrite).toHaveBeenCalledWith("/Users/test/work/term")
+    fireEvent.contextMenu(line())
+    fireEvent.mouseDown(screen.getByText("Open terminal here"))
+    expect(split).toHaveBeenCalledWith("/Users/test/work/term", id)
+  })
+})
