@@ -4,12 +4,12 @@ import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { SearchAddon, type ISearchOptions } from "@xterm/addon-search"
 import type { PaneLeaf, Session } from "../types"
-import { useStore } from "../store"
+import { activeTheme, useStore } from "../store"
 import { notify } from "../lib/notify"
 import { ipc } from "../lib/ipc"
-import { getTheme } from "../settings/themes"
 import type { Settings } from "../settings/schema"
 import { ligatureRanges } from "./ligatures"
+import { withAlpha } from "../settings/themes"
 import { displaySessionTitle } from "../lib/session-label"
 import { allPanes, visibleSessionIds } from "../lib/pane-tree"
 import { webglPanes, shouldRebuildAtlas } from "../lib/renderer-policy"
@@ -227,7 +227,7 @@ function build(): Entry {
     scrollSensitivity: 3,
     fastScrollSensitivity: 12, // Alt-scroll
     smoothScrollDuration: 300, // ms
-    theme: getTheme(s.theme).terminal,
+    theme: activeTheme(useStore.getState()).terminal,
   })
   const fit = new FitAddon()
   term.loadAddon(fit)
@@ -269,19 +269,21 @@ function build(): Entry {
   return { term, fit, search, host, opened: false, spawned: false }
 }
 
-// Search match highlighting — amber for all matches, orange for the active one
-// (translucent so text stays readable; solid on the overview ruler).
+// Search match highlighting from the active theme — amber for all matches, red for the
+// active one (translucent so text stays readable; solid on the overview ruler). Theme-
+// derived so matches stay visible on light backgrounds too.
 function searchOptions(caseSensitive: boolean, incremental: boolean): ISearchOptions {
+  const { amber, red } = activeTheme(useStore.getState()).ui
   return {
     caseSensitive,
     incremental, // type-as-you-go: keep the current match instead of jumping ahead
     decorations: {
-      matchBackground: "rgba(255, 213, 79, 0.35)",
-      matchBorder: "rgba(255, 213, 79, 0.9)",
-      matchOverviewRuler: "#ffd54f",
-      activeMatchBackground: "rgba(255, 152, 0, 0.55)",
-      activeMatchBorder: "rgba(255, 152, 0, 1)",
-      activeMatchColorOverviewRuler: "#ff9800",
+      matchBackground: withAlpha(amber, 0.35),
+      matchBorder: withAlpha(amber, 0.9),
+      matchOverviewRuler: amber,
+      activeMatchBackground: withAlpha(red, 0.45),
+      activeMatchBorder: red,
+      activeMatchColorOverviewRuler: red,
     },
   }
 }
@@ -328,10 +330,11 @@ function spawn(session: Session, entry: Entry) {
       cwd: session.cwd, // inherited from the pane this was split/opened from
       // → COLORFGBG so agents detect light/dark (fallback when the OSC-11 bg query can't
       // complete, e.g. across the wsl.exe hop). Captured at spawn: a running shell's env
-      // can't be rewritten, so a later theme switch only affects newly-spawned panes. On
-      // native, OSC-11 self-corrects live; on WSL a pane opened before the switch keeps the
-      // stale value until it's replaced — acceptable vs. the complexity of a live re-signal.
-      bg: getTheme(useStore.getState().settings.theme).terminal.background,
+      // can't be rewritten, so a later theme switch — incl. appearance "system" following
+      // the OS — only affects newly-spawned panes. On native, OSC-11 self-corrects live; on
+      // WSL a pane opened before the switch keeps the stale value until it's replaced.
+      // (Startup loads settings before any restore spawns, so first spawns are correct.)
+      bg: activeTheme(useStore.getState()).terminal.background,
     })
     .catch((e) => term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`))
 
@@ -605,7 +608,8 @@ export const TerminalManager = {
 
   /** Apply settings (font/theme/etc.) to every live terminal. */
   applySettings(settings: Settings) {
-    const theme = getTheme(settings.theme).terminal
+    // The resolved variant (dark/light, or the OS's for "system") — not just the family name.
+    const theme = activeTheme({ settings, systemDark: useStore.getState().systemDark }).terminal
     for (const [id, entry] of entries) {
       const o = entry.term.options
       o.fontFamily = fontStack(settings.font.family)

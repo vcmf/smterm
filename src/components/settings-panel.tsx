@@ -1,10 +1,10 @@
 import { X } from "@phosphor-icons/react"
 import { useStore } from "../store"
-import { openSettingsFile, saveSettings, settingsPath } from "../settings/io"
+import { openSettingsFile, settingsPath } from "../settings/io"
 import { mergeSettings } from "../settings/schema"
 import type { Settings } from "../settings/schema"
-import { THEMES } from "../settings/themes"
 import { useEffect, useState } from "react"
+import { ThemePicker } from "./theme-picker"
 
 export function SettingsPanel() {
   const settings = useStore((s) => s.settings)
@@ -16,11 +16,7 @@ export function SettingsPanel() {
   }, [])
 
   // Validate/clamp edits through the same merge used for the file, then persist.
-  const update = (next: Settings) => {
-    const validated = mergeSettings(next)
-    useStore.getState().setSettings(validated)
-    void saveSettings(validated)
-  }
+  const update = (next: Settings) => useStore.getState().updateSettings(next)
   const font = (patch: Partial<Settings["font"]>) =>
     update({ ...settings, font: { ...settings.font, ...patch } })
 
@@ -36,6 +32,10 @@ export function SettingsPanel() {
           </button>
         </div>
 
+        <h3 className="settings-section">Appearance</h3>
+        <ThemePicker />
+
+        <h3 className="settings-section">Terminal</h3>
         <label className="settings-row">
           <span>Font family</span>
           <input value={settings.font.family} onChange={(e) => font({ family: e.target.value })} />
@@ -71,20 +71,6 @@ export function SettingsPanel() {
             checked={settings.font.ligatures}
             onChange={(e) => font({ ligatures: e.target.checked })}
           />
-        </label>
-
-        <label className="settings-row">
-          <span>Theme</span>
-          <select
-            value={settings.theme}
-            onChange={(e) => update({ ...settings, theme: e.target.value })}
-          >
-            {Object.entries(THEMES).map(([key, theme]) => (
-              <option key={key} value={key}>
-                {theme.label}
-              </option>
-            ))}
-          </select>
         </label>
 
         <label className="settings-row">

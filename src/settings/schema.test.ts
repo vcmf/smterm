@@ -10,8 +10,8 @@ describe("mergeSettings", () => {
   })
 
   it("merges a partial object over defaults", () => {
-    const s = mergeSettings({ theme: "light", font: { size: 16 } })
-    expect(s.theme).toBe("light")
+    const s = mergeSettings({ theme: "gruvbox", font: { size: 16 } })
+    expect(s.theme).toBe("gruvbox")
     expect(s.font.size).toBe(16)
     expect(s.font.family).toBe(defaultSettings.font.family) // untouched
     expect(s.cursorBlink).toBe(defaultSettings.cursorBlink)
@@ -73,7 +73,27 @@ describe("parseSettings", () => {
   })
 
   it("round-trips through serialize", () => {
-    const s = mergeSettings({ theme: "light", font: { size: 15 } })
+    const s = mergeSettings({ theme: "catppuccin", appearance: "light", font: { size: 15 } })
     expect(parseSettings(serializeSettings(s))).toEqual(s)
+  })
+
+  it("theme is a family: a legacy name maps, an unknown one falls back", () => {
+    expect(mergeSettings({ theme: "minimal-dark" }).theme).toBe("minimal")
+    expect(mergeSettings({ theme: "solarized" }).theme).toBe("minimal")
+  })
+
+  it("appearance accepts dark/light/system and defaults to dark", () => {
+    expect(defaultSettings.appearance).toBe("dark")
+    expect(mergeSettings({ appearance: "light" }).appearance).toBe("light")
+    expect(mergeSettings({ appearance: "system" }).appearance).toBe("system")
+    expect(mergeSettings({ appearance: "sepia" }).appearance).toBe("dark")
+  })
+
+  it("a variant name selects its family and scheme (explicit appearance wins)", () => {
+    expect(mergeSettings({ theme: "catppuccin-latte" })).toMatchObject({
+      theme: "catppuccin",
+      appearance: "light",
+    })
+    expect(mergeSettings({ theme: "catppuccin-latte", appearance: "dark" }).appearance).toBe("dark")
   })
 })

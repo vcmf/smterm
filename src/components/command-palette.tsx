@@ -9,11 +9,14 @@ import {
   GearSix,
   FileText,
   Terminal,
+  Sun,
+  Moon,
+  CircleHalf,
   X,
 } from "@phosphor-icons/react"
 import { useStore } from "../store"
-import { THEMES } from "../settings/themes"
-import { openSettingsFile, saveSettings } from "../settings/io"
+import { THEME_FAMILIES } from "../settings/themes"
+import { openSettingsFile } from "../settings/io"
 import { resolveDefaultShell } from "../lib/shells"
 import { newSurfaceKey } from "../lib/platform"
 
@@ -94,18 +97,31 @@ export function CommandPalette() {
       })
     }
 
-    for (const [key, theme] of Object.entries(THEMES)) {
-      if (key === settings.theme) continue
+    for (const family of Object.values(THEME_FAMILIES)) {
+      if (family.name === settings.theme) continue
       list.push({
         group: "Appearance",
         label: "Theme",
-        sub: theme.label,
+        sub: family.label,
         icon: <Palette size={16} />,
-        run: () => {
-          const next = { ...settings, theme: key }
-          store.setSettings(next)
-          void saveSettings(next)
-        },
+        run: () => store.updateSettings({ ...settings, theme: family.name }),
+      })
+    }
+    for (const a of ["dark", "light", "system"] as const) {
+      if (a === settings.appearance) continue
+      list.push({
+        group: "Appearance",
+        label: "Appearance",
+        sub: a === "system" ? "System (follow the OS)" : a === "dark" ? "Dark" : "Light",
+        icon:
+          a === "light" ? (
+            <Sun size={16} />
+          ) : a === "dark" ? (
+            <Moon size={16} />
+          ) : (
+            <CircleHalf size={16} />
+          ),
+        run: () => store.updateSettings({ ...settings, appearance: a }),
       })
     }
 

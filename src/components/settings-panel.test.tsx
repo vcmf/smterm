@@ -13,12 +13,30 @@ beforeEach(() => {
 })
 
 describe("SettingsPanel", () => {
-  it("renders all four theme options", () => {
+  it("renders a card per theme family, the current one checked", () => {
     render(<SettingsPanel />)
     expect(screen.getByText("Settings")).toBeInTheDocument()
-    for (const name of ["Minimal Dark", "Tokyo Night", "Catppuccin Mocha", "Gruvbox"]) {
-      expect(screen.getByRole("option", { name })).toBeInTheDocument()
+    for (const name of ["Minimal", "Tokyo Night", "Catppuccin", "Gruvbox"]) {
+      expect(screen.getByRole("radio", { name })).toBeInTheDocument()
     }
+    expect(screen.getByRole("radio", { name: "Minimal" })).toHaveAttribute("aria-checked", "true")
+  })
+
+  it("cards preview the variant for the current appearance", () => {
+    render(<SettingsPanel />)
+    expect(screen.getByText("Mocha")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("radio", { name: /Light/ }))
+    expect(st().settings.appearance).toBe("light")
+    expect(screen.getByText("Latte")).toBeInTheDocument()
+    expect(ipc.writeSettings).toHaveBeenCalled()
+  })
+
+  it("System follows the OS preference", () => {
+    st().setSystemDark(false)
+    render(<SettingsPanel />)
+    fireEvent.click(screen.getByRole("radio", { name: /System/ }))
+    expect(st().settings.appearance).toBe("system")
+    expect(screen.getByText("Day")).toBeInTheDocument()
   })
 
   it("editing the font size updates the store and persists", () => {
@@ -28,10 +46,12 @@ describe("SettingsPanel", () => {
     expect(ipc.writeSettings).toHaveBeenCalled()
   })
 
-  it("changing the theme updates settings", () => {
+  it("clicking a theme card selects that family (appearance kept)", () => {
+    st().setSettings({ ...st().settings, appearance: "light" })
     render(<SettingsPanel />)
-    fireEvent.change(screen.getByLabelText("Theme"), { target: { value: "gruvbox" } })
+    fireEvent.click(screen.getByRole("radio", { name: "Gruvbox" }))
     expect(st().settings.theme).toBe("gruvbox")
+    expect(st().settings.appearance).toBe("light")
   })
 
   it("choosing a default shell persists it", () => {

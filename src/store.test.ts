@@ -628,3 +628,15 @@ function findRightPane(): string {
   if (root.type !== "split") throw new Error("expected split")
   return root.children[1].id
 }
+
+describe("store — settings", () => {
+  beforeEach(resetStore)
+
+  it("updateSettings validates, applies and persists", async () => {
+    const { ipc } = await import("./lib/ipc")
+    st().updateSettings({ ...st().settings, theme: "gruvbox-light", appearance: "light" })
+    expect(st().settings.theme).toBe("gruvbox") // variant name normalized to its family
+    expect(st().settingsLoaded).toBe(true)
+    expect(ipc.writeSettings).toHaveBeenCalled()
+  })
+})

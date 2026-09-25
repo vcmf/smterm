@@ -12,6 +12,8 @@ export function resetStore() {
     activeTabId: null,
     shells: [testShell],
     windowFocused: true,
+    systemDark: true,
+    settingsLoaded: false,
     settings: defaultSettings,
     settingsOpen: false,
     paletteOpen: false,

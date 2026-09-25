@@ -13,8 +13,10 @@ import {
   X,
   Copy,
   SidebarSimple,
+  Sun,
+  Moon,
 } from "@phosphor-icons/react"
-import { useStore } from "../store"
+import { activeTheme, useStore } from "../store"
 import { ipc } from "../lib/ipc"
 import { allSessionIds } from "../lib/pane-tree"
 import { aggregateBadge } from "../lib/session-status"
@@ -33,6 +35,7 @@ export function TopBar() {
   const defaultShellPref = useStore((s) => s.settings.defaultShell)
   const rightView = useStore((s) => s.rightView)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
+  const scheme = useStore((s) => activeTheme(s).scheme)
   const [maximized, setMaximized] = useState(false)
   const [shellMenu, setShellMenu] = useState(false)
 
@@ -228,6 +231,18 @@ export function TopBar() {
           onClick={() => useStore.getState().setRightView(rightView === "agents" ? null : "agents")}
         >
           <TreeStructure size={15} />
+        </button>
+        {/* One-click dark ↔ light for the current theme (leaves "system" for an explicit pick). */}
+        <button
+          className="iconbtn"
+          title={scheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          aria-label={scheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          onClick={() => {
+            const st = useStore.getState()
+            st.updateSettings({ ...st.settings, appearance: scheme === "dark" ? "light" : "dark" })
+          }}
+        >
+          {scheme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
         </button>
         <button
           className="iconbtn"

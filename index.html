@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/icon.png" />
     <title>smterm</title>
+    <!-- Last-used theme tokens, applied before the first paint (the module bundle is deferred,
+         so doing this in main.tsx is too late — a light theme would flash the dark CSS
+         defaults). Written by applyThemeVars (src/settings/themes.ts, key "smterm:theme-vars"). -->
+    <script>
+      try {
+        var c = JSON.parse(localStorage.getItem("smterm:theme-vars") || "null")
+        if (c && c.vars) {
+          var r = document.documentElement
+          for (var k in c.vars) r.style.setProperty(k, c.vars[k])
+          r.style.colorScheme = r.dataset.scheme = c.scheme === "light" ? "light" : "dark"
+        }
+      } catch (e) {}
+    </script>
   </head>
 
   <body>
