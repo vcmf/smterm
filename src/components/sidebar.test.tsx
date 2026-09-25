@@ -228,6 +228,7 @@ describe("Sidebar — folder lines: full path + right-click menu", () => {
     const id = setup()
     st().newTab(testShell) // a second tab is now active
     const other = st().activeTabId
+    useStore.setState({ platform: "darwin" }) // Ctrl-click = right-click there
     const { container } = render(<Sidebar />)
     const line = [...container.querySelectorAll(".tree-dir")].find((el) =>
       el.getAttribute("title")?.includes("/Users/test/work/term"),

@@ -119,6 +119,9 @@ export function Sidebar() {
   // — the one you were typing in, or the split "Open terminal here" just made.
   const closeDirMenu = useCallback(() => {
     setDirMenu(null)
+    // …unless something else (a text field) still has focus — leave it there.
+    const el = document.activeElement
+    if (el && el !== document.body) return
     const s = useStore.getState()
     const sid = s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId
     if (sid) requestAnimationFrame(() => TerminalManager.focus(sid))
@@ -210,7 +213,11 @@ export function Sidebar() {
                       // Left button only: a right-click (folder menu) mustn't switch tabs or
                       // focus the terminal (Escape closing the menu would reach a running Claude).
                       // (macOS Ctrl-click is a right-click that reports button 0.)
-                      onMouseDown={(e) => e.button === 0 && !e.ctrlKey && focusPane(tab.id, id)}
+                      onMouseDown={(e) =>
+                        e.button === 0 &&
+                        !(e.ctrlKey && platform === "darwin") &&
+                        focusPane(tab.id, id)
+                      }
                     >
                       <span className="tree-icon">
                         {(() => {

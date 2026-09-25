@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { useStore, isVisibleIn, isSessionVisible } from "./store"
-import { allSessionIds } from "./lib/pane-tree"
+import { allSessionIds, visibleSessionIds } from "./lib/pane-tree"
 import { resetStore, testShell as shell } from "./test/helpers"
 import { RIGHT_PANEL_MIN, RIGHT_PANEL_MAX } from "./lib/right-panel"
 import type { ShellOption } from "./types"
@@ -698,5 +698,32 @@ describe("store — resume banner state", () => {
     expect(st().resume[id]?.phase).toBe("pending")
     st().closeTab(firstTab().id)
     expect(st().resume[id]).toBeUndefined()
+  })
+})
+
+describe("splitPaneAt", () => {
+  it("splits beside that pane in its tab, as shown (no surface swap), focusing the new one", () => {
+    st().newTab(shell)
+    const tabA = st().tabs[0]!
+    const shown = tabA.activeSessionId
+    st().newSurface(shell) // a second surface now shown in the pane
+    const visible = st().tabs[0]!.activeSessionId
+    st().setActivePane(tabA.id, shown) // show the first again → `visible` is now hidden
+    const hidden = visible
+    st().newTab(shell) // another tab is active
+    st().splitPaneAt(hidden, "/x")
+    const tab = st().tabs[0]!
+    expect(st().activeTabId).toBe(tab.id)
+    expect(allSessionIds(tab.root)).toHaveLength(3)
+    expect(st().sessions[tab.activeSessionId]?.cwd).toBe("/x")
+    // the pane still shows the surface it showed
+    expect(visibleSessionIds(tab.root)).toContain(shown)
+  })
+
+  it("no-op when the pane is gone", () => {
+    st().newTab(shell)
+    const before = st().tabs
+    st().splitPaneAt("nope", "/x")
+    expect(st().tabs).toBe(before)
   })
 })
