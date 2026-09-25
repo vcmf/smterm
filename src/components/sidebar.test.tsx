@@ -120,7 +120,10 @@ describe("Sidebar — from / in folders", () => {
     st().applyAgentEvents([
       { event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/term/src" },
     ])
-    st().setPaneGit({ [id]: { root: "/w/term" }, [`${id}@in`]: { root: "/w/term" } }, [])
+    st().setPaneGit(
+      { [id]: { root: "/w/term" }, [`${id}@in`]: { root: "/w/term", forCwd: "/w/term/src" } },
+      [],
+    )
     render(<Sidebar />)
     expect(screen.queryByText("from")).toBeNull()
   })
@@ -150,6 +153,7 @@ describe("Sidebar — from / in folders", () => {
         [`${id}@in`]: {
           branch: "feat/a",
           root: "/w/term/.claude/worktrees/a",
+          forCwd: "/w/term/.claude/worktrees/a",
           pr: { number: 57, state: "open", url: "https://x/57" },
         },
       },
@@ -167,7 +171,7 @@ describe("Sidebar — from / in folders", () => {
   it("back to one line when Claude exits; closing the pane drops its `in` git info", () => {
     const id = setup()
     st().applyAgentEvents([{ event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/api" }])
-    st().setPaneGit({ [`${id}@in`]: { branch: "dev" } }, [`${id}@in`])
+    st().setPaneGit({ [`${id}@in`]: { branch: "dev", forCwd: "/w/api" } }, [`${id}@in`])
     render(<Sidebar />)
     expect(screen.getByText(/dev • \/w\/api/)).toBeInTheDocument()
     act(() => st().claudeExited(id))

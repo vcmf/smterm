@@ -68,7 +68,8 @@ export interface AgentNode {
 
 export interface AgentGraph {
   nodes: Record<string, AgentNode>
-  rootIds: string[] // one root per session, in order of first appearance
+  rootIds: string[] // one root per session, in order of first appearance (moved to the end
+  // when it restarts in another pane)
 }
 
 export const emptyGraph: AgentGraph = { nodes: {}, rootIds: [] }
@@ -140,11 +141,12 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
 
   switch (ev.event) {
     case "SessionStart":
-      // The same session can start again in another pane (`claude --resume` after a crash).
-      set(rid, { status: "idle", cwd: ev.cwd ?? at(rid).cwd, paneId: ev.paneId ?? at(rid).paneId })
-      // …and is now that pane's newest session: keep rootIds in last-started order.
-      if (rootIds[rootIds.length - 1] !== rid)
+      // The same session can start again in another pane (`claude --resume` after a crash):
+      // it becomes that pane's newest session → last in rootIds (the later root wins per pane).
+      // Same pane (/compact, a resume in place): it keeps its place on the board.
+      if (ev.paneId && at(rid).paneId !== ev.paneId && rootIds[rootIds.length - 1] !== rid)
         rootIds = [...rootIds.filter((id) => id !== rid), rid]
+      set(rid, { status: "idle", cwd: ev.cwd ?? at(rid).cwd, paneId: ev.paneId ?? at(rid).paneId })
       break
     case "UserPromptSubmit": {
       // New turn: drop the previous turn's FINISHED sub-agents (they're per-turn), so

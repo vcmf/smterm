@@ -11,7 +11,7 @@ import {
 import { activeTheme, useStore } from "../store"
 import { sessionColor } from "../lib/session-color"
 import { claudePaneIds } from "../lib/agent-graph"
-import { claudeWorkFlat, inGitKey, inLabel, worksElsewhere } from "../lib/agent-dirs"
+import { claudeWorkFlat, inGitFor, inGitKey, inLabel, worksElsewhere } from "../lib/agent-dirs"
 import { ClaudeIcon } from "./claude-icon"
 import { messageSnippet, prStateUi, type PaneGitInfo, type PrInfo } from "../lib/pane-git"
 import { ipc } from "../lib/ipc"
@@ -266,11 +266,14 @@ function DirLines({
       <span className="tree-sub tree-dir" title={`Claude is working here now: ${work.cwd}`}>
         <span className="tree-dir-label">in</span>
         <span className="tree-dir-path">
-          {branchLine(inGit?.branch, inLabel(shellCwd, work.cwd, home, shellGit?.root))}
+          {branchLine(
+            inGitFor(inGit, work.cwd)?.branch,
+            inLabel(shellCwd, work.cwd, home, shellGit?.real),
+          )}
         </span>
         {more}
       </span>
-      {inGit?.pr && <PrLine pr={inGit.pr} />}
+      {inGitFor(inGit, work.cwd)?.pr && <PrLine pr={inGit!.pr!} />}
     </>
   )
 }

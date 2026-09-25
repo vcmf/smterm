@@ -58,21 +58,38 @@ const PR51 = { number: 51, state: "MERGED", url: "https://x/pull/51", isDraft: f
 const tick = () => new Promise((r) => setTimeout(r, 15))
 
 describe("PaneGitService", () => {
+  it("resolves symlinks for the real path (host only, cached; WSL paths aren't resolvable)", async () => {
+    const f = fake({})
+    let calls = 0
+    const svc = new PaneGitService(f.run, Date.now, async (p) => (calls++, `/private${p}`))
+    expect(await svc.lookup([{ paneId: "a", cwd: "/tmp/x" }])).toEqual({
+      a: { real: "/private/tmp/x" },
+    })
+    await svc.lookup([{ paneId: "a", cwd: "/tmp/x" }])
+    expect(calls).toBe(1)
+    expect(await svc.lookup([{ paneId: "w", cwd: "/home/u", wsl: { distro: "D" } }])).toEqual({
+      w: {},
+    })
+  })
+
   it("branch now, PR fetched in the background (prPending), then served from cache", async () => {
     const f = fake({ heads: { "/repo": "feat/x\n/repo" }, prs: { "feat/x": PR51 } })
-    const svc = new PaneGitService(f.run)
+    const svc = new PaneGitService(f.run, Date.now, async (p) => p)
     const req = [
       { paneId: "a", cwd: "/repo" },
-      { paneId: "b", cwd: "/tmp" }, // not a repo → omitted
+      { paneId: "b", cwd: "/tmp" }, // not a repo → only its real path
     ]
     expect(await svc.lookup(req)).toEqual({
-      a: { branch: "feat/x", root: "/repo", prPending: true },
+      a: { branch: "feat/x", root: "/repo", real: "/repo", prPending: true },
+      b: { real: "/tmp" },
     })
     await tick()
     expect(await svc.lookup(req)).toEqual({
+      b: { real: "/tmp" },
       a: {
         branch: "feat/x",
         root: "/repo",
+        real: "/repo",
         pr: { number: 51, state: "merged", url: "https://x/pull/51" },
       },
     })

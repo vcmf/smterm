@@ -14,8 +14,7 @@ import { FilePreview } from "./components/file-preview"
 import { ClosePaneDialog } from "./components/close-pane-dialog"
 import { RightPanelResizer } from "./components/right-panel-resizer"
 import { useActiveWorkCwd, getActiveWsl } from "./lib/use-active-cwd"
-import { claudeWorkDirs, inGitKey, samePath } from "./lib/agent-dirs"
-import type { PaneGitRequest } from "./lib/pane-git"
+import { claudeWorkDirs, planGitPoll, settleInAnswers } from "./lib/agent-dirs"
 import { TerminalManager } from "./terminal/terminal-manager"
 import { activeTheme, useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
@@ -328,30 +327,19 @@ function App() {
     let seq = 0 // polls can overlap (a slow gh); only the newest may write
     const poll = async () => {
       const s = useStore.getState()
-      if (s.sidebarCollapsed || document.visibilityState === "hidden") return
-      const work = claudeWorkDirs(s.agents)
-      // Per terminal: its shell folder, then Claude's folder when it differs (the `in` line —
-      // its repo root decides whether it's really another checkout). Paired, so the cap below
-      // drops whole terminals, never just their `in` half.
-      const reqs: PaneGitRequest[] = []
-      const polled: string[] = []
-      for (const x of Object.values(s.sessions)) {
-        if (!x.cwd) continue
-        const w = work[x.id]?.cwd
-        const pair = w && !samePath(w, x.cwd) ? 2 : 1
-        if (reqs.length + pair > 64) break // main answers at most 64
-        const wsl = wslContext(x.command, x.args)
-        reqs.push({ paneId: x.id, cwd: x.cwd, wsl })
-        if (w && pair === 2) reqs.push({ paneId: inGitKey(x.id), cwd: w, wsl })
-        // Always "polled": an `in` entry not asked for any more (Claude left) gets cleared.
-        polled.push(x.id, inGitKey(x.id))
-      }
+      if (document.visibilityState === "hidden") return
+      const { reqs, polled, inCwd } = planGitPoll(
+        Object.values(s.sessions),
+        claudeWorkDirs(s.agents),
+        s.sidebarCollapsed,
+      )
       if (reqs.length === 0) return
       const mine = ++seq
       const res = await ipc.paneGitInfo(reqs).catch(() => null)
       if (!res || stopped || mine !== seq) return // a newer poll has (or will have) the truth
       const pending = Object.values(res).some((i) => i.prPending)
       for (const i of Object.values(res)) delete i.prPending // transport flag, not state
+      settleInAnswers(res, inCwd, useStore.getState().paneGit)
       useStore.getState().setPaneGit(res, polled)
       if (pending) pollSoon(1500) // a PR is being fetched in main — pick it up shortly
     }

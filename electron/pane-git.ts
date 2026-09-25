@@ -4,6 +4,7 @@
 // stores no token); if gh is missing / logged out / there's no PR, the line just stays hidden.
 
 import { execFile } from "node:child_process"
+import { realpath } from "node:fs/promises"
 import { promisify } from "node:util"
 import type { PaneGitInfo, PaneGitRequest, PrInfo, PrState } from "../src/lib/pane-git"
 import { wslArgs } from "./git"
@@ -73,6 +74,7 @@ interface Cached<T> {
 
 export class PaneGitService {
   private heads = new Map<string, Cached<{ branch: string | null; root: string } | null>>()
+  private reals = new Map<string, Cached<string | null>>()
   private prs = new Map<string, Cached<PrInfo | null>>()
   private inflight = new Map<string, Promise<unknown>>()
   // Per environment ("host" / "wsl:<distro>"): gh can be missing in one and present in another.
@@ -83,9 +85,11 @@ export class PaneGitService {
   constructor(
     private readonly run: Runner = defaultRunner,
     private readonly now: () => number = Date.now,
+    private readonly resolve: (p: string) => Promise<string> = realpath,
   ) {}
 
-  /** Branch + PR for each requested terminal (terminals outside a repo are omitted). Returns
+  /** Branch + PR for each requested terminal, plus its real path (symlinks resolved — host
+   *  only) so the renderer can tell two spellings of one folder apart, repo or not. Returns
    *  as soon as the (fast, local) branches are known: a PR not cached yet is fetched in the
    *  background and flagged `prPending`, so the caller re-asks shortly instead of waiting on
    *  the network behind other panes' gh calls. */
@@ -93,9 +97,12 @@ export class PaneGitService {
     const out: Record<string, PaneGitInfo> = {}
     await Promise.all(
       reqs.map(async (r) => {
-        const head = await this.head(r)
-        if (!head) return
-        const info: PaneGitInfo = head.branch ? { branch: head.branch } : {}
+        const [head, real] = await Promise.all([this.head(r), this.real(r)])
+        const info: PaneGitInfo = {}
+        if (real) info.real = real
+        out[r.paneId] = info
+        if (!head) return // not a repo: just the real path
+        if (head.branch) info.branch = head.branch
         info.root = head.root
         if (head.branch) {
           const hit = this.prs.get(this.prKey(r, head.root, head.branch))
@@ -105,10 +112,15 @@ export class PaneGitService {
             void this.pr(r, head.root, head.branch)
           }
         }
-        out[r.paneId] = info
       }),
     )
     return out
+  }
+
+  // The folder's real path (host only: a WSL path can't be resolved from Windows).
+  private real(r: PaneGitRequest) {
+    if (r.wsl) return Promise.resolve(null)
+    return this.cached(this.reals, r.cwd, HEAD_TTL, () => this.resolve(r.cwd).catch(() => null))
   }
 
   private envKey = (r: PaneGitRequest) => (r.wsl ? `wsl:${r.wsl.distro ?? ""}` : "host")
