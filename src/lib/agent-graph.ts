@@ -39,6 +39,9 @@ export interface AgentEvent {
   transcriptPath?: string // transcript_path — the session's JSONL (token accounting)
   agentTranscriptPath?: string // agent_transcript_path — a sub-agent's own JSONL
   tokens?: TokenUsage // synthetic "TokenUsage" event: cumulative usage for the target node
+  source?: string // SessionStart: startup | resume | clear | compact | fork
+  reason?: string // SessionEnd: prompt_input_exit | logout | clear | resume | other
+  permissionMode?: string // permission_mode (default | acceptEdits | plan | bypassPermissions …)
 }
 
 /** A git worktree an agent created (WorktreeCreate), for the "open a terminal here" chip. */

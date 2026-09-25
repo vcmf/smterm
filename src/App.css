@@ -787,6 +787,67 @@ body {
   background: var(--border2);
   color: var(--text);
 }
+/* Claude-session resume strip (restored panes). Static: it sits above a WebGL canvas. */
+.resume-banner {
+  /* Overlaid, not in the flex flow: showing/hiding it must not resize the terminal (that
+     would SIGWINCH the Claude we just resumed into a full redraw). */
+  position: absolute;
+  top: 33px; /* below .pane-header */
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  color: var(--dim);
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+  border-bottom: 1px solid var(--border);
+}
+.resume-banner b {
+  color: var(--text);
+  font-weight: 600;
+}
+.resume-banner.ok {
+  color: var(--accent);
+}
+.resume-banner.warn {
+  color: var(--text);
+  background: color-mix(in srgb, var(--amber) 12%, var(--panel));
+}
+.resume-banner.warn svg {
+  color: var(--amber);
+  flex: 0 0 auto;
+}
+.resume-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.resume-btn {
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  background: var(--elev);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.resume-btn:hover {
+  background: var(--bg);
+}
+.resume-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.resume-btn.primary {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border2));
+}
 .terminal-mount {
   flex: 1 1 auto;
   min-height: 0;

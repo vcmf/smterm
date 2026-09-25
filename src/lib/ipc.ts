@@ -2,6 +2,7 @@ import type { ShellOption } from "../types"
 import type { WslContext } from "./wsl"
 import type { AgentEvent } from "./agent-graph"
 import type { SessionMeta } from "./session-color"
+import type { ResumePlan } from "./resume"
 import type { PaneGitInfo, PaneGitRequest } from "./pane-git"
 import type { DirListing } from "./dir-listing"
 import type { EditorInfo } from "./file-actions"
@@ -24,7 +25,7 @@ export interface SpawnOpts {
 export interface Ipc {
   // Resolves { reattached: true } when the session was already live in main and we
   // reconnected the (reloaded) renderer to it, replaying history, instead of spawning.
-  ptySpawn: (opts: SpawnOpts) => Promise<{ reattached: boolean }>
+  ptySpawn: (opts: SpawnOpts) => Promise<{ reattached: boolean; integrated?: boolean }>
   onPtyData: (id: string, cb: (data: string) => void) => () => void
   ptyWrite: (id: string, data: string) => void
   ptyResize: (id: string, cols: number, rows: number) => void
@@ -38,6 +39,10 @@ export interface Ipc {
   // A Claude pane's /color + /rename (null = claude left the pane) → the pane accent.
   onAgentMeta: (cb: (paneId: string, meta: SessionMeta | null) => void) => () => void
   agentMetaSnapshot: () => Promise<[string, SessionMeta][]> // all current (renderer reload)
+  // Claude sessions to resume in restored terminals; consume = attempted/dismissed (one shot).
+  resumePlan: (paneIds: string[], allowBypass: boolean) => Promise<Record<string, ResumePlan>>
+  resumeConsume: (paneId: string, sessionId: string) => void
+  shellIdle: (paneId: string) => void // shell prompt returned after a command (resume ledger)
   openExternal: (url: string) => void
   openPath: (p: string) => void
   // Does `path` (relative to `cwd`, or absolute) exist? Validates a detected file link.

@@ -21,6 +21,8 @@ export interface Settings {
   defaultShell: string // command path of the preferred shell; "" = system $SHELL
   fileLinks: boolean // click file paths in output to open them
   openPath: string // editor command for clicked paths; "" = OS default. {file}/{line}/{col}
+  resumeAgents: "auto" | "ask" | "off" // on relaunch, resume the Claude session each pane was in
+  resumeBypassPermissions: boolean // also restore --permission-mode bypassPermissions (else default)
 }
 
 export const defaultSettings: Settings = {
@@ -42,6 +44,8 @@ export const defaultSettings: Settings = {
   defaultShell: "",
   fileLinks: true,
   openPath: "code -g {file}:{line}:{col}",
+  resumeAgents: "auto",
+  resumeBypassPermissions: false,
 }
 
 const num = (v: unknown, fallback: number, min: number, max: number): number =>
@@ -84,6 +88,11 @@ export function mergeSettings(input: unknown): Settings {
     fileLinks: bool(o.fileLinks, d.fileLinks),
     // Allow "" (OS default), so don't use str() which rejects empty strings.
     openPath: typeof o.openPath === "string" ? o.openPath : d.openPath,
+    resumeAgents:
+      o.resumeAgents === "ask" || o.resumeAgents === "off" || o.resumeAgents === "auto"
+        ? o.resumeAgents
+        : d.resumeAgents,
+    resumeBypassPermissions: bool(o.resumeBypassPermissions, d.resumeBypassPermissions),
   }
 }
 

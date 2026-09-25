@@ -16,6 +16,7 @@ import { webglPanes, shouldRebuildAtlas } from "../lib/renderer-policy"
 import { appShortcut, keyAction } from "../lib/terminal-keys"
 import { gridChanged, type Grid } from "../lib/resize"
 import { findFilePaths } from "../lib/file-links"
+import { isPosixShell, withCd } from "../lib/resume"
 import { isMac, isWindows } from "../lib/platform"
 
 interface Entry {
@@ -30,6 +31,17 @@ interface Entry {
   idleTimer?: ReturnType<typeof setTimeout>
   lastOutputSignal?: number
   lastGrid?: Grid // last cols/rows sent to the PTY — skip no-op resizes (spurious SIGWINCH)
+  // Claude-session resume (restored pane): type at the first prompt, then watch for failure.
+  resumeStage?: "await-prompt" | "typed"
+  resumeTimer?: ReturnType<typeof setTimeout>
+  resumeSawStart?: boolean // an OSC 133 C came after typing: the next D = our command ended
+  // Shell-integration state (OSC 133): a prompt was seen / a command is in the foreground.
+  seenPrompt?: boolean
+  cmdRunning?: boolean
+  integrated?: boolean // zsh/bash/wsl: our OSC 133 integration is expected
+  replaying?: boolean // a reattach's replayed history is being parsed: old marks, no side effects
+  suspendedJob?: boolean // a job was Ctrl-Z'd here: a prompt no longer proves Claude exited
+  claudeSeen?: boolean // a Claude session ran here this run → a returning prompt matters
   webgl?: WebglAddon // present only while this terminal is rendering via WebGL
   webglFailed?: boolean // context was lost — stay on DOM, don't re-acquire
 }
@@ -336,7 +348,39 @@ function spawn(session: Session, entry: Entry) {
       // (Startup loads settings before any restore spawns, so first spawns are correct.)
       bg: activeTheme(useStore.getState()).terminal.background,
     })
-    .catch((e) => term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`))
+    .then(({ reattached, integrated }) => {
+      // A reattach replays up to 256 KB of old output: its OSC 133 marks must not drive live
+      // side effects (e.g. a replayed "command ended" would drop a running Claude's ledger
+      // entry). xterm parses writes in order, so an empty write's callback = replay parsed.
+      if (reattached) term.write("", () => (entry.replaying = false))
+      else entry.replaying = false
+      // Main knows whether our integration was actually injected (a cold WSL VM or an
+      // unrecognised bash may run plain) — never guess from the shell's name.
+      entry.integrated = integrated === true
+      armResumeTimer(session.id, entry)
+    })
+    .catch((e) => {
+      entry.replaying = false
+      term.write(`\r\n\x1b[31m[spawn error] ${e}\x1b[0m\r\n`)
+      const r = useStore.getState().resume[session.id]
+      if (r?.phase === "pending") {
+        entry.resumeStage = undefined
+        useStore.getState().setResume(session.id, {
+          phase: "skipped",
+          plan: { ...r.plan, reason: "the shell couldn't start" },
+        })
+      }
+    })
+  entry.replaying = true
+
+  // This pane was inside a Claude session when smterm quit/crashed: resume it once the shell
+  // is ready. Shells with our integration (zsh/bash, incl. inside WSL) announce their first
+  // prompt (OSC 133 D) — wait for it and never type blind: a slow rc may be sitting on its own
+  // prompt ("update? [Y/n]") that the keystrokes would answer. If it never comes, fall back to
+  // offering [Resume]. Shells without integration (pwsh, cmd, fish) get a short grace period.
+  if (useStore.getState().resume[session.id]?.phase === "pending") {
+    entry.resumeStage = "await-prompt" // a first prompt typing it can arrive any time now
+  }
 
   term.onData((data) => ipc.ptyWrite(session.id, data))
 
@@ -381,12 +425,37 @@ function spawn(session: Session, entry: Entry) {
   // OSC 133;C/D — command start/finish.
   term.parser.registerOscHandler(133, (data) => {
     const kind = data.charAt(0)
-    if (kind === "C") store.signalSession(session.id, { type: "command-start" })
-    else if (kind === "D") {
+    if (kind === "C") {
+      store.signalSession(session.id, { type: "command-start" })
+      entry.cmdRunning = true
+      if (entry.resumeStage === "typed") entry.resumeSawStart = true
+    } else if (kind === "D") {
       // Command finished at the prompt — precise idle; cancel the heuristic timer
       // so it can't later mis-flip this settled session to "attention".
       clearTimeout(entry.idleTimer)
       store.signalSession(session.id, { type: "command-end" })
+      entry.seenPrompt = true
+      // The prompt is back after a command: whatever ran in the foreground (Claude included,
+      // SessionEnd or not) has exited → nothing to resume in this pane. Except Ctrl-Z: a
+      // suspended job (exit 128+SIGTSTP — 146 macOS, 148 Linux) is still alive (`fg`).
+      const code = Number.parseInt(data.slice(2), 10)
+      const suspended = code === 146 || code === 148
+      if (suspended) entry.suspendedJob = true // stays: we can't tell when that job ends
+      if (entry.cmdRunning && entry.claudeSeen && !entry.suspendedJob && !entry.replaying) {
+        ipc.shellIdle(session.id)
+        entry.claudeSeen = false
+      }
+      entry.cmdRunning = false
+      // Resume flow: the first prompt → type the command. After typing, only a D that follows
+      // our command's C means it exited before Claude confirmed (bad id, auth, not installed…);
+      // a D without a C is the shell's own first prompt arriving late (typeahead on a slow rc).
+      if (entry.resumeStage === "await-prompt") typeResume(session.id, entry)
+      else if (entry.resumeStage === "typed" && entry.resumeSawStart) {
+        const r = useStore.getState().resume[session.id]
+        if (r?.phase === "resuming" && !suspended) {
+          failResume(session.id, entry, Number.isFinite(code) ? code : undefined)
+        }
+      }
     }
     return true
   })
@@ -426,6 +495,94 @@ function spawn(session: Session, entry: Entry) {
       },
     })
   }
+}
+
+// Resume timings: shells without integration — a grace period before typing; with it — how
+// long to wait for the first prompt before offering [Resume] instead; and how long to wait
+// for Claude's SessionStart before calling the attempt failed.
+const RESUME_PROMPT_GRACE_MS = 3000
+const RESUME_PROMPT_WAIT_MS = 20_000
+const RESUME_CONFIRM_MS = 25_000
+
+/** Once we know whether the shell is integrated: arm the fallback for a pending resume. */
+function armResumeTimer(id: string, entry: Entry) {
+  if (entry.resumeStage !== "await-prompt") return // already typed (the prompt came first)
+  clearTimeout(entry.resumeTimer)
+  entry.resumeTimer = setTimeout(
+    () => (entry.integrated ? offerResume(id, entry) : typeResume(id, entry)),
+    entry.integrated ? RESUME_PROMPT_WAIT_MS : RESUME_PROMPT_GRACE_MS,
+  )
+}
+
+/** The integrated shell never showed a prompt: don't type into the unknown — offer it. */
+function offerResume(id: string, entry: Entry) {
+  entry.resumeStage = undefined
+  const r = useStore.getState().resume[id]
+  if (r?.phase === "pending") useStore.getState().setResume(id, { phase: "offer", plan: r.plan })
+}
+
+/** Safe to type into this terminal: its shell is at a prompt (never into a running program).
+ *  Without shell integration (no OSC 133 seen) we can't tell — allow. */
+function atPrompt(entry: Entry | undefined): boolean {
+  if (!entry?.spawned) return false
+  // Integration not known yet (the spawn hasn't answered — a WSL injection can take seconds):
+  // don't guess.
+  if (entry.integrated === undefined) return false
+  // An integrated shell must have SHOWN its prompt (else its rc may still be running — e.g.
+  // an "update? [Y/n]" read that our keystrokes would answer). Others: we can't know — allow.
+  if (entry.integrated && !entry.seenPrompt) return false
+  return !(entry.seenPrompt && entry.cmdRunning)
+}
+
+/** Type the pane's resume command (one shot: main forgets the ledger entry) and arm the
+ *  confirmation timeout. Success is flagged by App when Claude's SessionStart arrives. */
+function typeResume(id: string, entry: Entry) {
+  const r = useStore.getState().resume[id]
+  clearTimeout(entry.resumeTimer)
+  if (
+    !r ||
+    !r.plan.command ||
+    (r.phase !== "pending" && r.phase !== "offer" && r.phase !== "failed")
+  ) {
+    entry.resumeStage = undefined
+    return
+  }
+  entry.resumeStage = "typed"
+  entry.resumeSawStart = false
+  // ^U first (POSIX line editors): drops anything typed into the line before the prompt was
+  // ready, so it can't get glued onto the command.
+  const posix = isPosixShell(useStore.getState().sessions[id]?.command ?? "")
+  // POSIX shells: always `cd` into the session's project dir first — `claude --resume` only
+  // finds that project's transcripts, and a Retry may come after the user cd'd elsewhere.
+  const command = posix ? withCd(r.plan.cwd, r.plan.command) : r.plan.command
+  entry.claudeSeen = true
+  ipc.ptyWrite(id, `${posix ? "\x15" : ""}${command}\r`)
+  // The ledger entry is NOT consumed here: a quit/crash during the confirmation window must
+  // still resume next time. It's consumed on failure/dismiss; success re-records it anyway.
+  useStore.getState().setResume(id, { phase: "resuming", plan: r.plan })
+  entry.resumeTimer = setTimeout(() => {
+    if (useStore.getState().resume[id]?.phase !== "resuming") return
+    if (entry.integrated) failResume(id, entry)
+    else {
+      // No integration = no hooks and no OSC 133: Claude can't confirm it resumed, and we
+      // can't tell whether it's running now. Never call it failed (and never offer buttons
+      // that would type into it) — just say what was sent. The entry is kept.
+      entry.resumeStage = undefined
+      const plan = useStore.getState().resume[id]!.plan
+      useStore.getState().setResume(id, { phase: "sent", plan })
+    }
+  }, RESUME_CONFIRM_MS)
+}
+
+function failResume(id: string, entry: Entry, exitCode?: number) {
+  clearTimeout(entry.resumeTimer)
+  entry.resumeStage = undefined
+  // One shot: never retry a failing session on the next launch (main only drops the exact
+  // carried-over entry — a late success that re-recorded it this run is kept).
+  const plan = useStore.getState().resume[id]?.plan
+  if (plan) ipc.resumeConsume(id, plan.sessionId)
+  const r = useStore.getState().resume[id]
+  if (r) useStore.getState().setResume(id, { phase: "failed", plan: r.plan, exitCode })
 }
 
 function syncSize(id: string, entry: Entry) {
@@ -553,6 +710,42 @@ export const TerminalManager = {
     requestAnimationFrame(() => repairRenderers())
   },
 
+  /** Resume banner actions: (re)type the pane's resume command now (offer / retry) — only
+   *  at a shell prompt; returns whether it typed. */
+  resumeNow(id: string): boolean {
+    const entry = entries.get(id)
+    if (!entry || !atPrompt(entry)) return false
+    typeResume(id, entry)
+    return true
+  },
+
+  /** A Claude session started in this terminal (its SessionStart hook): a returning prompt
+   *  now means Claude exited; and any earlier Ctrl-Z'd job no longer masks that. */
+  claudeStarted(id: string) {
+    const entry = entries.get(id)
+    if (!entry) return
+    entry.claudeSeen = true
+    entry.suspendedJob = false
+  },
+
+  /** Claude confirmed the resume (its SessionStart arrived) — stop watching for failure. */
+  resumeSettled(id: string) {
+    const entry = entries.get(id)
+    if (!entry) return
+    clearTimeout(entry.resumeTimer)
+    entry.resumeStage = undefined
+  },
+
+  /** Type a command into a terminal's shell (banner actions: pick a session, start Claude) —
+   *  only at a prompt; returns whether it typed. */
+  runCommand(id: string, command: string): boolean {
+    if (!atPrompt(entries.get(id))) return false
+    // ^U first (POSIX line editors): a half-typed line must not get glued onto the command.
+    const posix = isPosixShell(useStore.getState().sessions[id]?.command ?? "")
+    ipc.ptyWrite(id, `${posix ? "\x15" : ""}${command}\r`)
+    return true
+  },
+
   /** Park a terminal off-screen, unless it has since been attached to another container. */
   detach(id: string, container: HTMLElement) {
     const entry = entries.get(id)
@@ -631,6 +824,7 @@ export const TerminalManager = {
 
   dispose(id: string) {
     const entry = entries.get(id)
+    if (entry) clearTimeout(entry.resumeTimer)
     // No entry = never started in this renderer (e.g. a hidden surface after a reload), but
     // main may still hold its PTY — always kill (an unknown id is a no-op there).
     if (!entry) return ipc.ptyKill(id)

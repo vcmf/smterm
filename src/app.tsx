@@ -22,6 +22,7 @@ import { applyThemeVars } from "./settings/themes"
 import { readWorkspaceFile, serializeToJson } from "./lib/workspace"
 import { appShortcut } from "./lib/terminal-keys"
 import { wslContext } from "./lib/wsl"
+import { isPosixShell, type ResumePlan } from "./lib/resume"
 import { resolveDefaultShell } from "./lib/shells"
 import { isMac } from "./lib/platform"
 import type { ShellOption } from "./types"
@@ -78,7 +79,44 @@ function App() {
         }
         if (cancelled) return
         if (restored) {
+          // Panes that were inside a Claude session when smterm quit/crashed: ask main what
+          // to resume BEFORE restoring, so those shells spawn in the session's own cwd.
+          const plans =
+            loaded.resumeAgents === "off"
+              ? {}
+              : await ipc
+                  .resumePlan(Object.keys(restored.sessions), loaded.resumeBypassPermissions)
+                  .catch(() => ({}) as Record<string, ResumePlan>)
+          if (cancelled) return
+          // Auto: spawn right in the session's cwd. Ask: keep the pane's own cwd (a Dismiss
+          // must leave it where it was) and make the command `cd` there first — on POSIX
+          // shells; pwsh/cmd can't take that, so they spawn in the session's cwd either way.
+          // The typed command cd's into the session's dir on POSIX shells (terminal-manager).
+          // So only move the spawn cwd where that's both needed and safe: auto mode, a host
+          // shell (a missing Linux dir as a WSL spawn cwd stops the shell from starting), and
+          // a shell that can't take the cd form. Ask mode keeps the pane's own cwd (Dismiss).
+          // An unverified cwd (its stat timed out — a hung mount) is never a spawn cwd: the
+          // spawn's own existence check would block main.
+          const ask = loaded.resumeAgents === "ask"
+          for (const [id, plan] of Object.entries(plans)) {
+            const s = restored.sessions[id]
+            if (!s || plan.status !== "resume" || !plan.command || plan.cwdUnverified) continue
+            const wsl = !!wslContext(s.command, s.args)
+            // Non-POSIX shells can't take the typed cd, so they spawn there even in ask mode.
+            if (!wsl && (!ask || !isPosixShell(s.command))) s.cwd = plan.cwd
+          }
           store.restoreWorkspace(restored)
+          for (const [id, plan] of Object.entries(plans)) {
+            if (plan.status === "skip") ipc.resumeConsume(id, plan.sessionId) // can't succeed — tell
+            store.setResume(
+              id,
+              plan.status === "skip"
+                ? { phase: "skipped", plan }
+                : loaded.resumeAgents === "ask"
+                  ? { phase: "offer", plan }
+                  : { phase: "pending", plan }, // terminal-manager types it at the first prompt
+            )
+          }
           // After a renderer reload main still holds PTYs for sessions the restore dropped.
           for (const id of restored.pruned ?? []) ipc.ptyKill(id)
           // …and the Claude accents of the ones it kept (the store restarted empty).
@@ -148,6 +186,24 @@ function App() {
   useEffect(() => {
     const unlisten = ipc.onAgentEvents((events) => {
       useStore.getState().applyAgentEvents(events)
+      // A resumed Claude announces itself: SessionStart from that pane → the resume worked.
+      for (const ev of events) {
+        if (ev.event !== "SessionStart" || !ev.paneId || ev.agentId) continue
+        TerminalManager.claudeStarted(ev.paneId)
+        const r = useStore.getState().resume[ev.paneId]
+        // "failed" too: a slow Claude can confirm after the timeout — the late success wins.
+        // Only for THIS session: a fresh `claude` the user starts instead isn't a resume.
+        if (r?.phase !== "resuming" && r?.phase !== "failed") continue
+        if (ev.sessionId !== r.plan.sessionId) continue
+        TerminalManager.resumeSettled(ev.paneId)
+        useStore.getState().setResume(ev.paneId, { phase: "resumed", plan: r.plan })
+        const paneId = ev.paneId
+        setTimeout(() => {
+          if (useStore.getState().resume[paneId]?.phase === "resumed") {
+            useStore.getState().setResume(paneId, null)
+          }
+        }, 4000)
+      }
       if (import.meta.env.DEV) {
         const g = useStore.getState().agents
         const names = events.map((e) => e.event).join(", ")

@@ -45,6 +45,7 @@ import { colorfgbg } from "./color"
 import { TranscriptTokens } from "./transcript-tokens"
 import { tokenEventsForBatch } from "./agent-tokens"
 import { AgentMetaTracker } from "./agent-meta"
+import { SessionLedger } from "./agent-sessions"
 import { PaneGitService } from "./pane-git"
 import type { PaneGitRequest } from "../src/lib/pane-git"
 import type { WslContext } from "../src/lib/wsl"
@@ -75,6 +76,7 @@ interface PtySession {
   coalescer?: OutputCoalescer // absent only in the SMTERM_NO_COALESCE=1 A/B baseline
   shell: string
   wslDistro?: string // for a WSL pane: the distro, so its Linux paths resolve to the right UNC share
+  integrated: boolean // our shell integration (OSC 133 marks, claude wrapper) was injected
 }
 const sessions = new Map<string, PtySession>()
 let mainWindow: BrowserWindow | null = null
@@ -89,9 +91,14 @@ const agentTokens = new TranscriptTokens()
 // Branch + GitHub PR per terminal (sidebar), via git + the user's `gh`.
 const paneGit = new PaneGitService()
 // Per-pane Claude `/color` + `/rename` (pane accent), read from each session's transcript.
-const agentMeta = new AgentMetaTracker((paneId, meta) =>
-  mainWindow?.webContents.send("agents:meta", paneId, meta),
-)
+const agentMeta = new AgentMetaTracker((paneId, meta) => {
+  mainWindow?.webContents.send("agents:meta", paneId, meta)
+  sessionLedger().setName(paneId, meta?.name) // the /rename, for the resume banner
+})
+// Which Claude session each terminal is inside (persisted) → resume on relaunch.
+let ledger: SessionLedger | null = null
+const sessionLedger = () =>
+  (ledger ??= new SessionLedger(path.join(configDir(), "agent-sessions.json")))
 let quitConfirmed = false
 
 // PTY output batching (see electron/coalescer.ts + docs/PERF.md).
@@ -161,6 +168,7 @@ function createWindow() {
   })
 
   mainWindow = win
+  win.on("session-end", () => sessionLedger().freeze(60_000)) // Windows logout/shutdown — see onPower
   win.on("closed", () => {
     mainWindow = null
   })
@@ -216,6 +224,10 @@ async function startAgentObservability(): Promise<void> {
         // resulting token totals as a follow-up batch. The read is off the terminal hot
         // path and incremental, so it never delays the events above or the agent's loop.
         mainWindow?.webContents.send("agents:events", events)
+        // Which pane is inside which Claude session (+ its WSL distro, for the transcript).
+        for (const ev of events) {
+          sessionLedger().apply(ev, ev.paneId ? sessions.get(ev.paneId)?.wslDistro : undefined)
+        }
         // Session-level events locate each Claude pane's transcript → track its /color and
         // /rename for the pane accent (async + debounced; SessionEnd stops it).
         for (const ev of events) {
@@ -318,7 +330,7 @@ function registerIpc() {
         cwd?: string
         bg?: string
       },
-    ): { reattached: boolean } => {
+    ): { reattached: boolean; integrated: boolean } => {
       const existing = sessions.get(opts.id)
       if (existing) {
         // Reattach: point output at the new renderer, drop stale in-flight bytes
@@ -332,7 +344,7 @@ function registerIpc() {
         }
         emit(existing, existing.buffer.dump())
         diag("pty-reattach", { id: opts.id, pid: existing.proc.pid })
-        return { reattached: true }
+        return { reattached: true, integrated: existing.integrated }
       }
 
       const shellCmd = opts.shell || defaultShell()
@@ -381,6 +393,7 @@ function registerIpc() {
         // Remember a WSL pane's distro so a hook event tagged with this pane resolves its
         // Linux transcript path against the right distro's UNC share (not just the default).
         wslDistro: wsl ? (parseWslDistroArg(opts.args ?? []) ?? defaultWslDistro()) : undefined,
+        integrated: !!inj,
       }
       if (coalesce) {
         rec.coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, (d) => emit(rec, d))
@@ -395,10 +408,11 @@ function registerIpc() {
         rec.coalescer?.flush() // don't lose the final output
         sessions.delete(opts.id)
         agentMeta.untrack(opts.id) // shell (and any claude in it) gone — drop the accent
+        sessionLedger().drop(opts.id) // …and nothing to resume there (no-op during a quit)
       })
       sessions.set(opts.id, rec)
       diag("pty-spawn", { id: opts.id, pid: proc.pid, shell: path.basename(shellCmd) })
-      return { reattached: false }
+      return { reattached: false, integrated: !!inj }
     },
   )
   ipcMain.on("pty:write", (_e, id: string, data: string) => sessions.get(id)?.proc.write(data))
@@ -412,6 +426,7 @@ function registerIpc() {
   // Explicit kill (pane/tab closed) — really terminate + free the replay buffer.
   ipcMain.on("pty:kill", (_e, id: string) => {
     agentMeta.untrack(id, false) // the pane is gone — nothing left to accent
+    sessionLedger().drop(id) // closed on purpose — don't resume its Claude session
     const rec = sessions.get(id)
     if (!rec) return
     rec.coalescer?.dispose()
@@ -443,6 +458,43 @@ function registerIpc() {
       // best-effort — the next launch just opens with the default bg
     }
   })
+  // Resume on relaunch: what to type into each restored terminal (live PTYs = a renderer
+  // reload → skipped). Entries for panes no longer in the workspace are pruned.
+  ipcMain.handle("agents:resume-plan", async (_e, paneIds: string[], allowBypass: boolean) => {
+    if (!Array.isArray(paneIds)) return {}
+    const l = sessionLedger()
+    l.prune(new Set(paneIds))
+    return l.plan(
+      paneIds,
+      (id) => sessions.has(id),
+      // Async + host paths only; bounded. A WSL path isn't checked (a cold share could block
+      // or wrongly say "gone") and a stat that times out (a hung network mount) means "can't
+      // check" — claude itself reports a missing session, the banner handles that, and the
+      // renderer won't use an unverified path as a spawn cwd (spawn's own check would hang).
+      async (e) => {
+        if (e.wslDistro || (process.platform === "win32" && e.cwd.startsWith("/"))) {
+          return { unverified: true }
+        }
+        const within = <T>(p: Promise<T>) =>
+          Promise.race([p, new Promise<undefined>((r) => setTimeout(() => r(undefined), 1500))])
+        const cwdOk = await within(pathExists("/", e.cwd))
+        if (cwdOk === false) return { skip: "its folder is gone" }
+        if (cwdOk === undefined) return { unverified: true }
+        if (e.transcriptPath && (await within(pathExists("/", e.transcriptPath))) === false) {
+          return { skip: "its transcript is gone" }
+        }
+        return {}
+      },
+      allowBypass === true,
+    )
+  })
+  // The pane's shell prompt came back after a command → its foreground program (Claude or
+  // not) has exited: nothing to resume there even if Claude died without a SessionEnd.
+  ipcMain.on("agents:shell-idle", (_e, paneId: string) => sessionLedger().shellIdle(paneId))
+  // One shot per session: attempted (or dismissed) → forget it.
+  ipcMain.on("agents:resume-consume", (_e, paneId: string, sessionId: string) =>
+    sessionLedger().consume(paneId, sessionId),
+  )
   // A (re)loaded renderer starts with no accents: hand it every tracked pane's current meta.
   ipcMain.handle("agents:meta-snapshot", async () => agentMeta.snapshot())
   ipcMain.handle("window:is-maximized", async () => mainWindow?.isMaximized() ?? false)
@@ -803,6 +855,10 @@ app.whenReady().then(async () => {
   for (const ev of ["suspend", "resume", "lock-screen", "unlock-screen", "shutdown"]) {
     onPower(ev, () => diag(`power-${ev}`, { ptys: sessions.size }))
   }
+  // OS shutdown / restart / logout: Electron skips before-quit (notably on Windows), so freeze
+  // the resume ledger here too — else the dying children's SessionEnds/exits would clear it,
+  // and a reboot is exactly when resuming matters.
+  onPower("shutdown", () => sessionLedger().freeze(60_000)) // thaws if the shutdown is cancelled
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -821,6 +877,9 @@ app.on("will-quit", () => {
 app.on("quit", () => diag("quit"))
 
 function killAllPtys() {
+  // Quit: keep every "inside Claude" entry for the relaunch BEFORE our kill makes Claude
+  // fire SessionEnd (which would otherwise clear them).
+  sessionLedger().freeze()
   for (const rec of sessions.values()) {
     rec.coalescer?.dispose()
     try {

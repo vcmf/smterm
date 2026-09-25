@@ -345,6 +345,8 @@ Config dir: `~/.config/smterm/` (`%APPDATA%\smterm\` on Windows).
   `{id, sessionIds, activeSessionId}` plus a legacy `sessionId` mirror so an older build still
   restores every pane; v1 files migrate on read. A file from a **newer** build is not parsed
   and not overwritten. Restore de-duplicates / prunes broken entries.
+- **`agent-sessions.json`** — which Claude session each terminal is inside, so a relaunch can
+  type `claude --resume <id>` back into it (GOTCHAS #resume).
 - **Small caches:** `window-bg` (native window colour for the next launch), `claude-hooks.json`
   and the per-launch `hook-events/` drop dir, and localStorage `smterm:theme-vars` (first paint).
 - **Process lifetime:** PTYs live in the main process, so they **survive a renderer reload**

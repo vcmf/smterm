@@ -113,4 +113,6 @@ rules also in `electron/CLAUDE.md` (loaded on demand). Design detail in `docs/AR
 - **No dark flash on launch** needs the `index.html` pre-paint script + `settingsLoaded` gate +
   saved window bg. → GOTCHAS #first-paint-theme
 - **`/color` + `/rename` live only in Claude's transcript**; slash commands fire no hook. → GOTCHAS #claude-transcript
+- **Relaunch resumes Claude sessions** from a hook-fed ledger: any SessionEnd while running
+  clears an entry; a quit freezes it first; one shot per session. → GOTCHAS #resume
 - **Agent-status reducer has a known flaw** — don't quick-patch (needs a test matrix). → GOTCHAS #agent-status, ARCHITECTURE §9a

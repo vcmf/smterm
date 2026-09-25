@@ -32,6 +32,7 @@ import type { WorkspaceState } from "./lib/workspace"
 import type { MoveTarget } from "./lib/pane-tree"
 import type { SessionMeta } from "./lib/session-color"
 import { mergePaneGit, type PaneGitInfo } from "./lib/pane-git"
+import type { ResumeState } from "./lib/resume"
 import { clampPanelWidth, RIGHT_PANEL_DEFAULT } from "./lib/right-panel"
 
 const newId = () => crypto.randomUUID()
@@ -93,6 +94,7 @@ interface AppState {
   dragging: { tabId: string; sessionId: string } | null // surface being dragged (drop hints on)
   agentMeta: Record<string, SessionMeta> // per pane: the Claude session's /color + /rename
   paneGit: Record<string, PaneGitInfo> // per terminal: branch + GitHub PR (sidebar)
+  resume: Record<string, ResumeState> // per terminal: Claude-session resume banner
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
@@ -129,6 +131,7 @@ interface AppState {
   setDragging: (dragging: { tabId: string; sessionId: string } | null) => void
   setAgentMeta: (sessionId: string, meta: SessionMeta | null) => void
   setPaneGit: (fresh: Record<string, PaneGitInfo>, polled: string[]) => void
+  setResume: (sessionId: string, state: ResumeState | null) => void
   moveSurface: (tabId: string, sessionId: string, target: MoveTarget) => void // drag & drop
   setActivePane: (tabId: string, sessionId: string) => void
   focusSession: (sessionId: string) => void
@@ -221,18 +224,20 @@ function markSeen(sessions: Record<string, Session>, sessionId: string): Record<
 function dropSessions(
   state: AppState,
   ids: string[],
-): Pick<AppState, "sessions" | "paneRoot" | "agentMeta" | "paneGit"> {
+): Pick<AppState, "sessions" | "paneRoot" | "agentMeta" | "paneGit" | "resume"> {
   const sessions = { ...state.sessions }
   const paneRoot = { ...state.paneRoot }
   const agentMeta = { ...state.agentMeta }
   const paneGit = { ...state.paneGit }
+  const resume = { ...state.resume }
   for (const id of ids) {
+    delete resume[id]
     delete paneGit[id]
     delete sessions[id]
     delete paneRoot[id] // don't leak the pane's root override
     delete agentMeta[id] // …or its Claude accent
   }
-  return { sessions, paneRoot, agentMeta, paneGit }
+  return { sessions, paneRoot, agentMeta, paneGit, resume }
 }
 
 /** Remove a tab; if it was active, the last remaining tab takes over. */
@@ -273,6 +278,7 @@ export const useStore = create<AppState>((set, get) => ({
   dragging: null,
   agentMeta: {},
   paneGit: {},
+  resume: {},
 
   setHome: (home) => set({ home }),
   setPlatform: (platform) => set({ platform }),
@@ -484,6 +490,16 @@ export const useStore = create<AppState>((set, get) => ({
         delete next[id]
       }
       return next === state.paneGit ? {} : { paneGit: next }
+    }),
+
+  setResume: (sessionId, st) =>
+    set((state) => {
+      if (st && !state.sessions[sessionId]) return {}
+      if (!st && !(sessionId in state.resume)) return {}
+      const resume = { ...state.resume }
+      if (st) resume[sessionId] = st
+      else delete resume[sessionId]
+      return { resume }
     }),
 
   // A Claude pane's /color + /rename from main (null = claude left the pane → no accent).
