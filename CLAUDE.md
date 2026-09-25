@@ -15,26 +15,26 @@ Mono** (chrome) + FiraCode/JetBrains Mono (terminal). Visual design = `mux` (see
 ## Structure
 
 ```
-electron/
-  main.ts               main process: frameless BrowserWindow, ipcMain (pty/settings/shells/notify/links/window-controls/platform/git)
-  preload.ts            contextBridge → window.smterm
-  shell-integration.ts  inlined zsh/bash OSC-133 + OSC-7 (cwd) scripts + listShells (WSL) + buildInjection
-  git.ts                main-process git status/diff (pure parsers, unit-tested) for the changes panel
+electron/                 main process (Node) — see electron/CLAUDE.md
+  main.ts                 BrowserWindow + every ipcMain handler + PTY registry + quit guard
+  preload.ts              contextBridge → window.smterm (mirrors src/lib/ipc.ts)
+  shell-integration.ts    inlined zsh/bash OSC-133/OSC-7 scripts, listShells (WSL), injection
+  git.ts · pane-git.ts    changes panel (status/diff) · per-terminal branch + gh PR (sidebar)
+  agent-hooks.ts          Claude hook-event file drops → AgentEvents (hook-writer builds them)
+  transcript-fold.ts      chunked incremental JSONL reader, shared by:
+    transcript-tokens.ts  · token badge      transcript-meta.ts · /color + /rename
+  agent-meta.ts           per-pane transcript watch → session colour (agents:meta)
 src/
-  main.tsx              renderer entry (bundles fonts)
-  app.tsx               compose: tab bar + active tab's pane layout
-  store.ts              Zustand: sessions + per-tab pane tree + settings + actions
-  types.ts              Session, PaneNode, Tab, ShellOption
-  lib/ipc.ts            typed renderer→main seam (the only backend touchpoint)
-  lib/pane-tree.ts      pure split/remove/collapse/query (unit-tested)
-  lib/session-status.ts pure status reducer + tab-badge aggregation (unit-tested)
-  lib/status-ui.ts      status → dot colour/word/pulse (shared by sidebar/status/pane)
-  lib/session-label.ts  title (rename/OSC/cwd) + shell badge + branch•cwd sublines (pure, tested)
-  lib/shells.ts         resolve the default shell from settings (pure, tested)
-  lib/use-active-cwd.ts hook: focused session's cwd (OSC-7 tracked) → git panel/status bar
-  terminal/terminal-manager.ts  xterm+PTY kept OUTSIDE React, keyed by session id
-  settings/            schema (merge/validate) · themes (tokens→CSS+xterm) · io
-  components/          top-bar, sidebar, status-bar, command-palette, diff-panel, pane-layout, terminal-pane, settings-panel
+  app.tsx · store.ts      compose + global effects/pollers · Zustand state + actions
+  types.ts                Session, PaneLeaf/PaneNode (pane = surfaces), Tab, DropZone
+  terminal/terminal-manager.ts  xterm+PTY OUTSIDE React: attach / park / followSize / WebGL
+  lib/                    pure logic, unit-tested — pane-tree (split/surfaces/move), workspace
+                          (persist + migrate), session-status, session-color, drop-zone,
+                          pane-git, terminal-keys, …; ipc.ts = the only backend seam
+  settings/               schema (merge/validate) · themes (families × dark/light) · io
+  components/             top-bar, sidebar, terminal-pane (surface tabs, drag & drop),
+                          pane-layout, theme-picker, close-pane-dialog, palettes/panels, …
+.claude/skills/run-smterm drive the BUILT app with Playwright (real-app verification)
 ```
 
 ## Commands
@@ -63,6 +63,30 @@ src/
 - **Tests with the feature**: push logic into pure functions (pane-tree, session-status,
   shell-integration parsers) and test those; the risky code earns real tests.
 - **Lint is a gate** (pre-commit hook): `tsc` (renderer + electron), eslint, prettier. Run `make fmt` first.
+- **Verify in the real app** when a change touches terminals, focus, rendering, or Claude
+  integration (Vitest can't load node-pty/WebGL): the `run-smterm` skill. Never run the app
+  against the user's real `HOME` — it overwrites their saved layout and hook settings.
+
+## Invariants
+
+Rules the code relies on but can't enforce — most past review findings broke one of these.
+
+- **Once started, a terminal is mounted in its pane or parked — never unopened**, and never
+  disposed on unmount (only when its session leaves the store). Starting is lazy per tab:
+  after a restore/reload only the active tab's terminals start (incl. its hidden surfaces);
+  a background tab starts when first shown. → GOTCHAS #hidden-terminals
+- **`Tab.activeSessionId` is the focus.** Focusing a terminal also makes it its pane's visible
+  surface (`focusIn`); keyboard focus follows the store, never "whatever just mounted".
+- **Store actions return the same reference when nothing changed** — `tabs`/`sessions`
+  subscribers trigger WebGL reconcile and a workspace save (`replaceTab`, `markSeen`, …).
+- **`useShallow` selectors return primitives** (flatten to `[id, value, …]`); new objects per
+  call never compare equal → endless re-renders.
+- **Settings change via `store.updateSettings`** (validate + apply + persist); the theme to
+  render is `activeTheme(state)` (family × appearance), never `settings.theme` directly.
+- **Persisted files stay readable by older builds** (workspace v2 keeps a legacy `sessionId`
+  per leaf), and a file written by a **newer** build is never overwritten.
+- **Claude hook payloads + transcripts are internal formats** — parse best-effort, never throw,
+  read incrementally off the hot path. → GOTCHAS #claude-transcript
 
 ## Gotchas
 
@@ -84,4 +108,9 @@ rules also in `electron/CLAUDE.md` (loaded on demand). Design detail in `docs/AR
   (incremental write → also survives close); opt-out via `shareHistory` setting. → GOTCHAS #history
 - **`node-pty` is a native module** — `npx electron-rebuild -o node-pty`; not unit-testable in Vitest. → GOTCHAS #node-pty
 - **On Windows the app spawns `wsl.exe`** — never runs _inside_ WSL. → GOTCHAS #windows
+- **Hidden surfaces (and visited background tabs) are parked** — opened off-screen,
+  render-paused — not `visibility:hidden`. Unvisited background tabs aren't started at all. → GOTCHAS #hidden-terminals
+- **No dark flash on launch** needs the `index.html` pre-paint script + `settingsLoaded` gate +
+  saved window bg. → GOTCHAS #first-paint-theme
+- **`/color` + `/rename` live only in Claude's transcript**; slash commands fire no hook. → GOTCHAS #claude-transcript
 - **Agent-status reducer has a known flaw** — don't quick-patch (needs a test matrix). → GOTCHAS #agent-status, ARCHITECTURE §9a
