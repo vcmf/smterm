@@ -1,7 +1,7 @@
 // Where Claude files a session: ~/.claude/projects/<folder, every non-alphanumeric → "-">/<id>.jsonl.
 // `claude --resume <id>` only finds a session from that folder, so a folder that doesn't encode
 // to the transcript's project dir can't be the session's (a background agent's scratchpad, a
-// nested claude's cwd) — the resume ledger uses this to reject such folders.
+// nested claude's cwd) — the resume ledger never resumes into such a folder.
 
 /** Claude's project-folder name for a working directory. */
 export const claudeProjectDirName = (cwd: string): string => cwd.replace(/[^A-Za-z0-9]/g, "-")

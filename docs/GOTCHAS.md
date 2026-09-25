@@ -311,7 +311,8 @@ and `terminal-manager` types `claude --resume <id> [--permission-mode m]` at the
   `~/.claude/projects/<cwd with every non-alphanumeric → "-">/`, and `claude --resume` only finds
   it from that folder. A `SessionStart` whose folder doesn't encode to its transcript's project
   dir falls back to the pane's last verified folder that fits (a stray event from an agent's
-  scratchpad; `/clear` while Claude sits in a subfolder), else it's rejected — logged as
+  scratchpad; `/clear` while Claude sits in a subfolder); with none, the session is still
+  recorded as the pane's lead but never resumed — logged as
   `hook-cwd-fallback` / `hook-cwd-rejected`. A later event whose folder does match is followed
   (a session re-filed under a worktree); `plan()` skips a mismatching entry instead of
   `cd`-ing into it (`src/lib/claude-project.ts`).
@@ -322,8 +323,10 @@ and `terminal-manager` types `claude --resume <id> [--permission-mode m]` at the
   ends the old session first, and `/clear` / `fork` count as one regardless. Main rewrites a
   replaced/rejected folder and tags every root event `nested` before forwarding, so the
   renderer's graph (`in`, status bar, panels) and the pane accent follow only the lead — no
-  second classifier. Known limit: a lead killed with no `SessionEnd` in a shell
-  without our integration (no prompt mark to notice it) keeps leading until the pane closes.
+  second classifier. Known limits: a lead killed with no `SessionEnd` in a shell without our
+  integration (no prompt mark to notice it) keeps leading until the pane closes; and after the
+  lead exits, a surviving agent that runs `claude -p` itself looks exactly like the user starting
+  a new `claude` there, so it can lead.
   Session lifecycle hooks are traced as `hook …` lines in `diagnostics.log`.
 - Known limit: vi-mode users in **normal** mode — ^U doesn't clear the line there, so a banner
   button's keystrokes are read as vi commands. Stay in insert mode (the default) to use them.

@@ -119,12 +119,12 @@ export class SessionLedger {
         nested.add(ev.sessionId)
         return {}
       }
-      const same = cur?.sessionId === ev.sessionId
       // Resume must `cd` where Claude filed the session. A folder that doesn't encode to the
       // transcript's project dir — a stray event from an agent's scratchpad, or Claude sitting
       // in a subfolder when /clear starts a new session — falls back to a known folder of the
-      // pane that fits, else the event is rejected. Undecided (very long path, no transcript):
-      // the same session keeps its recorded folder.
+      // pane that fits; with none, it's recorded but never resumed ("rejected"). Undecided (very
+      // long path, no transcript): the same session keeps its recorded folder.
+      const same = cur?.sessionId === ev.sessionId
       let cwd = ev.cwd
       let verdict: "fallback" | undefined
       let rejected = false
@@ -137,9 +137,11 @@ export class SessionLedger {
           cwd = known
           verdict = "fallback"
         } else {
-          // Nothing verified fits: still record the session — who leads the pane matters (else
-          // its first background agent would take over) — plan() won't resume a mismatch.
+          // Nothing verified fits. The same session keeps its recorded folder; a new one is
+          // still recorded — who leads the pane matters (else its first background agent
+          // would take over) — and plan() won't resume a mismatch.
           rejected = true
+          if (same) cwd = cur.cwd
         }
       } else if (fits === undefined && same) {
         cwd = cur.cwd
@@ -176,7 +178,7 @@ export class SessionLedger {
   /** Is this event's session one launched inside the pane's lead (a background agent…)? */
   isNested(paneId: string, sessionId: string): boolean {
     const lead = this.entries.get(paneId)?.sessionId
-    return this.nestedIn(paneId).has(sessionId) || (!!lead && lead !== sessionId)
+    return !!this.nested.get(paneId)?.has(sessionId) || (!!lead && lead !== sessionId)
   }
 
   private nestedIn(paneId: string): Set<string> {

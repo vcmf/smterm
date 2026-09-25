@@ -460,3 +460,14 @@ describe("SessionLedger — the folder must be where Claude filed the session", 
     })
   })
 })
+
+describe("SessionLedger — an unverifiable restart never costs a resumable folder", () => {
+  it("very long project path: a same-session restart from a short mismatching folder keeps it", async () => {
+    const long = "/Users/me/" + "x".repeat(210)
+    const t = `/Users/me/.claude/projects/${claudeProjectDirName(long)}/${ID}.jsonl`
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: long, transcriptPath: t }))
+    l.apply(start({ cwd: "/tmp/x", transcriptPath: t, source: "compact" }))
+    expect(l.get("p1")?.cwd).toBe(long)
+  })
+})
