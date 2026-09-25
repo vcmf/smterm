@@ -7,6 +7,7 @@
 export interface Drainable {
   kill: (signal?: string) => void
   exited: Promise<void>
+  killed?: boolean // already hung up (a closed pane winding down): wait, don't re-signal
 }
 
 export interface DrainOptions {
@@ -36,6 +37,7 @@ export async function drainPtys(
   const alive = new Set(ptys)
   for (const p of ptys) void p.exited.then(() => alive.delete(p))
   for (const p of ptys) {
+    if (p.killed) continue
     try {
       p.kill() // SIGHUP: the shell (and a Claude inside it) shuts down normally
     } catch {

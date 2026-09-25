@@ -78,7 +78,7 @@ interface PtySession {
   shell: string
   wslDistro?: string // for a WSL pane: the distro, so its Linux paths resolve to the right UNC share
   integrated: boolean // our shell integration (OSC 133 marks, claude wrapper) was injected
-  exited: Promise<void> // resolves in onExit — quitting waits for it (see pty-drain.ts)
+  live: Drainable // this PTY's entry in livePtys (outlives the session record until onExit)
 }
 const sessions = new Map<string, PtySession>()
 // Every node-pty that hasn't reported its exit yet — including closed panes still winding
@@ -175,11 +175,7 @@ function createWindow() {
   })
 
   mainWindow = win
-  win.on("session-end", () => {
-    // Windows logout/shutdown (before-quit may not run) — see onPower.
-    sessionLedger().freeze(60_000)
-    void shutdownPtys() // best effort: end the shells before the OS kills us
-  })
+  win.on("session-end", () => sessionLedger().freeze(60_000)) // Windows logout/shutdown — see onPower
   win.on("closed", () => {
     mainWindow = null
   })
@@ -410,7 +406,7 @@ function registerIpc() {
         // Linux transcript path against the right distro's UNC share (not just the default).
         wslDistro: wsl ? (parseWslDistroArg(opts.args ?? []) ?? defaultWslDistro()) : undefined,
         integrated: !!inj,
-        exited,
+        live,
       }
       if (coalesce) {
         rec.coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, (d) => emit(rec, d))
@@ -451,6 +447,7 @@ function registerIpc() {
     rec.coalescer?.dispose()
     rec.buffer.clear()
     rec.proc.kill()
+    rec.live.killed = true // already hung up: a quit waits for it without signalling again
     sessions.delete(id)
   })
 
@@ -840,7 +837,7 @@ app.setAppUserModelId("com.smterm.app")
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
 app.on("second-instance", () => {
-  if (!mainWindow) return
+  if (!mainWindow || draining) return // quitting: don't resurface a window whose shells are ending
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.focus()
 })
@@ -877,10 +874,9 @@ app.whenReady().then(async () => {
   // OS shutdown / restart / logout: Electron skips before-quit (notably on Windows), so freeze
   // the resume ledger here too — else the dying children's SessionEnds/exits would clear it,
   // and a reboot is exactly when resuming matters.
-  onPower("shutdown", () => {
-    sessionLedger().freeze(60_000) // thaws if the shutdown is cancelled
-    void shutdownPtys() // best effort: end the shells before the OS kills us
-  })
+  // No PTY drain here: a shutdown can be cancelled, and the app must stay usable then. A real
+  // quit (macOS logout sends terminate → before-quit) drains.
+  onPower("shutdown", () => sessionLedger().freeze(60_000)) // thaws if the shutdown is cancelled
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -898,7 +894,7 @@ app.on("will-quit", () => {
 })
 app.on("quit", () => diag("quit"))
 
-/** End every live PTY and wait for its exit (bounded) — see pty-drain.ts. Idempotent. */
+/** Quit only: end every live PTY and wait for its exit (bounded) — see pty-drain.ts. */
 function shutdownPtys(): Promise<void> {
   if (!shutdown) {
     draining = true // refuse new spawns from here on
@@ -953,7 +949,7 @@ function disableConfirmQuit() {
 app.on("before-quit", (e) => {
   if (ptysDrained) return // second pass, after the drain below: let the quit proceed
   diag("before-quit", { ptys: sessions.size, confirmed: quitConfirmed })
-  if (quitConfirmed || sessions.size === 0 || !confirmQuitEnabled() || !mainWindow) {
+  if (draining || quitConfirmed || sessions.size === 0 || !confirmQuitEnabled() || !mainWindow) {
     // Nothing alive: quit right away (a cancelled quit could cancel an OS logout on macOS).
     if (livePtys.size === 0 && !draining) return
     // Else hold the quit until every PTY has exited (≤ ~2 s), then quit for real.

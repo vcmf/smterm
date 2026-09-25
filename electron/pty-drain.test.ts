@@ -82,6 +82,25 @@ describe("drainPtys", () => {
     expect(result).toBe(false)
   })
 
+  it("a PTY already hung up (closed pane) is waited for, not signalled again", async () => {
+    vi.useFakeTimers()
+    const signals: string[] = []
+    let exit!: () => void
+    const closing: Drainable = {
+      killed: true,
+      exited: new Promise((r) => (exit = r)),
+      kill: (sig = "SIGHUP") => void signals.push(sig),
+    }
+    setTimeout(() => exit(), 30) // its own shutdown finishes
+    let done = false
+    void drainPtys([closing], { graceMs: 100 }).then(() => (done = true))
+    await vi.advanceTimersByTimeAsync(10)
+    expect(done).toBe(false)
+    await vi.advanceTimersByTimeAsync(30)
+    expect(done).toBe(true)
+    expect(signals).toEqual([])
+  })
+
   it("nothing to drain → resolves immediately", async () => {
     expect(await drainPtys([])).toBe(true)
   })

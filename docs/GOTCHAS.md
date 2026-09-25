@@ -161,9 +161,12 @@ parsers) and test those; verify the PTY path manually / via the diagnostics log.
 
 **Quit must wait for every PTY's exit.** node-pty reports a child's exit from a background
 thread back into JS; if that lands while Electron is tearing Node down, node-pty throws a C++
-exception nobody catches → `abort()` (a SIGABRT crash report on ⌘Q). `before-quit` therefore
-holds the quit, drains the PTYs (`pty-drain.ts`: SIGHUP, then SIGKILL after 1.5 s, always
-resolves) and only then quits. Never quit/exit with PTYs still alive.
+exception nobody catches → `abort()` (a SIGABRT crash report on ⌘Q). `before-quit` holds the
+quit and drains `livePtys` — every node-pty not yet exited, closed panes still winding down
+included (`pty-drain.ts`: SIGHUP, SIGKILL after 1.5 s; Windows: no signals + a 300 ms settle;
+always resolves), refusing new spawns meanwhile. Only a quit drains: an OS shutdown/logout
+event can be cancelled, and the app must stay usable then. Known gap: a Windows logoff that
+skips `before-quit`.
 
 ## GUI launch has a bare PATH — import the login-shell env {#shell-env}
 
