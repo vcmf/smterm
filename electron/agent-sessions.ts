@@ -56,6 +56,8 @@ export function resumeCommand(e: LedgerEntry, allowBypass: boolean): string | nu
 export class SessionLedger {
   // Per pane: the last folder that matched its session's transcript (in memory only).
   private verified = new Map<string, string>()
+  // Per pane: sessions launched inside its lead, until they end (in memory only).
+  private nested = new Map<string, Set<string>>()
   private entries = new Map<string, LedgerEntry>() // key: smterm pane (session) id
   private frozen = false
   private timer?: ReturnType<typeof setTimeout>
@@ -91,36 +93,53 @@ export class SessionLedger {
     }
   }
 
-  /** Fold one hook event; says when a SessionStart's folder wasn't the session's. */
-  apply(ev: AgentEvent, wslDistro?: string): "rejected" | "fallback" | undefined {
-    if (this.frozen || !ev.paneId || ev.agentId) return
-    const cur = this.entries.get(ev.paneId)
+  /** Fold one hook event. For a SessionStart: whether its folder was replaced (`fallback`, with
+   *  the folder used) or it was dropped (`rejected`) — main rewrites the event to match. */
+  apply(ev: AgentEvent, wslDistro?: string): { verdict?: "rejected" | "fallback"; cwd?: string } {
+    if (this.frozen || !ev.paneId || ev.agentId) return {}
+    const pane = ev.paneId
+    const cur = this.entries.get(pane)
+    const nested = this.nestedIn(pane)
+    if (ev.event === "SessionEnd") {
+      nested.delete(ev.sessionId)
+      if (cur?.sessionId === ev.sessionId) this.delete(pane)
+      return {}
+    }
+    // A session once launched inside the pane's lead stays nested until it ends — a background
+    // agent keeps running after the lead exits (or across a thaw) and must never become it.
+    if (nested.has(ev.sessionId)) return {}
     if (ev.event === "SessionStart") {
-      if (!ev.cwd) return
+      if (!ev.cwd) return {}
       // Another session starting while the pane's session (recorded THIS run) is live was
-      // launched from inside it — a background agent (its own startup, compact or resume), a
-      // nested `claude -p`: keep the lead. A real switch (/clear, /resume) ends the old one
-      // first. An entry carried over from the previous run is always replaceable.
-      if (cur && !cur.carried && cur.sessionId !== ev.sessionId) return
+      // launched from inside it — a background agent (its startup, compact or resume), a nested
+      // `claude -p`. A real switch ends the old one first; /clear and fork count as a switch
+      // even if that SessionEnd got lost. A carried-over entry is always replaceable.
+      const isSwitch = ev.source === "clear" || ev.source === "fork"
+      if (cur && !cur.carried && cur.sessionId !== ev.sessionId && !isSwitch) {
+        nested.add(ev.sessionId)
+        return {}
+      }
+      const same = cur?.sessionId === ev.sessionId
       // Resume must `cd` where Claude filed the session. A folder that doesn't encode to the
       // transcript's project dir — a stray event from an agent's scratchpad, or Claude sitting
       // in a subfolder when /clear starts a new session — falls back to a known folder of the
-      // pane that fits, else the event is rejected.
+      // pane that fits, else the event is rejected. Undecided (very long path, no transcript):
+      // the same session keeps its recorded folder.
       let cwd = ev.cwd
       let verdict: "fallback" | undefined
-      let fits = cwdMatchesTranscript(cwd, ev.transcriptPath)
+      const fits = cwdMatchesTranscript(cwd, ev.transcriptPath)
       if (fits === false) {
-        const known = [this.verified.get(ev.paneId), cur?.cwd].find(
+        const known = [this.verified.get(pane), cur?.cwd].find(
           (k) => k !== undefined && cwdMatchesTranscript(k, ev.transcriptPath) === true,
         )
-        if (!known) return "rejected"
+        if (!known) return { verdict: "rejected" }
         cwd = known
-        fits = true
         verdict = "fallback"
+      } else if (fits === undefined && same) {
+        cwd = cur.cwd
       }
-      if (fits === true) this.verified.set(ev.paneId, cwd)
-      const same = cur?.sessionId === ev.sessionId
-      this.set(ev.paneId, {
+      if (fits === true || verdict) this.verified.set(pane, cwd)
+      this.set(pane, {
         sessionId: ev.sessionId,
         cwd,
         // The same session restarting keeps what the event doesn't say (a stray event carries
@@ -131,25 +150,32 @@ export class SessionLedger {
         wslDistro,
         updatedAt: this.now(),
       })
-      return verdict
-    } else if (ev.event === "SessionEnd") {
-      if (cur?.sessionId === ev.sessionId) this.delete(ev.paneId)
-    } else if (cur?.sessionId === ev.sessionId) {
-      let next = cur
-      if (ev.permissionMode && ev.permissionMode !== cur.permissionMode)
-        next = { ...next, permissionMode: ev.permissionMode }
-      // Claude re-files a session that enters a worktree under the worktree's folder: follow
-      // it (only a folder matching the transcript's — a plain `cd src` never does).
-      if (
-        ev.cwd &&
-        ev.cwd !== cur.cwd &&
-        cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === true
-      ) {
-        next = { ...next, cwd: ev.cwd, transcriptPath: ev.transcriptPath }
-        this.verified.set(ev.paneId, ev.cwd)
-      }
-      if (next !== cur) this.set(ev.paneId, { ...next, updatedAt: this.now() })
+      return verdict ? { verdict, cwd } : {}
     }
+    if (cur?.sessionId !== ev.sessionId) return {}
+    let next = cur
+    if (ev.permissionMode && ev.permissionMode !== cur.permissionMode)
+      next = { ...next, permissionMode: ev.permissionMode }
+    // Claude re-files a session that enters a worktree under the worktree's folder: follow it
+    // (only a folder matching the transcript's — a plain `cd src` never does).
+    if (ev.cwd && ev.cwd !== cur.cwd && cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === true) {
+      next = { ...next, cwd: ev.cwd, transcriptPath: ev.transcriptPath }
+      this.verified.set(pane, ev.cwd)
+    }
+    if (next !== cur) this.set(pane, { ...next, updatedAt: this.now() })
+    return {}
+  }
+
+  /** Is this event's session one launched inside the pane's lead (a background agent…)? */
+  isNested(paneId: string, sessionId: string): boolean {
+    const lead = this.entries.get(paneId)?.sessionId
+    return this.nestedIn(paneId).has(sessionId) || (!!lead && lead !== sessionId)
+  }
+
+  private nestedIn(paneId: string): Set<string> {
+    let set = this.nested.get(paneId)
+    if (!set) this.nested.set(paneId, (set = new Set()))
+    return set
   }
 
   /** The session's /rename (from the transcript meta tracker), shown on the resume banner. */
@@ -167,6 +193,7 @@ export class SessionLedger {
   drop(paneId: string): void {
     if (this.frozen) return
     this.verified.delete(paneId)
+    this.nested.delete(paneId)
     if (this.entries.has(paneId)) this.delete(paneId)
   }
 
@@ -239,6 +266,7 @@ export class SessionLedger {
   prune(keep: Set<string>): void {
     for (const id of [...this.entries.keys()]) if (!keep.has(id)) this.delete(id)
     for (const id of [...this.verified.keys()]) if (!keep.has(id)) this.verified.delete(id)
+    for (const id of [...this.nested.keys()]) if (!keep.has(id)) this.nested.delete(id)
   }
 
   get(paneId: string): LedgerEntry | undefined {

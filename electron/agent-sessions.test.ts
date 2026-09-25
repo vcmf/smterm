@@ -3,6 +3,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { SessionLedger, resumeCommand } from "./agent-sessions"
+import { claudeProjectDirName } from "../src/lib/claude-project"
 import type { AgentEvent } from "../src/lib/agent-graph"
 
 const ID = "7fe87f63-8ccf-437e-b991-94aa4ee44a0e"
@@ -314,12 +315,36 @@ describe("SessionLedger persistence", () => {
 
 describe("SessionLedger — a session launched inside the lead never replaces it", () => {
   it("a background agent's own compact / resume (not just its startup) is nested", () => {
-    for (const source of ["startup", "compact", "resume", "clear"]) {
+    for (const source of ["startup", "compact", "resume"]) {
       const l = new SessionLedger(null)
       l.apply(start())
       l.apply(start({ sessionId: ID2, source }))
       expect(l.get("p1")?.sessionId, source).toBe(ID)
+      expect(l.isNested("p1", ID2)).toBe(true)
+      expect(l.isNested("p1", ID)).toBe(false)
     }
+  })
+
+  it("/clear or fork switches even if the old session's SessionEnd got lost", () => {
+    for (const source of ["clear", "fork"]) {
+      const l = new SessionLedger(null)
+      l.apply(start())
+      l.apply(start({ sessionId: ID2, source }))
+      expect(l.get("p1")?.sessionId, source).toBe(ID2)
+    }
+  })
+
+  it("a nested session stays nested after the lead ends — it never becomes the lead", () => {
+    const ID3 = "11111111-2222-4333-8444-555555555555"
+    const l = new SessionLedger(null)
+    l.apply(start())
+    l.apply(start({ sessionId: ID2 })) // the background agent
+    l.apply(end()) // the user leaves Claude; the agent keeps running
+    l.apply(start({ sessionId: ID2, source: "compact" })) // the agent compacts
+    expect(l.get("p1")).toBeUndefined()
+    expect(l.isNested("p1", ID2)).toBe(true)
+    l.apply(start({ sessionId: ID3 })) // the user's next real claude leads
+    expect(l.get("p1")?.sessionId).toBe(ID3)
   })
 })
 
@@ -336,7 +361,7 @@ describe("SessionLedger — the folder must be where Claude filed the session", 
       l.apply(
         start({ cwd: PAD, transcriptPath: T_DIMO, source: "resume", permissionMode: undefined }),
       ),
-    ).toBe("fallback")
+    ).toEqual({ verdict: "fallback", cwd: DIMO })
     expect(l.get("p1")?.cwd).toBe(DIMO)
     expect(l.get("p1")?.permissionMode).toBe("default") // kept, not wiped by the stray event
   })
@@ -358,7 +383,7 @@ describe("SessionLedger — the folder must be where Claude filed the session", 
 
   it("no verified folder that fits → rejected (nothing to resume beats a wrong folder)", () => {
     const l = new SessionLedger(null)
-    expect(l.apply(start({ cwd: PAD, transcriptPath: T_DIMO }))).toBe("rejected")
+    expect(l.apply(start({ cwd: PAD, transcriptPath: T_DIMO }))).toEqual({ verdict: "rejected" })
     expect(l.get("p1")).toBeUndefined()
   })
 
@@ -392,6 +417,15 @@ describe("SessionLedger — the folder must be where Claude filed the session", 
       cwd: wt,
       transcriptPath: tr("-Users-me-up-asianf--claude-worktrees-x"),
     })
+  })
+
+  it("an undecided check (very long path) keeps a restarting session's recorded folder", () => {
+    const long = "/Users/me/" + "x".repeat(210)
+    const t = tr(claudeProjectDirName(long))
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: long, transcriptPath: t }))
+    l.apply(start({ cwd: `${long}/packages/a`, transcriptPath: t, source: "compact" }))
+    expect(l.get("p1")?.cwd).toBe(long)
   })
 
   it("an entry recorded with a mismatching folder (before this check) is skipped, never cd'd into", async () => {

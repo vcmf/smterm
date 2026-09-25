@@ -250,25 +250,28 @@ async function startAgentObservability(): Promise<void> {
         for (const ev of events) {
           // Session lifecycle only (never per-tool events): traceable when resume goes wrong.
           if (TRACED_HOOKS.has(ev.event)) diag("hook", hookTrace(ev))
-          const verdict = sessionLedger().apply(
+          const r = sessionLedger().apply(
             ev,
             ev.paneId ? sessions.get(ev.paneId)?.wslDistro : undefined,
           )
-          if (verdict) diag(`hook-cwd-${verdict}`, hookTrace(ev))
+          if (r.verdict) diag(`hook-cwd-${r.verdict}`, hookTrace(ev))
+          // The renderer's graph takes the ledger's folder: a replaced one is rewritten, a
+          // rejected one dropped (the graph keeps what it knew) — no second classifier there.
+          if (r.verdict === "fallback") ev.cwd = r.cwd
+          else if (r.verdict === "rejected") ev.cwd = undefined
           // One classifier for "who leads this pane": the ledger. Tag every root event so the
-          // renderer's graph agrees (and survives a renderer reload — the ledger lives here).
-          const lead = ev.paneId && !ev.agentId ? sessionLedger().get(ev.paneId) : undefined
-          if (lead) ev.nested = lead.sessionId !== ev.sessionId
+          // graph and the accent agree (and survive a renderer reload — the ledger lives here).
+          if (ev.paneId && !ev.agentId)
+            ev.nested = sessionLedger().isNested(ev.paneId, ev.sessionId)
         }
         mainWindow?.webContents.send("agents:events", events)
         // Session-level events locate each Claude pane's transcript → track its /color and
         // /rename for the pane accent (async + debounced; SessionEnd stops it).
         for (const ev of events) {
           if (!ev.paneId || !ev.transcriptPath || ev.agentId) continue
-          // Only the pane's own session: a background agent inherits the pane but mustn't
-          // switch its accent to the agent's transcript.
-          const lead = sessionLedger().get(ev.paneId)?.sessionId
-          if (lead && lead !== ev.sessionId) continue
+          // Only the pane's own session (this event's own verdict, not the state after the whole
+          // batch): a background agent inherits the pane but mustn't take its accent.
+          if (ev.nested) continue
           if (ev.event === "SessionEnd") agentMeta.untrack(ev.paneId, true, ev.transcriptPath)
           else
             agentMeta.track(

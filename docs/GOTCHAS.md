@@ -318,9 +318,11 @@ and `terminal-manager` types `claude --resume <id> [--permission-mode m]` at the
 - **Background agents inherit the pane.** Claude's named agents run as separate `claude`
   processes with our `SMTERM_PANE_ID` + hooks. **One classifier decides the pane's lead: the
   ledger** — while a live lead exists, any other session's `SessionStart` (startup, compact,
-  resume) is nested; a real switch (`/clear`, `/resume`) ends the old session first. Main tags
-  every root event `nested` from it, and the renderer's graph (`in`, status bar, panels) and the
-  pane accent follow only the lead. Known limit: a lead killed with no `SessionEnd` in a shell
+  resume) is nested, and stays nested until it ends (an agent outlives its lead); a real switch
+  ends the old session first, and `/clear` / `fork` count as one regardless. Main rewrites a
+  replaced/rejected folder and tags every root event `nested` before forwarding, so the
+  renderer's graph (`in`, status bar, panels) and the pane accent follow only the lead — no
+  second classifier. Known limit: a lead killed with no `SessionEnd` in a shell
   without our integration (no prompt mark to notice it) keeps leading until the pane closes.
   Session lifecycle hooks are traced as `hook …` lines in `diagnostics.log`.
 - Known limit: vi-mode users in **normal** mode — ^U doesn't clear the line there, so a banner

@@ -271,37 +271,12 @@ describe("background agents don't take the pane over (main tags them nested)", (
   })
 })
 
-describe("a stray SessionStart from another folder doesn't move the lead", () => {
-  it("keeps the lead's folder when a SessionStart's folder isn't where Claude filed it", () => {
-    const tr = "/Users/me/.claude/projects/-dimo/lead.jsonl"
+describe("a stray SessionStart main rejected doesn't move the lead", () => {
+  it("main drops a rejected folder (cwd undefined): the graph keeps the lead's folder", () => {
     const g = graph([
-      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", transcriptPath: tr },
-      {
-        event: "SessionStart",
-        sessionId: "lead",
-        paneId: "p",
-        cwd: "/tmp/x/scratchpad",
-        transcriptPath: tr,
-        source: "resume",
-      },
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", nested: false },
+      { event: "SessionStart", sessionId: "lead", paneId: "p", source: "resume", nested: false },
     ])
     expect(claudeWorkDirs(g).p?.cwd).toBe("/dimo")
-  })
-
-  it("…and doesn't reset its status (a working lead stays working)", () => {
-    const tr = "/Users/me/.claude/projects/-dimo/lead.jsonl"
-    const g = graph([
-      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", transcriptPath: tr },
-      { event: "UserPromptSubmit", sessionId: "lead", paneId: "p" },
-      {
-        event: "SessionStart",
-        sessionId: "lead",
-        paneId: "p",
-        cwd: "/tmp/pad",
-        transcriptPath: tr,
-        source: "resume",
-      },
-    ])
-    expect(g.nodes["root:lead"]?.status).toBe("working")
   })
 })

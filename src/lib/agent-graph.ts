@@ -12,8 +12,6 @@
 // (UserPromptSubmit) drops the previous turn's finished sub-agents, and SessionEnd
 // evicts the whole session. So finished agents disappear rather than piling up.
 
-import { cwdMatchesTranscript } from "./claude-project"
-
 export type AgentStatus = "working" | "waiting" | "idle" | "done"
 
 /** Token usage read from a transcript (see electron/transcript-tokens.ts).
@@ -64,7 +62,7 @@ export interface AgentNode {
   recentFiles: string[] // most-recent-first, capped
   worktrees?: Worktree[] // worktrees created in this session (WorktreeCreate), root only
   started?: number // root: order of its latest SessionStart — the newest per pane is live
-  nested?: boolean // root: a `startup` while the pane's lead ran (background agent, claude -p)
+  nested?: boolean // root: launched inside the pane's lead (background agent) — main decides
   lastMessage?: string
   tokens?: TokenUsage // cumulative token usage (session root or sub-agent), off-band via hooks
   parentId?: string // undefined for a root
@@ -105,8 +103,7 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
   const at = (id: string) => nodes[id] as AgentNode
 
   // Every event belongs to a session → ensure that session's root node exists.
-  const isNew = !nodes[rid]
-  if (isNew) {
+  if (!nodes[rid]) {
     nodes[rid] = {
       id: rid,
       sessionId: ev.sessionId,
@@ -151,9 +148,6 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
 
   switch (ev.event) {
     case "SessionStart":
-      // A SessionStart for a session we know, from a folder Claude didn't file it under, is
-      // a stray (a background agent's scratchpad): ignore it — status and folder alike.
-      if (!isNew && cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === false) break
       // A (re)start — also in another pane (`claude --resume` after a crash) — makes it its
       // pane's newest session (`started`); the board order (rootIds) never changes.
       set(rid, {
