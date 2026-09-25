@@ -4,6 +4,7 @@ import { Sidebar } from "./sidebar"
 import { useStore } from "../store"
 import { allSessionIds } from "../lib/pane-tree"
 import { resetStore, testShell } from "../test/helpers"
+import { TerminalManager } from "../terminal/terminal-manager"
 
 vi.mock("../terminal/terminal-manager", () => ({
   TerminalManager: { attach: vi.fn(), fit: vi.fn(), focus: vi.fn(), dispose: vi.fn() },
@@ -221,5 +222,32 @@ describe("Sidebar — folder lines: full path + right-click menu", () => {
     fireEvent.contextMenu(line())
     fireEvent.mouseDown(screen.getByText("Open terminal here"))
     expect(split).toHaveBeenCalledWith("/Users/test/work/term", id)
+  })
+
+  it("a right-click doesn't switch to / focus that pane (Escape would reach its Claude)", () => {
+    const id = setup()
+    st().newTab(testShell) // a second tab is now active
+    const other = st().activeTabId
+    const { container } = render(<Sidebar />)
+    const line = [...container.querySelectorAll(".tree-dir")].find((el) =>
+      el.getAttribute("title")?.includes("/Users/test/work/term"),
+    )!
+    fireEvent.mouseDown(line, { button: 2 })
+    fireEvent.contextMenu(line)
+    expect(st().activeTabId).toBe(other)
+    expect(TerminalManager.focus).not.toHaveBeenCalled()
+    fireEvent.mouseDown(line, { button: 0 }) // a left click still focuses it
+    expect(st().activeTabId).not.toBe(other)
+    void id
+  })
+
+  it("Reveal is unavailable for a WSL pane's path", () => {
+    st().newTab({ id: "wsl", label: "Ubuntu", command: "wsl.exe", args: ["-d", "Ubuntu"] })
+    const id = st().tabs[0]!.activeSessionId
+    st().setSessionCwd(id, "/home/u/repo")
+    const { container } = render(<Sidebar />)
+    fireEvent.contextMenu(container.querySelector(".tree-dir")!)
+    expect(screen.getByText("WSL path")).toBeInTheDocument()
+    expect(screen.getByText(/Reveal in|Show in/).closest("button")).toBeDisabled()
   })
 })

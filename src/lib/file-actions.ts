@@ -63,16 +63,16 @@ export function fileMenuItems(input: FileMenuInput): MenuItemSpec[] {
   return items
 }
 
-/** The sidebar's folder-line menu. Reveal needs a host path (not a WSL one). */
-export function folderMenuItems(revealLabel: string, canReveal: boolean): MenuItemSpec[] {
+/** The sidebar's folder-line menu; `revealHint` = why Reveal is unavailable (e.g. a WSL path). */
+export function folderMenuItems(revealLabel: string, revealHint?: string): MenuItemSpec[] {
   return [
     { id: "copyPath", label: "Copy path" },
     { id: "openHere", label: "Open terminal here" },
     {
       id: "reveal",
       label: revealLabel,
-      disabled: !canReveal,
-      hint: canReveal ? undefined : "WSL path",
+      disabled: !!revealHint,
+      hint: revealHint,
       separatorBefore: true,
     },
   ]

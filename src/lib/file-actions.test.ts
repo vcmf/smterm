@@ -79,12 +79,12 @@ describe("clampMenuPosition", () => {
 
 describe("folderMenuItems", () => {
   it("copy, open a terminal there, reveal — reveal disabled for a WSL path", () => {
-    expect(folderMenuItems("Reveal in Finder", true).map((i) => i.label)).toEqual([
+    expect(folderMenuItems("Reveal in Finder").map((i) => i.label)).toEqual([
       "Copy path",
       "Open terminal here",
       "Reveal in Finder",
     ])
-    const wsl = folderMenuItems("Reveal in Explorer", false)[2]
+    const wsl = folderMenuItems("Reveal in Explorer", "WSL path")[2]
     expect(wsl).toMatchObject({ disabled: true, hint: "WSL path" })
   })
 })

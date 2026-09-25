@@ -98,26 +98,35 @@ export function Sidebar() {
     x: number
     y: number
     path: string
-    tabId: string
     sessionId: string
-    canReveal: boolean
+    revealHint?: string // why Reveal is unavailable (undefined = available)
   } | null>(null)
-  const openDirMenu = (e: React.MouseEvent, path: string, tabId: string, sessionId: string) => {
+  const openDirMenu = (e: React.MouseEvent, path: string, sessionId: string) => {
     e.preventDefault()
     e.stopPropagation()
     const s = useStore.getState().sessions[sessionId]
     const wsl = s ? wslContext(s.command, s.args) : undefined
-    const canReveal = !wsl && isAbsoluteHostPath(path)
-    setDirMenu({ x: e.clientX, y: e.clientY, path, tabId, sessionId, canReveal })
+    // Reveal needs a path the host OS can open: not a WSL one, nor a POSIX-style path on
+    // Windows (Git Bash's /c/…).
+    const revealHint = wsl
+      ? "WSL path"
+      : !isAbsoluteHostPath(path) || (platform === "win32" && path.startsWith("/"))
+        ? "not a host path"
+        : undefined
+    setDirMenu({ x: e.clientX, y: e.clientY, path, sessionId, revealHint })
   }
   const onDirAction = (id: FileActionId) => {
     if (!dirMenu) return
     if (id === "copyPath") ipc.clipboardWrite(dirMenu.path)
     else if (id === "reveal") ipc.revealPath(dirMenu.path)
     else if (id === "openHere") {
-      // Split beside that terminal (its shell — so a WSL path opens in WSL).
-      focusPane(dirMenu.tabId, dirMenu.sessionId)
-      useStore.getState().openFolderInSplit(dirMenu.path, dirMenu.sessionId)
+      // Split beside that terminal (its shell — so a WSL path opens in WSL). focusSession (not
+      // focusPane): no deferred DOM focus stealing it back from the new split; a pane closed
+      // meanwhile → no-op.
+      const s = useStore.getState()
+      if (!s.sessions[dirMenu.sessionId]) return
+      s.focusSession(dirMenu.sessionId)
+      s.openFolderInSplit(dirMenu.path, dirMenu.sessionId)
     }
   }
 
@@ -194,7 +203,9 @@ export function Sidebar() {
                       // A surface hidden behind another in its pane reads dimmer.
                       className={`tree-row${isActive ? " active" : ""}${visible.has(id) ? "" : " surface-hidden"}`}
                       style={{ paddingLeft: 32 }}
-                      onMouseDown={() => focusPane(tab.id, id)}
+                      // Left button only: a right-click (folder menu) mustn't switch tabs or
+                      // focus the terminal (Escape closing the menu would reach a running Claude).
+                      onMouseDown={(e) => e.button === 0 && focusPane(tab.id, id)}
                     >
                       <span className="tree-icon">
                         {(() => {
@@ -228,7 +239,7 @@ export function Sidebar() {
                           shellGit={paneGit[id]}
                           inGit={paneGit[inGitKey(id)]}
                           work={work[id]}
-                          onMenu={(e, path) => openDirMenu(e, path, tab.id, id)}
+                          onMenu={(e, path) => openDirMenu(e, path, id)}
                         />
                       </div>
                       {s.status !== "attention" && (
@@ -249,7 +260,7 @@ export function Sidebar() {
         <ContextMenu
           x={dirMenu.x}
           y={dirMenu.y}
-          items={folderMenuItems(revealLabel(platform), dirMenu.canReveal)}
+          items={folderMenuItems(revealLabel(platform), dirMenu.revealHint)}
           onSelect={onDirAction}
           onClose={() => setDirMenu(null)}
         />
