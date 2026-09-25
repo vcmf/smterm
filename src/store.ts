@@ -125,6 +125,7 @@ interface AppState {
   renameTab: (tabId: string, title: string) => void
   splitActive: (direction: "row" | "column", fallback?: ShellOption) => void
   openFolderInSplit: (cwd: string, paneId?: string) => void // split active pane at cwd; shell from paneId
+  splitPaneAt: (paneId: string, cwd: string) => void // split beside that pane (its shell); not "seen"
   newSurface: (fallback?: ShellOption) => void // new terminal tab in the focused pane
   closeSurface: (tabId: string, sessionId: string) => void // one terminal; last one closes the pane
   closePane: (tabId: string, paneId: string) => void // the pane with all its terminals
@@ -406,6 +407,21 @@ export const useStore = create<AppState>((set, get) => ({
       const shell = inheritShell(state.shells, agentSession ?? src) ?? state.shells[0]
       if (!shell) return {}
       return splitActivePane(state, { shell, cwd, direction: "row" })
+    }),
+
+  // A terminal at `cwd` beside pane `paneId` (any tab), with its shell — the new split takes
+  // focus. Unlike focusing the pane first, its attention/unread state stays (you never looked).
+  splitPaneAt: (paneId, cwd) =>
+    set((state) => {
+      const tab = state.tabs.find((t) => allSessionIds(t.root).includes(paneId))
+      const shell = inheritShell(state.shells, state.sessions[paneId]) ?? state.shells[0]
+      if (!tab || !shell) return {}
+      const at = {
+        ...state,
+        activeTabId: tab.id,
+        tabs: replaceTab(state.tabs, tab.id, (t) => focusIn(t, paneId)),
+      }
+      return { activeTabId: tab.id, ...splitActivePane(at, { shell, cwd, direction: "row" }) }
     }),
 
   // New terminal as a tab (surface) of the focused pane, inheriting its shell + cwd.

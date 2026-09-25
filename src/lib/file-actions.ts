@@ -13,8 +13,9 @@ export interface EditorInfo {
 // A path we can safely hand to the OS on the host: POSIX-absolute (/…) or a Windows
 // drive path (C:\… / C:/…). Guards the file menu against repo-relative paths (empty
 // git root) and WSL paths that the Windows/macOS host can't resolve.
-export function isAbsoluteHostPath(p: string): boolean {
-  return /^\//.test(p) || /^[A-Za-z]:[\\/]/.test(p) || /^\\\\/.test(p)
+export function isAbsoluteHostPath(p: string, platform?: string): boolean {
+  if (/^[A-Za-z]:[\\/]/.test(p) || /^\\\\/.test(p)) return true
+  return /^\//.test(p) && platform !== "win32" // on Windows a /… path is Git Bash's, not the host's
 }
 
 // Platform-appropriate label for the reveal-in-file-manager action.

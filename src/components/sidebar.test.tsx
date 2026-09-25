@@ -4,7 +4,6 @@ import { Sidebar } from "./sidebar"
 import { useStore } from "../store"
 import { allSessionIds } from "../lib/pane-tree"
 import { resetStore, testShell } from "../test/helpers"
-import { TerminalManager } from "../terminal/terminal-manager"
 
 vi.mock("../terminal/terminal-manager", () => ({
   TerminalManager: { attach: vi.fn(), fit: vi.fn(), focus: vi.fn(), dispose: vi.fn() },
@@ -212,8 +211,6 @@ describe("Sidebar — folder lines: full path + right-click menu", () => {
   it("right-click: copy the path, or open a terminal there beside that pane", async () => {
     const { ipc } = await import("../lib/ipc")
     const id = setup()
-    const split = vi.fn()
-    useStore.setState({ openFolderInSplit: split })
     const { container } = render(<Sidebar />)
     const line = () => container.querySelector(".tree-dir")!
     fireEvent.contextMenu(line())
@@ -221,7 +218,10 @@ describe("Sidebar — folder lines: full path + right-click menu", () => {
     expect(ipc.clipboardWrite).toHaveBeenCalledWith("/Users/test/work/term")
     fireEvent.contextMenu(line())
     fireEvent.mouseDown(screen.getByText("Open terminal here"))
-    expect(split).toHaveBeenCalledWith("/Users/test/work/term", id)
+    const tab = st().tabs[0]!
+    expect(allSessionIds(tab.root)).toHaveLength(2) // split beside that pane…
+    expect(tab.activeSessionId).not.toBe(id) // …and the new one is focused
+    expect(st().sessions[tab.activeSessionId]?.cwd).toBe("/Users/test/work/term")
   })
 
   it("a right-click doesn't switch to / focus that pane (Escape would reach its Claude)", () => {
@@ -233,12 +233,28 @@ describe("Sidebar — folder lines: full path + right-click menu", () => {
       el.getAttribute("title")?.includes("/Users/test/work/term"),
     )!
     fireEvent.mouseDown(line, { button: 2 })
+    fireEvent.mouseDown(line, { button: 0, ctrlKey: true }) // macOS Ctrl-click = right-click
     fireEvent.contextMenu(line)
     expect(st().activeTabId).toBe(other)
-    expect(TerminalManager.focus).not.toHaveBeenCalled()
-    fireEvent.mouseDown(line, { button: 0 }) // a left click still focuses it
+    fireEvent.mouseDown(line, { button: 0 }) // a plain left click still focuses it
     expect(st().activeTabId).not.toBe(other)
     void id
+  })
+
+  it("Open terminal here keeps the source pane's attention (you never looked at it)", () => {
+    const id = setup()
+    useStore.setState((x) => ({
+      sessions: {
+        ...x.sessions,
+        [id]: { ...x.sessions[id]!, status: "attention", detail: "permission" },
+      },
+    }))
+    const before = st().sessions[id]?.status
+    expect(before).toBe("attention")
+    const { container } = render(<Sidebar />)
+    fireEvent.contextMenu(container.querySelector(".tree-dir")!)
+    fireEvent.mouseDown(screen.getByText("Open terminal here"))
+    expect(st().sessions[id]?.status).toBe(before)
   })
 
   it("Reveal is unavailable for a WSL pane's path", () => {

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useShallow } from "zustand/react/shallow"
 import {
   CaretDown,
@@ -110,23 +110,27 @@ export function Sidebar() {
     // Windows (Git Bash's /c/…).
     const revealHint = wsl
       ? "WSL path"
-      : !isAbsoluteHostPath(path) || (platform === "win32" && path.startsWith("/"))
+      : !isAbsoluteHostPath(path, platform)
         ? "not a host path"
         : undefined
     setDirMenu({ x: e.clientX, y: e.clientY, path, sessionId, revealHint })
   }
+  // Closing the menu (Escape, outside click, any action) returns focus to the active terminal
+  // — the one you were typing in, or the split "Open terminal here" just made.
+  const closeDirMenu = useCallback(() => {
+    setDirMenu(null)
+    const s = useStore.getState()
+    const sid = s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId
+    if (sid) requestAnimationFrame(() => TerminalManager.focus(sid))
+  }, [])
   const onDirAction = (id: FileActionId) => {
     if (!dirMenu) return
     if (id === "copyPath") ipc.clipboardWrite(dirMenu.path)
     else if (id === "reveal") ipc.revealPath(dirMenu.path)
     else if (id === "openHere") {
-      // Split beside that terminal (its shell — so a WSL path opens in WSL). focusSession (not
-      // focusPane): no deferred DOM focus stealing it back from the new split; a pane closed
-      // meanwhile → no-op.
-      const s = useStore.getState()
-      if (!s.sessions[dirMenu.sessionId]) return
-      s.focusSession(dirMenu.sessionId)
-      s.openFolderInSplit(dirMenu.path, dirMenu.sessionId)
+      // Split beside that terminal, with its shell (a WSL path opens in WSL); the new split
+      // takes focus. A pane closed meanwhile → no-op.
+      useStore.getState().splitPaneAt(dirMenu.sessionId, dirMenu.path)
     }
   }
 
@@ -205,7 +209,8 @@ export function Sidebar() {
                       style={{ paddingLeft: 32 }}
                       // Left button only: a right-click (folder menu) mustn't switch tabs or
                       // focus the terminal (Escape closing the menu would reach a running Claude).
-                      onMouseDown={(e) => e.button === 0 && focusPane(tab.id, id)}
+                      // (macOS Ctrl-click is a right-click that reports button 0.)
+                      onMouseDown={(e) => e.button === 0 && !e.ctrlKey && focusPane(tab.id, id)}
                     >
                       <span className="tree-icon">
                         {(() => {
@@ -262,7 +267,7 @@ export function Sidebar() {
           y={dirMenu.y}
           items={folderMenuItems(revealLabel(platform), dirMenu.revealHint)}
           onSelect={onDirAction}
-          onClose={() => setDirMenu(null)}
+          onClose={closeDirMenu}
         />
       )}
       <div className="legend">
