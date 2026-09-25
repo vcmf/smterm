@@ -42,6 +42,7 @@ export interface AgentEvent {
   agentTranscriptPath?: string // agent_transcript_path — a sub-agent's own JSONL
   tokens?: TokenUsage // synthetic "TokenUsage" event: cumulative usage for the target node
   source?: string // SessionStart: startup | resume | clear | compact | fork
+  nested?: boolean // main's verdict: a session launched inside the pane's lead (background agent)
   reason?: string // SessionEnd: prompt_input_exit | logout | clear | resume | other
   permissionMode?: string // permission_mode (default | acceptEdits | plan | bypassPermissions …)
 }
@@ -138,6 +139,11 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
     }
   }
 
+  // Main decides which session leads the pane (one classifier, shared with resume + accent):
+  // a background agent inherits the pane but mustn't take `in` over.
+  if (ev.nested !== undefined && !ev.agentId && nodes[rid]?.nested !== ev.nested)
+    nodes[rid] = { ...at(rid), nested: ev.nested }
+
   const targetId = ev.agentId ?? rid
   const set = (id: string, changes: Partial<AgentNode>) => {
     nodes[id] = { ...at(id), ...changes }
@@ -155,16 +161,6 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
         cwd: ev.cwd ?? at(rid).cwd,
         paneId: ev.paneId ?? at(rid).paneId,
         started: Math.max(0, ...rootIds.map((id) => nodes[id]?.started ?? 0)) + 1,
-        // A fresh session starting while the pane's lead is live was launched from inside it
-        // (a background agent inherits the pane) — it mustn't take the pane over. A resume /
-        // compact / clear is the pane's own session (re)starting.
-        nested:
-          (ev.source ?? "startup") === "startup" &&
-          !!ev.paneId &&
-          rootIds.some((id) => {
-            const r = nodes[id]
-            return id !== rid && r?.paneId === ev.paneId && !r?.nested
-          }),
       })
       break
     case "UserPromptSubmit": {

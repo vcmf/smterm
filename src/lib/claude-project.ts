@@ -18,7 +18,9 @@ export function cwdMatchesTranscript(
   const parts = transcriptPath.split(/[\\/]/).filter(Boolean)
   const dir = parts[parts.length - 2]
   if (!dir || parts[parts.length - 3] !== "projects") return undefined // not a Claude transcript
-  const name = claudeProjectDirName(cwd.length > 1 ? cwd.replace(/[\\/]+$/, "") : cwd)
+  // Strip a trailing separator — but not from a root ("/", "C:\\" → Claude's "C--").
+  const bare = /^([A-Za-z]:)?[\\/]$/.test(cwd) ? cwd : cwd.replace(/[\\/]+$/, "")
+  const name = claudeProjectDirName(bare)
   if (name.length <= MAX_CERTAIN && dir.length <= MAX_CERTAIN) return name === dir
   // A long name may be shortened by Claude: only a shared start keeps it possible (a long
   // scratchpad path vs a short project folder is still a clear mismatch).

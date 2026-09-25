@@ -97,30 +97,28 @@ export class SessionLedger {
     const cur = this.entries.get(ev.paneId)
     if (ev.event === "SessionStart") {
       if (!ev.cwd) return
+      // Another session starting while the pane's session (recorded THIS run) is live was
+      // launched from inside it — a background agent (its own startup, compact or resume), a
+      // nested `claude -p`: keep the lead. A real switch (/clear, /resume) ends the old one
+      // first. An entry carried over from the previous run is always replaceable.
+      if (cur && !cur.carried && cur.sessionId !== ev.sessionId) return
       // Resume must `cd` where Claude filed the session. A folder that doesn't encode to the
-      // transcript's project dir — a background agent's scratchpad, or Claude sitting in a
-      // subfolder when /clear starts a new session — falls back to the pane's last verified
-      // folder if that one fits, else the event is rejected.
+      // transcript's project dir — a stray event from an agent's scratchpad, or Claude sitting
+      // in a subfolder when /clear starts a new session — falls back to a known folder of the
+      // pane that fits, else the event is rejected.
       let cwd = ev.cwd
       let verdict: "fallback" | undefined
-      if (cwdMatchesTranscript(cwd, ev.transcriptPath) === false) {
-        const known = this.verified.get(ev.paneId) ?? cur?.cwd
-        if (!known || cwdMatchesTranscript(known, ev.transcriptPath) !== true) return "rejected"
+      let fits = cwdMatchesTranscript(cwd, ev.transcriptPath)
+      if (fits === false) {
+        const known = [this.verified.get(ev.paneId), cur?.cwd].find(
+          (k) => k !== undefined && cwdMatchesTranscript(k, ev.transcriptPath) === true,
+        )
+        if (!known) return "rejected"
         cwd = known
+        fits = true
         verdict = "fallback"
       }
-      // A new `startup` while the pane's session (recorded THIS run) is live = a nested claude:
-      // keep the parent. An entry carried over from the previous run is always replaceable —
-      // the user started something new instead of resuming it.
-      if (
-        cur &&
-        !cur.carried &&
-        cur.sessionId !== ev.sessionId &&
-        (ev.source ?? "startup") === "startup"
-      ) {
-        return
-      }
-      if (cwdMatchesTranscript(cwd, ev.transcriptPath) === true) this.verified.set(ev.paneId, cwd)
+      if (fits === true) this.verified.set(ev.paneId, cwd)
       const same = cur?.sessionId === ev.sessionId
       this.set(ev.paneId, {
         sessionId: ev.sessionId,
@@ -167,7 +165,9 @@ export class SessionLedger {
 
   /** The pane closed / its shell exited — nothing to resume there any more. */
   drop(paneId: string): void {
-    if (!this.frozen && this.entries.has(paneId)) this.delete(paneId)
+    if (this.frozen) return
+    this.verified.delete(paneId)
+    if (this.entries.has(paneId)) this.delete(paneId)
   }
 
   /** Quit / OS shutdown: keep every entry and flush now; an OS-shutdown freeze thaws later. */
@@ -238,6 +238,7 @@ export class SessionLedger {
   /** Drop entries for panes no longer in the workspace (closed while smterm wasn't running). */
   prune(keep: Set<string>): void {
     for (const id of [...this.entries.keys()]) if (!keep.has(id)) this.delete(id)
+    for (const id of [...this.verified.keys()]) if (!keep.has(id)) this.verified.delete(id)
   }
 
   get(paneId: string): LedgerEntry | undefined {

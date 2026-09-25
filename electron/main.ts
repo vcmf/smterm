@@ -243,12 +243,10 @@ async function startAgentObservability(): Promise<void> {
     hookWatcher = await startHookWatcher({
       dir: eventsDir,
       onBatch: (events: AgentEvent[]) => {
-        // Forward the hook events immediately (keeps the board live), then price any
-        // finished turns/sub-agents from their transcripts asynchronously and forward the
-        // resulting token totals as a follow-up batch. The read is off the terminal hot
-        // path and incremental, so it never delays the events above or the agent's loop.
-        mainWindow?.webContents.send("agents:events", events)
-        // Which pane is inside which Claude session (+ its WSL distro, for the transcript).
+        // Fold the batch into the resume ledger (which pane is inside which Claude session,
+        // + its WSL distro) and tag each event lead/nested from it, then forward it at once
+        // (keeps the board live). Token totals are priced from the transcripts afterwards,
+        // async and incremental — off the terminal hot path and the agent's loop.
         for (const ev of events) {
           // Session lifecycle only (never per-tool events): traceable when resume goes wrong.
           if (TRACED_HOOKS.has(ev.event)) diag("hook", hookTrace(ev))
@@ -257,7 +255,12 @@ async function startAgentObservability(): Promise<void> {
             ev.paneId ? sessions.get(ev.paneId)?.wslDistro : undefined,
           )
           if (verdict) diag(`hook-cwd-${verdict}`, hookTrace(ev))
+          // One classifier for "who leads this pane": the ledger. Tag every root event so the
+          // renderer's graph agrees (and survives a renderer reload — the ledger lives here).
+          const lead = ev.paneId && !ev.agentId ? sessionLedger().get(ev.paneId) : undefined
+          if (lead) ev.nested = lead.sessionId !== ev.sessionId
         }
+        mainWindow?.webContents.send("agents:events", events)
         // Session-level events locate each Claude pane's transcript → track its /color and
         // /rename for the pane accent (async + debounced; SessionEnd stops it).
         for (const ev of events) {

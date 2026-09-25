@@ -228,32 +228,45 @@ describe("planGitPoll / settleInAnswers", () => {
   })
 })
 
-describe("background agents don't take the pane over", () => {
-  it("a startup while the lead runs is nested: `in` keeps following the lead", () => {
+describe("background agents don't take the pane over (main tags them nested)", () => {
+  it("a session tagged nested never becomes the pane's `in`, even started later or re-started", () => {
     const g = graph([
-      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", source: "resume" },
-      { event: "SessionStart", sessionId: "agent", paneId: "p", cwd: "/dimo", source: "startup" },
-      { event: "CwdChanged", sessionId: "agent", paneId: "p", cwd: "/tmp/agent/scratchpad" },
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", nested: false },
+      { event: "SessionStart", sessionId: "agent", paneId: "p", cwd: "/dimo", nested: true },
+      { event: "CwdChanged", sessionId: "agent", paneId: "p", cwd: "/tmp/pad", nested: true },
+      {
+        event: "SessionStart",
+        sessionId: "agent",
+        paneId: "p",
+        cwd: "/tmp/pad",
+        source: "compact",
+        nested: true,
+      },
     ])
-    expect(g.nodes["root:agent"]?.nested).toBe(true)
     expect(claudeWorkDirs(g).p?.cwd).toBe("/dimo")
   })
 
-  it("the lead's own restart (/compact, resume) isn't nested; a first session isn't either", () => {
+  it("after a renderer reload the agent may be seen first — the lead still wins", () => {
     const g = graph([
-      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/a" },
-      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/a", source: "compact" },
+      { event: "PreToolUse", sessionId: "agent", paneId: "p", cwd: "/tmp/pad", nested: true },
+      { event: "PreToolUse", sessionId: "lead", paneId: "p", cwd: "/dimo", nested: false },
     ])
-    expect(g.nodes["root:lead"]?.nested).toBe(false)
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/dimo")
   })
 
-  it("once the lead is gone, a new session leads again", () => {
+  it("when the lead is replaced (/clear → new lead), the tag follows", () => {
     const g = graph([
-      { event: "SessionStart", sessionId: "old", paneId: "p", cwd: "/a" },
+      { event: "SessionStart", sessionId: "old", paneId: "p", cwd: "/a", nested: false },
       { event: "SessionEnd", sessionId: "old", paneId: "p" },
-      { event: "SessionStart", sessionId: "new", paneId: "p", cwd: "/b" },
+      {
+        event: "SessionStart",
+        sessionId: "new",
+        paneId: "p",
+        cwd: "/b",
+        source: "clear",
+        nested: false,
+      },
     ])
-    expect(g.nodes["root:new"]?.nested).toBe(false)
     expect(claudeWorkDirs(g).p?.cwd).toBe("/b")
   })
 })

@@ -43,6 +43,12 @@ describe("cwdMatchesTranscript", () => {
     const pad = `/private/tmp/claude-501/-Users-me-${"x".repeat(150)}/7aaf8a32/scratchpad`
     expect(cwdMatchesTranscript(pad, T(`-Users-me-${"x".repeat(150)}`))).toBe(false)
   })
+  it("a drive root keeps its separator (Claude files C:\\ as C--)", () => {
+    expect(cwdMatchesTranscript("C:\\", "C:\\Users\\me\\.claude\\projects\\C--\\1.jsonl")).toBe(
+      true,
+    )
+    expect(cwdMatchesTranscript("/", T("-"))).toBe(true)
+  })
   it("Windows transcript paths", () => {
     const t = "C:\\Users\\me\\.claude\\projects\\C--Users-me-repo\\1.jsonl"
     expect(cwdMatchesTranscript("C:\\Users\\me\\repo", t)).toBe(true)

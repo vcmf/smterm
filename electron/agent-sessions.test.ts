@@ -59,6 +59,7 @@ describe("SessionLedger rules", () => {
     const l = new SessionLedger(null)
     l.apply(start())
     expect(l.get("p1")).toMatchObject({ sessionId: ID, cwd: "/repo" })
+    l.apply(end({ reason: "clear" })) // Claude ends the old session first
     l.apply(start({ sessionId: ID2, source: "clear" }))
     expect(l.get("p1")?.sessionId).toBe(ID2)
   })
@@ -308,6 +309,17 @@ describe("SessionLedger persistence", () => {
     const file = path.join(dir, "agent-sessions.json")
     fs.writeFileSync(file, "{nope")
     expect(new SessionLedger(file).get("p1")).toBeUndefined()
+  })
+})
+
+describe("SessionLedger — a session launched inside the lead never replaces it", () => {
+  it("a background agent's own compact / resume (not just its startup) is nested", () => {
+    for (const source of ["startup", "compact", "resume", "clear"]) {
+      const l = new SessionLedger(null)
+      l.apply(start())
+      l.apply(start({ sessionId: ID2, source }))
+      expect(l.get("p1")?.sessionId, source).toBe(ID)
+    }
   })
 })
 

@@ -309,14 +309,20 @@ and `terminal-manager` types `claude --resume <id> [--permission-mode m]` at the
   never reports failure or offers buttons that would type into a possibly-running Claude.
 - **The resume folder must be where Claude filed the session.** Claude files a session under
   `~/.claude/projects/<cwd with every non-alphanumeric → "-">/`, and `claude --resume` only finds
-  it from that folder. Background agents (Claude's own named agents) run as separate `claude`
-  processes that **inherit the pane** (`SMTERM_PANE_ID`, our hooks), with their own scratchpad
-  folder. So a `SessionStart` whose folder doesn't encode to its transcript's project dir is
-  rejected (ledger + agents graph; logged as `hook-cwd-rejected`), a later event whose folder
-  does match is followed (a session re-filed under a worktree), and `plan()` skips a
-  mismatching entry instead of `cd`-ing into it (`src/lib/claude-project.ts`). A `startup` while
-  the pane's lead runs is `nested` in the graph (it can't take over `in` / the accent). Session
-  lifecycle hooks are traced as `hook …` lines in `diagnostics.log`.
+  it from that folder. A `SessionStart` whose folder doesn't encode to its transcript's project
+  dir falls back to the pane's last verified folder that fits (a stray event from an agent's
+  scratchpad; `/clear` while Claude sits in a subfolder), else it's rejected — logged as
+  `hook-cwd-fallback` / `hook-cwd-rejected`. A later event whose folder does match is followed
+  (a session re-filed under a worktree); `plan()` skips a mismatching entry instead of
+  `cd`-ing into it (`src/lib/claude-project.ts`).
+- **Background agents inherit the pane.** Claude's named agents run as separate `claude`
+  processes with our `SMTERM_PANE_ID` + hooks. **One classifier decides the pane's lead: the
+  ledger** — while a live lead exists, any other session's `SessionStart` (startup, compact,
+  resume) is nested; a real switch (`/clear`, `/resume`) ends the old session first. Main tags
+  every root event `nested` from it, and the renderer's graph (`in`, status bar, panels) and the
+  pane accent follow only the lead. Known limit: a lead killed with no `SessionEnd` in a shell
+  without our integration (no prompt mark to notice it) keeps leading until the pane closes.
+  Session lifecycle hooks are traced as `hook …` lines in `diagnostics.log`.
 - Known limit: vi-mode users in **normal** mode — ^U doesn't clear the line there, so a banner
   button's keystrokes are read as vi commands. Stay in insert mode (the default) to use them.
 - **rc-time commands are fine** (`conda activate`, nvm, direnv in `.zshrc`): the first `D` only
