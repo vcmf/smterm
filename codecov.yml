@@ -1,0 +1,15 @@
+# Codecov: report on every PR; fail only if coverage drops meaningfully.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: auto
+        threshold: 5%
+
+comment:
+  layout: "diff, flags, files"
+  require_changes: true
