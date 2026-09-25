@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { CaretDown, CaretRight, Plus, Terminal } from "@phosphor-icons/react"
-import { useStore } from "../store"
+import { activeTheme, useStore } from "../store"
+import { sessionColor } from "../lib/session-color"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { allPanes } from "../lib/pane-tree"
 import { resolveDefaultShell } from "../lib/shells"
@@ -22,6 +23,11 @@ export function Sidebar() {
   const defaultShellPref = useStore((s) => s.settings.defaultShell)
   const git = useStore((s) => s.git)
   const home = useStore((s) => s.home)
+  // Claude session colours per terminal (same as the pane border + tab icon).
+  const agentMeta = useStore((s) => s.agentMeta)
+  const scheme = useStore((s) => activeTheme(s).scheme)
+  const accentOf = (id: string) => sessionColor(agentMeta[id], scheme)
+
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   const defaultShell = resolveDefaultShell(shells, defaultShellPref)
@@ -123,7 +129,7 @@ export function Sidebar() {
                         <Terminal
                           size={14}
                           weight="fill"
-                          color={isActive ? "var(--accent)" : "var(--dim)"}
+                          color={accentOf(id) ?? (isActive ? "var(--accent)" : "var(--dim)")}
                         />
                       </span>
                       <div className="tree-labels">

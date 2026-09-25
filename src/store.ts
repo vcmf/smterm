@@ -30,6 +30,7 @@ import { normalizeRootPath } from "./lib/breadcrumb"
 import type { WslContext } from "./lib/wsl"
 import type { WorkspaceState } from "./lib/workspace"
 import type { MoveTarget } from "./lib/pane-tree"
+import type { SessionMeta } from "./lib/session-color"
 import { clampPanelWidth, RIGHT_PANEL_DEFAULT } from "./lib/right-panel"
 
 const newId = () => crypto.randomUUID()
@@ -89,6 +90,7 @@ interface AppState {
   paneRoot: Record<string, string> // per-session Files-panel root override (absent = follow cwd)
   closePaneConfirm: ClosePaneConfirm | null // multi-surface pane close awaiting the dialog
   dragging: { tabId: string; sessionId: string } | null // surface being dragged (drop hints on)
+  agentMeta: Record<string, SessionMeta> // per pane: the Claude session's /color + /rename
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
@@ -123,6 +125,7 @@ interface AppState {
   requestClosePane: (tabId: string, paneId: string) => void // confirms first if several terminals
   cancelClosePane: () => void
   setDragging: (dragging: { tabId: string; sessionId: string } | null) => void
+  setAgentMeta: (sessionId: string, meta: SessionMeta | null) => void
   moveSurface: (tabId: string, sessionId: string, target: MoveTarget) => void // drag & drop
   setActivePane: (tabId: string, sessionId: string) => void
   focusSession: (sessionId: string) => void
@@ -212,14 +215,19 @@ function markSeen(sessions: Record<string, Session>, sessionId: string): Record<
 }
 
 /** Drop sessions (and their Files-panel root overrides) from the store maps. */
-function dropSessions(state: AppState, ids: string[]): Pick<AppState, "sessions" | "paneRoot"> {
+function dropSessions(
+  state: AppState,
+  ids: string[],
+): Pick<AppState, "sessions" | "paneRoot" | "agentMeta"> {
   const sessions = { ...state.sessions }
   const paneRoot = { ...state.paneRoot }
+  const agentMeta = { ...state.agentMeta }
   for (const id of ids) {
     delete sessions[id]
     delete paneRoot[id] // don't leak the pane's root override
+    delete agentMeta[id] // …or its Claude accent
   }
-  return { sessions, paneRoot }
+  return { sessions, paneRoot, agentMeta }
 }
 
 /** Remove a tab; if it was active, the last remaining tab takes over. */
@@ -258,6 +266,7 @@ export const useStore = create<AppState>((set, get) => ({
   paneRoot: {},
   closePaneConfirm: null,
   dragging: null,
+  agentMeta: {},
 
   setHome: (home) => set({ home }),
   setPlatform: (platform) => set({ platform }),
@@ -453,6 +462,17 @@ export const useStore = create<AppState>((set, get) => ({
   cancelClosePane: () => set({ closePaneConfirm: null }),
 
   setDragging: (dragging) => set({ dragging }),
+
+  // A Claude pane's /color + /rename from main (null = claude left the pane → no accent).
+  setAgentMeta: (sessionId, meta) =>
+    set((state) => {
+      if (!state.sessions[sessionId]) return {} // the pane already closed
+      const agentMeta = { ...state.agentMeta }
+      if (meta) agentMeta[sessionId] = meta
+      else if (sessionId in agentMeta) delete agentMeta[sessionId]
+      else return {}
+      return { agentMeta }
+    }),
 
   // Drop a dragged surface: the terminal keeps its session (re-attaches, no respawn),
   // becomes visible where it lands and takes focus.

@@ -1,6 +1,7 @@
 import type { ShellOption } from "../types"
 import type { WslContext } from "./wsl"
 import type { AgentEvent } from "./agent-graph"
+import type { SessionMeta } from "./session-color"
 import type { DirListing } from "./dir-listing"
 import type { EditorInfo } from "./file-actions"
 import type { PreviewData } from "./file-preview"
@@ -33,6 +34,9 @@ export interface Ipc {
   settingsPath: () => Promise<string>
   onSettingsChanged: (cb: () => void) => () => void
   onAgentEvents: (cb: (events: AgentEvent[]) => void) => () => void
+  // A Claude pane's /color + /rename (null = claude left the pane) → the pane accent.
+  onAgentMeta: (cb: (paneId: string, meta: SessionMeta | null) => void) => () => void
+  agentMetaSnapshot: () => Promise<[string, SessionMeta][]> // all current (renderer reload)
   openExternal: (url: string) => void
   openPath: (p: string) => void
   // Does `path` (relative to `cwd`, or absolute) exist? Validates a detected file link.

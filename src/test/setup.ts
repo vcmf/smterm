@@ -21,6 +21,8 @@ const smtermStub = {
   settingsPath: vi.fn(async () => "/tmp/smterm/settings.json"),
   onSettingsChanged: vi.fn(unsub),
   onAgentEvents: vi.fn(unsub),
+  onAgentMeta: vi.fn(unsub),
+  agentMetaSnapshot: vi.fn(async () => []),
   clipboardWrite: vi.fn(),
   clipboardRead: vi.fn(async () => ""),
   readdir: vi.fn(async () => ({ entries: [], truncated: false })),

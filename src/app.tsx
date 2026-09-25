@@ -80,6 +80,10 @@ function App() {
           store.restoreWorkspace(restored)
           // After a renderer reload main still holds PTYs for sessions the restore dropped.
           for (const id of restored.pruned ?? []) ipc.ptyKill(id)
+          // …and the Claude accents of the ones it kept (the store restarted empty).
+          void ipc.agentMetaSnapshot().then((all) => {
+            for (const [paneId, meta] of all) useStore.getState().setAgentMeta(paneId, meta)
+          })
         } else if (shells[0]) store.newTab(shells[0])
       }
     })()
@@ -132,6 +136,12 @@ function App() {
     })
     return () => unlisten()
   }, [])
+
+  // Claude session /color + /rename per pane → the pane accent (border + tab icon).
+  useEffect(
+    () => ipc.onAgentMeta((paneId, meta) => useStore.getState().setAgentMeta(paneId, meta)),
+    [],
+  )
 
   // Agents board (M6): fold coalesced hook-event batches into the store's agent tree.
   useEffect(() => {

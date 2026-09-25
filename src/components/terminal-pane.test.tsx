@@ -274,3 +274,38 @@ describe("TerminalPane — drag & drop", () => {
     expect(tabs[0]).not.toHaveClass("insert-before")
   })
 })
+
+describe("TerminalPane — Claude session colour", () => {
+  it("a /color paints the pane's top border and the tab icon", () => {
+    const { tabId, id } = mountPane()
+    st().setAgentMeta(id, { color: "orange" })
+    const { container } = renderPane(tabId)
+    const pane = container.querySelector(".terminal-pane") as HTMLElement
+    expect(pane).toHaveClass("tinted")
+    expect(pane.style.getPropertyValue("--pane-accent")).toMatch(/^#/)
+    expect(container.querySelector(".surface-tab svg")).toHaveAttribute(
+      "fill",
+      pane.style.getPropertyValue("--pane-accent"),
+    )
+  })
+
+  it("no Claude colour → no tint", () => {
+    const { tabId } = mountPane()
+    const { container } = renderPane(tabId)
+    expect(container.querySelector(".terminal-pane")).not.toHaveClass("tinted")
+  })
+
+  it("in a split, an unfocused coloured pane that needs input shows the amber rail", () => {
+    const { tabId, id } = mountPane()
+    st().setAgentMeta(id, { color: "blue" })
+    st().splitActive("row", testShell) // focus moves to the new pane
+    st().signalSession(id, { type: "attention", detail: "approve?" })
+    const root = st().tabs[0]!.root
+    if (root.type !== "split") throw new Error("expected split")
+    const left = root.children[0] as PaneLeaf
+    const { container } = render(<TerminalPane pane={left} tabId={tabId} />)
+    const pane = container.querySelector(".terminal-pane")!
+    expect(pane).toHaveClass("waiting")
+    expect(pane).not.toHaveClass("tinted")
+  })
+})
