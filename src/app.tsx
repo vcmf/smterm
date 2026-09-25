@@ -21,6 +21,7 @@ import { loadSettings } from "./settings/io"
 import { applyThemeVars } from "./settings/themes"
 import { readWorkspaceFile, serializeToJson } from "./lib/workspace"
 import { appShortcut } from "./lib/terminal-keys"
+import { wslContext } from "./lib/wsl"
 import { resolveDefaultShell } from "./lib/shells"
 import { isMac } from "./lib/platform"
 import type { ShellOption } from "./types"
@@ -254,6 +255,58 @@ function App() {
         TerminalManager.reconcileRenderers()
       }
     })
+  }, [])
+
+  // Branch + GitHub PR for every terminal (sidebar). Main caches/dedupes, so this is cheap;
+  // still paused while the sidebar is collapsed or the window hidden. Re-polls soon after a
+  // cwd changes (cd / new terminal) or the sidebar is shown again.
+  useEffect(() => {
+    let stopped = false
+    let soon: ReturnType<typeof setTimeout> | undefined
+    let lastKey = ""
+    let seq = 0 // polls can overlap (a slow gh); only the newest may write
+    const poll = async () => {
+      const s = useStore.getState()
+      if (s.sidebarCollapsed || document.visibilityState === "hidden") return
+      const reqs = Object.values(s.sessions)
+        .flatMap((x) =>
+          x.cwd ? [{ paneId: x.id, cwd: x.cwd, wsl: wslContext(x.command, x.args) }] : [],
+        )
+        .slice(0, 64) // main answers at most 64 — keep `polled` in step with what was sent
+      if (reqs.length === 0) return
+      const mine = ++seq
+      const res = await ipc.paneGitInfo(reqs).catch(() => null)
+      if (!res || stopped || mine !== seq) return // a newer poll has (or will have) the truth
+      const pending = Object.values(res).some((i) => i.prPending)
+      for (const i of Object.values(res)) delete i.prPending // transport flag, not state
+      useStore.getState().setPaneGit(
+        res,
+        reqs.map((r) => r.paneId),
+      )
+      if (pending) pollSoon(1500) // a PR is being fetched in main — pick it up shortly
+    }
+    const pollSoon = (ms = 400) => {
+      clearTimeout(soon)
+      soon = setTimeout(() => void poll(), ms)
+    }
+    const every = setInterval(() => void poll(), 10_000)
+    const unsub = useStore.subscribe((state, prev) => {
+      if (state.sidebarCollapsed !== prev.sidebarCollapsed && !state.sidebarCollapsed) pollSoon()
+      if (state.sessions === prev.sessions) return
+      const key = Object.values(state.sessions)
+        .map((x) => `${x.id}=${x.cwd ?? ""}`)
+        .join("|")
+      if (key !== lastKey) {
+        lastKey = key
+        pollSoon()
+      }
+    })
+    return () => {
+      stopped = true
+      clearInterval(every)
+      clearTimeout(soon)
+      unsub()
+    }
   }, [])
 
   // Poll git status for the focused session's cwd (feeds status bar + diff panel).

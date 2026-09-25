@@ -664,3 +664,24 @@ describe("store — Claude session accent", () => {
     expect(st().agentMeta[id]).toBeUndefined()
   })
 })
+
+describe("store — sidebar branch/PR", () => {
+  beforeEach(resetStore)
+
+  it("setPaneGit applies results, clears panes that left their repo, stays quiet on no change", () => {
+    st().newTab(shell)
+    const id = firstTab().activeSessionId
+    st().setPaneGit({ [id]: { branch: "main" } }, [id])
+    expect(st().paneGit[id]).toEqual({ branch: "main" })
+    const before = st().paneGit
+    st().setPaneGit({ [id]: { branch: "main" } }, [id])
+    expect(st().paneGit).toBe(before)
+    st().setPaneGit({}, [id]) // polled, no result → cd'd out of the repo
+    expect(st().paneGit[id]).toBeUndefined()
+  })
+
+  it("setPaneGit ignores terminals that closed while the poll was in flight", () => {
+    st().setPaneGit({ ghost: { branch: "main" } }, ["ghost"])
+    expect(st().paneGit.ghost).toBeUndefined()
+  })
+})

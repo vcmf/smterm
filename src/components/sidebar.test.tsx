@@ -69,3 +69,26 @@ describe("Sidebar", () => {
     expect(st().tabs[0]!.activeSessionId).toBe(ids[0])
   })
 })
+
+describe("Sidebar — branch, PR and Claude snippet", () => {
+  it("shows the terminal's branch, its PR (link opens it) and Claude's last reply", async () => {
+    const { ipc } = await import("../lib/ipc")
+    st().newTab(testShell)
+    const id = st().tabs[0]!.activeSessionId
+    st().setSessionCwd(id, "/w/term")
+    st().setPaneGit(
+      { [id]: { branch: "feat/x", pr: { number: 51, state: "merged", url: "https://x/51" } } },
+      [id],
+    )
+    st().applyAgentEvents([
+      { event: "SessionStart", sessionId: "c1", paneId: id },
+      { event: "Stop", sessionId: "c1", paneId: id, message: "**All done** — PR is up." },
+    ])
+    render(<Sidebar />)
+    expect(screen.getAllByText(/feat\/x/).length).toBeGreaterThan(0)
+    expect(screen.getByText("merged")).toBeInTheDocument()
+    expect(screen.getByText("All done — PR is up.")).toBeInTheDocument()
+    fireEvent.click(screen.getByText("PR #51"))
+    expect(ipc.openExternal).toHaveBeenCalledWith("https://x/51")
+  })
+})

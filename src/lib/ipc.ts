@@ -2,6 +2,7 @@ import type { ShellOption } from "../types"
 import type { WslContext } from "./wsl"
 import type { AgentEvent } from "./agent-graph"
 import type { SessionMeta } from "./session-color"
+import type { PaneGitInfo, PaneGitRequest } from "./pane-git"
 import type { DirListing } from "./dir-listing"
 import type { EditorInfo } from "./file-actions"
 import type { PreviewData } from "./file-preview"
@@ -68,6 +69,7 @@ export interface Ipc {
   onMaximizeChange: (cb: (max: boolean) => void) => () => void
   platformInfo: () => Promise<PlatformInfo>
   gitStatus: (cwd: string, wsl?: WslContext) => Promise<GitStatus>
+  paneGitInfo: (reqs: PaneGitRequest[]) => Promise<Record<string, PaneGitInfo>> // sidebar PRs
   gitDiff: (cwd: string, file: string, wsl?: WslContext) => Promise<DiffLine[]>
   readWorkspace: () => Promise<string>
   writeWorkspace: (contents: string) => void

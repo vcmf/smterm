@@ -31,6 +31,7 @@ import type { WslContext } from "./lib/wsl"
 import type { WorkspaceState } from "./lib/workspace"
 import type { MoveTarget } from "./lib/pane-tree"
 import type { SessionMeta } from "./lib/session-color"
+import { mergePaneGit, type PaneGitInfo } from "./lib/pane-git"
 import { clampPanelWidth, RIGHT_PANEL_DEFAULT } from "./lib/right-panel"
 
 const newId = () => crypto.randomUUID()
@@ -91,6 +92,7 @@ interface AppState {
   closePaneConfirm: ClosePaneConfirm | null // multi-surface pane close awaiting the dialog
   dragging: { tabId: string; sessionId: string } | null // surface being dragged (drop hints on)
   agentMeta: Record<string, SessionMeta> // per pane: the Claude session's /color + /rename
+  paneGit: Record<string, PaneGitInfo> // per terminal: branch + GitHub PR (sidebar)
 
   setHome: (home: string) => void
   setPlatform: (platform: string) => void
@@ -126,6 +128,7 @@ interface AppState {
   cancelClosePane: () => void
   setDragging: (dragging: { tabId: string; sessionId: string } | null) => void
   setAgentMeta: (sessionId: string, meta: SessionMeta | null) => void
+  setPaneGit: (fresh: Record<string, PaneGitInfo>, polled: string[]) => void
   moveSurface: (tabId: string, sessionId: string, target: MoveTarget) => void // drag & drop
   setActivePane: (tabId: string, sessionId: string) => void
   focusSession: (sessionId: string) => void
@@ -218,16 +221,18 @@ function markSeen(sessions: Record<string, Session>, sessionId: string): Record<
 function dropSessions(
   state: AppState,
   ids: string[],
-): Pick<AppState, "sessions" | "paneRoot" | "agentMeta"> {
+): Pick<AppState, "sessions" | "paneRoot" | "agentMeta" | "paneGit"> {
   const sessions = { ...state.sessions }
   const paneRoot = { ...state.paneRoot }
   const agentMeta = { ...state.agentMeta }
+  const paneGit = { ...state.paneGit }
   for (const id of ids) {
+    delete paneGit[id]
     delete sessions[id]
     delete paneRoot[id] // don't leak the pane's root override
     delete agentMeta[id] // …or its Claude accent
   }
-  return { sessions, paneRoot, agentMeta }
+  return { sessions, paneRoot, agentMeta, paneGit }
 }
 
 /** Remove a tab; if it was active, the last remaining tab takes over. */
@@ -267,6 +272,7 @@ export const useStore = create<AppState>((set, get) => ({
   closePaneConfirm: null,
   dragging: null,
   agentMeta: {},
+  paneGit: {},
 
   setHome: (home) => set({ home }),
   setPlatform: (platform) => set({ platform }),
@@ -462,6 +468,23 @@ export const useStore = create<AppState>((set, get) => ({
   cancelClosePane: () => set({ closePaneConfirm: null }),
 
   setDragging: (dragging) => set({ dragging }),
+
+  // Branch/PR poll results. Panes that were polled but came back empty (left the repo) are
+  // cleared; unchanged results keep the same map (no re-render).
+  setPaneGit: (fresh, polled) =>
+    set((state) => {
+      // Drop results for terminals that closed while the poll was in flight (else they'd
+      // be re-added after dropSessions cleared them, and never removed).
+      const live: typeof fresh = {}
+      for (const [id, info] of Object.entries(fresh)) if (state.sessions[id]) live[id] = info
+      let next = mergePaneGit(state.paneGit, live)
+      for (const id of polled) {
+        if (id in live || !(id in next)) continue
+        if (next === state.paneGit) next = { ...next }
+        delete next[id]
+      }
+      return next === state.paneGit ? {} : { paneGit: next }
+    }),
 
   // A Claude pane's /color + /rename from main (null = claude left the pane → no accent).
   setAgentMeta: (sessionId, meta) =>
