@@ -31,7 +31,7 @@ import {
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
 import { OutputBuffer } from "./output-buffer"
-import { drainPtys } from "./pty-drain"
+import { drainPtys, type Drainable } from "./pty-drain"
 import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
@@ -81,6 +81,9 @@ interface PtySession {
   exited: Promise<void> // resolves in onExit — quitting waits for it (see pty-drain.ts)
 }
 const sessions = new Map<string, PtySession>()
+// Every node-pty that hasn't reported its exit yet — including closed panes still winding
+// down (gone from `sessions`). None may outlive Node: quitting drains this (pty-drain.ts).
+const livePtys = new Set<Drainable>()
 let mainWindow: BrowserWindow | null = null
 // Paths to the scoped Claude Code hook-settings files the `claude` shell wrapper loads
 // (set once the file-drop watcher is up). null ⇒ agents board stays empty. The WSL variant
@@ -172,7 +175,11 @@ function createWindow() {
   })
 
   mainWindow = win
-  win.on("session-end", () => sessionLedger().freeze(60_000)) // Windows logout/shutdown — see onPower
+  win.on("session-end", () => {
+    // Windows logout/shutdown (before-quit may not run) — see onPower.
+    sessionLedger().freeze(60_000)
+    void shutdownPtys() // best effort: end the shells before the OS kills us
+  })
   win.on("closed", () => {
     mainWindow = null
   })
@@ -335,6 +342,7 @@ function registerIpc() {
         bg?: string
       },
     ): { reattached: boolean; integrated: boolean } => {
+      if (draining) throw new Error("smterm is quitting") // nothing new may outlive the drain
       const existing = sessions.get(opts.id)
       if (existing) {
         // Reattach: point output at the new renderer, drop stale in-flight bytes
@@ -390,6 +398,8 @@ function registerIpc() {
       const coalesce = process.env.SMTERM_NO_COALESCE !== "1"
       let markExited!: () => void
       const exited = new Promise<void>((res) => (markExited = res))
+      const live: Drainable = { kill: (sig) => proc.kill(sig), exited }
+      livePtys.add(live)
       const rec: PtySession = {
         id: opts.id,
         proc,
@@ -416,6 +426,7 @@ function registerIpc() {
         sessions.delete(opts.id)
         agentMeta.untrack(opts.id) // shell (and any claude in it) gone — drop the accent
         sessionLedger().drop(opts.id) // …and nothing to resume there (no-op during a quit)
+        livePtys.delete(live)
         markExited()
       })
       sessions.set(opts.id, rec)
@@ -866,7 +877,10 @@ app.whenReady().then(async () => {
   // OS shutdown / restart / logout: Electron skips before-quit (notably on Windows), so freeze
   // the resume ledger here too — else the dying children's SessionEnds/exits would clear it,
   // and a reboot is exactly when resuming matters.
-  onPower("shutdown", () => sessionLedger().freeze(60_000)) // thaws if the shutdown is cancelled
+  onPower("shutdown", () => {
+    sessionLedger().freeze(60_000) // thaws if the shutdown is cancelled
+    void shutdownPtys() // best effort: end the shells before the OS kills us
+  })
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -884,20 +898,27 @@ app.on("will-quit", () => {
 })
 app.on("quit", () => diag("quit"))
 
-/** Quit: end every PTY and wait for their exits, so none calls back into a Node that's being
- *  torn down (node-pty → uncaught C++ exception → SIGABRT). Bounded: always resolves. */
-async function shutdownPtys(): Promise<void> {
-  // Keep every "inside Claude" entry for the relaunch BEFORE our kill makes Claude fire
-  // SessionEnd (which would otherwise clear them).
-  sessionLedger().freeze()
-  const recs = [...sessions.values()]
-  for (const rec of recs) rec.coalescer?.dispose()
-  const clean = await drainPtys(
-    recs.map((rec) => ({ kill: (sig?: string) => rec.proc.kill(sig), exited: rec.exited })),
-  )
-  diag("ptys-drained", { count: recs.length, clean })
-  sessions.clear()
+/** End every live PTY and wait for its exit (bounded) — see pty-drain.ts. Idempotent. */
+function shutdownPtys(): Promise<void> {
+  if (!shutdown) {
+    draining = true // refuse new spawns from here on
+    // Keep every "inside Claude" entry for the relaunch BEFORE our kill makes Claude fire
+    // SessionEnd (which would otherwise clear them).
+    sessionLedger().freeze()
+    for (const rec of sessions.values()) rec.coalescer?.dispose()
+    const count = livePtys.size
+    const win32 = process.platform === "win32"
+    shutdown = drainPtys([...livePtys], {
+      signals: !win32,
+      settleMs: win32 ? 300 : 0,
+    }).then((clean) => {
+      diag("ptys-drained", { count, clean })
+      sessions.clear()
+    })
+  }
+  return shutdown
 }
+let shutdown: Promise<void> | null = null
 
 // Is the quit-confirmation prompt enabled? (reads settings.json live)
 function confirmQuitEnabled(): boolean {
@@ -933,10 +954,10 @@ app.on("before-quit", (e) => {
   if (ptysDrained) return // second pass, after the drain below: let the quit proceed
   diag("before-quit", { ptys: sessions.size, confirmed: quitConfirmed })
   if (quitConfirmed || sessions.size === 0 || !confirmQuitEnabled() || !mainWindow) {
-    // Hold the quit until every PTY has exited (≤ ~2 s), then quit for real.
+    // Nothing alive: quit right away (a cancelled quit could cancel an OS logout on macOS).
+    if (livePtys.size === 0 && !draining) return
+    // Else hold the quit until every PTY has exited (≤ ~2 s), then quit for real.
     e.preventDefault()
-    if (draining) return
-    draining = true
     mainWindow?.hide() // feels instant while the shells wind down
     void shutdownPtys().finally(() => {
       ptysDrained = true

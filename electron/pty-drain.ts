@@ -9,22 +9,28 @@ export interface Drainable {
   exited: Promise<void>
 }
 
-const settled = (p: Promise<void>) => p.then(() => true)
+export interface DrainOptions {
+  graceMs?: number // wait after the hang-up before forcing
+  forceMs?: number // wait after SIGKILL
+  signals?: boolean // false on Windows: no signals (a queued SIGKILL would throw later)
+  settleMs?: number // extra wait after the exits (Windows: ConPTY's native callback trails 'exit')
+}
 
 /** Resolves true if every exit settled within `ms`, else false (never rejects). */
 function allWithin(ps: Promise<void>[], ms: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<boolean>((res) => (timer = setTimeout(() => res(false), ms)))
-  return Promise.race([Promise.all(ps.map(settled)).then(() => true), timeout]).finally(() =>
+  return Promise.race([Promise.all(ps).then(() => true), timeout]).finally(() =>
     clearTimeout(timer),
   )
 }
 
-/** Hang up every PTY and wait for the exits; after `graceMs` SIGKILL whatever is left and
- *  wait `forceMs` more. Always resolves — true = all exited cleanly in time. */
+const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms))
+
+/** Hang up every PTY, wait for the exits, SIGKILL stragglers; always resolves (true = clean). */
 export async function drainPtys(
   ptys: Drainable[],
-  { graceMs = 1500, forceMs = 500 } = {},
+  { graceMs = 1500, forceMs = 500, signals = true, settleMs = 0 }: DrainOptions = {},
 ): Promise<boolean> {
   if (ptys.length === 0) return true
   const alive = new Set(ptys)
@@ -33,25 +39,27 @@ export async function drainPtys(
     try {
       p.kill() // SIGHUP: the shell (and a Claude inside it) shuts down normally
     } catch {
-      alive.delete(p) // already gone
+      // Already gone, or a half-closed handle: keep waiting on its exit all the same — a
+      // failed kill doesn't prove its exit callback has run.
     }
   }
-  if (
-    await allWithin(
-      [...alive].map((p) => p.exited),
-      graceMs,
-    )
-  )
-    return true
-  for (const p of alive) {
-    try {
-      p.kill("SIGKILL") // unix; Windows has no signals (ConPTY kill is already forceful)
-    } catch {
-      // already gone / unsupported
-    }
-  }
-  return allWithin(
+  let clean = await allWithin(
     [...alive].map((p) => p.exited),
-    forceMs,
+    graceMs,
   )
+  if (!clean && signals) {
+    for (const p of alive) {
+      try {
+        p.kill("SIGKILL")
+      } catch {
+        // already gone
+      }
+    }
+    clean = await allWithin(
+      [...alive].map((p) => p.exited),
+      forceMs,
+    )
+  }
+  if (settleMs) await sleep(settleMs)
+  return clean
 }

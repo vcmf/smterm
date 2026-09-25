@@ -52,18 +52,34 @@ describe("drainPtys", () => {
     expect(await done).toBe(false)
   })
 
-  it("a PTY whose kill throws (already gone) doesn't hold the others up", async () => {
+  it("a failed kill still waits for that PTY's exit (its callback may be pending)", async () => {
     vi.useFakeTimers()
-    const gone: Drainable = {
-      exited: new Promise(() => {}),
+    let exit!: () => void
+    const halfClosed: Drainable = {
+      exited: new Promise((r) => (exit = r)),
       kill: () => {
-        throw new Error("x")
+        throw new Error("handle closed")
       },
     }
-    const ok = fakePty(5)
-    const done = drainPtys([gone, ok], { graceMs: 100 })
-    await vi.advanceTimersByTimeAsync(10)
-    expect(await done).toBe(true)
+    let done = false
+    void drainPtys([halfClosed], { graceMs: 100 }).then(() => (done = true))
+    await vi.advanceTimersByTimeAsync(20)
+    expect(done).toBe(false) // still waiting on it
+    exit()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(done).toBe(true)
+  })
+
+  it("Windows: no signals (a queued SIGKILL would throw later), then a settle wait", async () => {
+    vi.useFakeTimers()
+    const p = fakePty(null)
+    let result: boolean | undefined
+    void drainPtys([p], { graceMs: 100, signals: false, settleMs: 300 }).then((r) => (result = r))
+    await vi.advanceTimersByTimeAsync(150)
+    expect(p.signals).toEqual(["SIGHUP"]) // never SIGKILL
+    expect(result).toBeUndefined() // settling
+    await vi.advanceTimersByTimeAsync(300)
+    expect(result).toBe(false)
   })
 
   it("nothing to drain → resolves immediately", async () => {
