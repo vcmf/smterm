@@ -31,6 +31,8 @@ import {
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
 import { OutputBuffer } from "./output-buffer"
+import { drainPtys, type Drainable } from "./pty-drain"
+import { quitStep, type QuitPhase } from "./quit-plan"
 import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
@@ -77,8 +79,12 @@ interface PtySession {
   shell: string
   wslDistro?: string // for a WSL pane: the distro, so its Linux paths resolve to the right UNC share
   integrated: boolean // our shell integration (OSC 133 marks, claude wrapper) was injected
+  live: Drainable // this PTY's entry in livePtys (outlives the session record until onExit)
 }
 const sessions = new Map<string, PtySession>()
+// Every node-pty that hasn't reported its exit yet — including closed panes still winding
+// down (gone from `sessions`). None may outlive Node: quitting drains this (pty-drain.ts).
+const livePtys = new Set<Drainable>()
 let mainWindow: BrowserWindow | null = null
 // Paths to the scoped Claude Code hook-settings files the `claude` shell wrapper loads
 // (set once the file-drop watcher is up). null ⇒ agents board stays empty. The WSL variant
@@ -100,6 +106,9 @@ let ledger: SessionLedger | null = null
 const sessionLedger = () =>
   (ledger ??= new SessionLedger(path.join(configDir(), "agent-sessions.json")))
 let quitConfirmed = false
+let quitPhase: QuitPhase = "running" // running → draining (PTYs ending) → drained (quit through)
+let osEnding = false // the OS is logging out / restarting — don't hold its quit
+const draining = () => quitPhase !== "running"
 
 // PTY output batching (see electron/coalescer.ts + docs/PERF.md).
 const PTY_FLUSH_MS = 4
@@ -109,6 +118,8 @@ const PTY_REPLAY_BYTES = 256 * 1024
 
 // Send PTY output to the session's current renderer (skips a destroyed one).
 function emit(rec: PtySession, data: string): void {
+  // Quitting: the dying shells' last output (a bell, OSC 9) mustn't reach the hidden window.
+  if (draining()) return
   if (!rec.sender.isDestroyed()) rec.sender.send(`pty:data:${rec.id}`, data)
 }
 
@@ -331,6 +342,7 @@ function registerIpc() {
         bg?: string
       },
     ): { reattached: boolean; integrated: boolean } => {
+      if (draining()) throw new Error("smterm is quitting") // nothing new may outlive the drain
       const existing = sessions.get(opts.id)
       if (existing) {
         // Reattach: point output at the new renderer, drop stale in-flight bytes
@@ -384,6 +396,10 @@ function registerIpc() {
         env: spawnEnv,
       })
       const coalesce = process.env.SMTERM_NO_COALESCE !== "1"
+      let markExited!: () => void
+      const exited = new Promise<void>((res) => (markExited = res))
+      const live: Drainable = { kill: (sig) => proc.kill(sig), exited }
+      livePtys.add(live)
       const rec: PtySession = {
         id: opts.id,
         proc,
@@ -394,6 +410,7 @@ function registerIpc() {
         // Linux transcript path against the right distro's UNC share (not just the default).
         wslDistro: wsl ? (parseWslDistroArg(opts.args ?? []) ?? defaultWslDistro()) : undefined,
         integrated: !!inj,
+        live,
       }
       if (coalesce) {
         rec.coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, (d) => emit(rec, d))
@@ -409,6 +426,8 @@ function registerIpc() {
         sessions.delete(opts.id)
         agentMeta.untrack(opts.id) // shell (and any claude in it) gone — drop the accent
         sessionLedger().drop(opts.id) // …and nothing to resume there (no-op during a quit)
+        livePtys.delete(live)
+        markExited()
       })
       sessions.set(opts.id, rec)
       diag("pty-spawn", { id: opts.id, pid: proc.pid, shell: path.basename(shellCmd) })
@@ -431,8 +450,13 @@ function registerIpc() {
     if (!rec) return
     rec.coalescer?.dispose()
     rec.buffer.clear()
-    rec.proc.kill()
+    rec.live.killed = true // hung up below: a quit waits for it without signalling again
     sessions.delete(id)
+    try {
+      rec.proc.kill()
+    } catch {
+      // already gone
+    }
   })
 
   // Shells — per-OS defaults + WSL distro enumeration.
@@ -821,7 +845,7 @@ app.setAppUserModelId("com.smterm.app")
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
 app.on("second-instance", () => {
-  if (!mainWindow) return
+  if (!mainWindow || draining()) return // quitting: don't resurface a window whose shells are ending
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.focus()
 })
@@ -858,8 +882,15 @@ app.whenReady().then(async () => {
   // OS shutdown / restart / logout: Electron skips before-quit (notably on Windows), so freeze
   // the resume ledger here too — else the dying children's SessionEnds/exits would clear it,
   // and a reboot is exactly when resuming matters.
-  onPower("shutdown", () => sessionLedger().freeze(60_000)) // thaws if the shutdown is cancelled
+  // No PTY drain here: a shutdown can be cancelled, and the app must stay usable then. A real
+  // quit (macOS logout sends terminate → before-quit) drains.
+  onPower("shutdown", () => {
+    sessionLedger().freeze(60_000) // thaws if the shutdown is cancelled
+    osEnding = true // its quit mustn't be held (see quit-plan.ts)…
+    setTimeout(() => (osEnding = false), 60_000) // …unless it was cancelled
+  })
   app.on("activate", () => {
+    if (draining()) return // quitting: a fresh window's panes couldn't spawn
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
@@ -876,20 +907,39 @@ app.on("will-quit", () => {
 })
 app.on("quit", () => diag("quit"))
 
-function killAllPtys() {
-  // Quit: keep every "inside Claude" entry for the relaunch BEFORE our kill makes Claude
-  // fire SessionEnd (which would otherwise clear them).
+/** Quit only: end every live PTY and wait for its exit (bounded) — see pty-drain.ts. */
+/** OS logout/restart: end every PTY without holding the quit (a hold reads as "cancelled"). */
+function killNow(): void {
   sessionLedger().freeze()
-  for (const rec of sessions.values()) {
-    rec.coalescer?.dispose()
+  for (const rec of sessions.values()) rec.coalescer?.dispose()
+  for (const p of livePtys) {
     try {
-      rec.proc.kill()
+      if (!p.killed) p.kill()
     } catch {
       // already gone
     }
   }
-  sessions.clear()
 }
+
+function shutdownPtys(): Promise<void> {
+  if (!shutdown) {
+    // Keep every "inside Claude" entry for the relaunch BEFORE our kill makes Claude fire
+    // SessionEnd (which would otherwise clear them).
+    sessionLedger().freeze()
+    for (const rec of sessions.values()) rec.coalescer?.dispose()
+    const count = livePtys.size
+    const win32 = process.platform === "win32"
+    shutdown = drainPtys([...livePtys], {
+      signals: !win32,
+      settleMs: win32 ? 300 : 0,
+    }).then((clean) => {
+      diag("ptys-drained", { count, clean })
+      sessions.clear()
+    })
+  }
+  return shutdown
+}
+let shutdown: Promise<void> | null = null
 
 // Is the quit-confirmation prompt enabled? (reads settings.json live)
 function confirmQuitEnabled(): boolean {
@@ -922,12 +972,29 @@ function disableConfirmQuit() {
 
 // Guard quit (⌘Q or the close button) when live sessions would be killed.
 app.on("before-quit", (e) => {
-  diag("before-quit", { ptys: sessions.size, confirmed: quitConfirmed })
-  if (quitConfirmed || sessions.size === 0 || !confirmQuitEnabled() || !mainWindow) {
-    killAllPtys()
+  const step = quitStep({
+    phase: quitPhase,
+    confirmed: quitConfirmed,
+    needsConfirm: sessions.size > 0 && confirmQuitEnabled() && !!mainWindow,
+    livePtys: livePtys.size,
+    osEnding,
+  })
+  diag("before-quit", { ptys: livePtys.size, step })
+  if (step === "proceed") return
+  if (step === "killNow") return killNow()
+  e.preventDefault()
+  if (step === "hold") return
+  if (step === "drain") {
+    // Hold the quit until every PTY has exited (≤ ~2 s), then quit for real.
+    quitPhase = "draining"
+    mainWindow?.hide() // feels instant while the shells wind down
+    void shutdownPtys().finally(() => {
+      quitPhase = "drained"
+      app.quit()
+    })
     return
   }
-  e.preventDefault()
+  if (!mainWindow) return
   const n = sessions.size
   void dialog
     .showMessageBox(mainWindow, {

@@ -159,6 +159,17 @@ After install / Electron upgrades run `npx electron-rebuild -o node-pty` (in
 there — push logic into pure modules (`output-buffer`, `coalescer`, shell-integration
 parsers) and test those; verify the PTY path manually / via the diagnostics log.
 
+**Quit must wait for every PTY's exit.** node-pty reports a child's exit from a background
+thread back into JS; if that lands while Electron is tearing Node down, node-pty throws a C++
+exception nobody catches → `abort()` (a SIGABRT crash report on ⌘Q). `before-quit` holds the
+quit and drains `livePtys` — every node-pty not yet exited, closed panes still winding down
+included (`pty-drain.ts`: SIGHUP, SIGKILL after 1.5 s; Windows: no signals + a 300 ms settle;
+always resolves), refusing new spawns meanwhile. The decision is the pure, tested
+`quit-plan.ts`. Two exceptions: an OS logout/restart (powerMonitor `shutdown`) is **not** held
+— macOS would report "smterm cancelled restart" — so it kills without waiting; and the shutdown
+event itself never drains (it can be cancelled; the app must stay usable). Known gap: a
+Windows logoff that skips `before-quit`.
+
 ## GUI launch has a bare PATH — import the login-shell env {#shell-env}
 
 A macOS/Linux app launched from Finder/Dock inherits a minimal `launchd` PATH
