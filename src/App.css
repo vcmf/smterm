@@ -491,6 +491,24 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tree-sub.tree-dir {
+  display: flex; /* the path ellipsizes; the label + `+N` never do */
+}
+.tree-dir-label {
+  flex: 0 0 3.2em; /* aligns the `from` / `in` paths */
+  color: var(--dim);
+}
+.tree-dir-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-more {
+  flex: none;
+  margin-left: 6px;
+  color: var(--dim);
+  cursor: default;
+}
 .tree-sub.attn {
   color: var(--amber);
 }

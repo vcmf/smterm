@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { FileText, FilePlus, FileX, X } from "@phosphor-icons/react"
 import { useStore } from "../store"
 import { ipc } from "../lib/ipc"
-import { useActiveCwd, getActiveWsl } from "../lib/use-active-cwd"
+import { useActiveWorkCwd, getActiveWsl } from "../lib/use-active-cwd"
 import { useFileMenu } from "./use-file-menu"
 import type { ChangeStatus, DiffLine } from "../lib/ipc"
 
@@ -16,7 +16,7 @@ const fileIcon = (status: ChangeStatus) => {
 /** Right-side git changes panel: changed files + selected-file unified diff. */
 export function DiffPanel() {
   const git = useStore((s) => s.git)
-  const cwd = useActiveCwd()
+  const cwd = useActiveWorkCwd() // the diff of where Claude works (its worktree), if it runs
   const [selected, setSelected] = useState<string | null>(null)
   const [diff, setDiff] = useState<DiffLine[]>([])
 

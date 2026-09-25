@@ -60,6 +60,7 @@ export interface AgentNode {
   cwd?: string
   recentFiles: string[] // most-recent-first, capped
   worktrees?: Worktree[] // worktrees created in this session (WorktreeCreate), root only
+  started?: number // root: order of its latest SessionStart — the newest per pane is live
   lastMessage?: string
   tokens?: TokenUsage // cumulative token usage (session root or sub-agent), off-band via hooks
   parentId?: string // undefined for a root
@@ -68,7 +69,7 @@ export interface AgentNode {
 
 export interface AgentGraph {
   nodes: Record<string, AgentNode>
-  rootIds: string[] // one root per session, in order of first appearance
+  rootIds: string[] // one root per session, in order of first appearance (the board's order)
 }
 
 export const emptyGraph: AgentGraph = { nodes: {}, rootIds: [] }
@@ -140,7 +141,14 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
 
   switch (ev.event) {
     case "SessionStart":
-      set(rid, { status: "idle", cwd: ev.cwd ?? at(rid).cwd })
+      // A (re)start — also in another pane (`claude --resume` after a crash) — makes it its
+      // pane's newest session (`started`); the board order (rootIds) never changes.
+      set(rid, {
+        status: "idle",
+        cwd: ev.cwd ?? at(rid).cwd,
+        paneId: ev.paneId ?? at(rid).paneId,
+        started: Math.max(0, ...rootIds.map((id) => nodes[id]?.started ?? 0)) + 1,
+      })
       break
     case "UserPromptSubmit": {
       // New turn: drop the previous turn's FINISHED sub-agents (they're per-turn), so

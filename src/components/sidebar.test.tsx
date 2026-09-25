@@ -106,3 +106,77 @@ describe("Sidebar — branch, PR and Claude snippet", () => {
     expect(ipc.openExternal).toHaveBeenCalledWith("https://x/51")
   })
 })
+
+describe("Sidebar — from / in folders", () => {
+  const setup = () => {
+    st().newTab(testShell)
+    const id = st().tabs[0]!.activeSessionId
+    st().setSessionCwd(id, "/w/term")
+    return id
+  }
+
+  it("one folder line for a `cd` inside the same checkout (same repo root)", () => {
+    const id = setup()
+    st().applyAgentEvents([
+      { event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/term/src" },
+    ])
+    st().setPaneGit(
+      { [id]: { root: "/w/term" }, [`${id}@in`]: { root: "/w/term", forCwd: "/w/term/src" } },
+      [],
+    )
+    render(<Sidebar />)
+    expect(screen.queryByText("from")).toBeNull()
+  })
+
+  it("one folder line while Claude works where it started", () => {
+    const id = setup()
+    st().applyAgentEvents([{ event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/term" }])
+    render(<Sidebar />)
+    expect(screen.queryByText("from")).toBeNull()
+    expect(screen.queryByText("in")).toBeNull()
+  })
+
+  it("from + in once Claude moves into another checkout (a worktree); each keeps its PR; +N", () => {
+    const id = setup()
+    st().applyAgentEvents([
+      { event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/term" },
+      { event: "WorktreeCreate", sessionId: "c1", paneId: id, worktreePath: "/w/term/wt/b" },
+      { event: "CwdChanged", sessionId: "c1", paneId: id, cwd: "/w/term/.claude/worktrees/a" },
+    ])
+    st().setPaneGit(
+      {
+        [id]: {
+          branch: "main",
+          root: "/w/term",
+          pr: { number: 1, state: "merged", url: "https://x/1" },
+        },
+        [`${id}@in`]: {
+          branch: "feat/a",
+          root: "/w/term/.claude/worktrees/a",
+          forCwd: "/w/term/.claude/worktrees/a",
+          pr: { number: 57, state: "open", url: "https://x/57" },
+        },
+      },
+      [id, `${id}@in`],
+    )
+    render(<Sidebar />)
+    expect(screen.getByText("from")).toBeInTheDocument()
+    expect(screen.getByText("in")).toBeInTheDocument()
+    expect(screen.getByText(/feat\/a • \.claude\/worktrees\/a/)).toBeInTheDocument()
+    expect(screen.getByText("PR #57")).toBeInTheDocument()
+    expect(screen.getByText("PR #1")).toBeInTheDocument() // the session's own branch PR stays
+    expect(screen.getByText("+1")).toHaveAttribute("title", expect.stringContaining("/w/term/wt/b"))
+  })
+
+  it("back to one line when Claude exits; closing the pane drops its `in` git info", () => {
+    const id = setup()
+    st().applyAgentEvents([{ event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/api" }])
+    st().setPaneGit({ [`${id}@in`]: { branch: "dev", forCwd: "/w/api" } }, [`${id}@in`])
+    render(<Sidebar />)
+    expect(screen.getByText(/dev • \/w\/api/)).toBeInTheDocument()
+    act(() => st().claudeExited(id))
+    expect(screen.queryByText("in")).toBeNull()
+    act(() => st().closeSurface(st().tabs[0]!.id, id))
+    expect(st().paneGit[`${id}@in`]).toBeUndefined()
+  })
+})

@@ -1,12 +1,14 @@
 import { useStore } from "../store"
 import { wslContext, type WslContext } from "./wsl"
+import { workCwd } from "./agent-dirs"
 
-/** The working directory of the focused session (drives the git diff panel). */
-export function useActiveCwd(): string | undefined {
+/** The folder the focused pane works in: Claude's while it runs there (a worktree, a `cd`),
+ *  else the shell's — drives the git status bar + changes panel. */
+export function useActiveWorkCwd(): string | undefined {
   return useStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId)
     const sid = tab?.activeSessionId
-    return sid ? s.sessions[sid]?.cwd : undefined
+    return sid ? workCwd(s.agents, s.paneGit, sid, s.sessions[sid]?.cwd) : undefined
   })
 }
 
@@ -24,7 +26,8 @@ export function useFilesRoot(): {
   sessionId: string | undefined
   diverged: boolean
 } {
-  const cwd = useActiveCwd()
+  // Claude's checkout while it works in another one — the same repo the git badges come from.
+  const cwd = useActiveWorkCwd()
   const sessionId = useActiveSessionId()
   const override = useStore((s) => (sessionId ? s.paneRoot[sessionId] : undefined))
   return { root: override ?? cwd, cwd, sessionId, diverged: !!override && override !== cwd }

@@ -13,7 +13,8 @@ import { SettingsPanel } from "./components/settings-panel"
 import { FilePreview } from "./components/file-preview"
 import { ClosePaneDialog } from "./components/close-pane-dialog"
 import { RightPanelResizer } from "./components/right-panel-resizer"
-import { useActiveCwd, getActiveWsl } from "./lib/use-active-cwd"
+import { useActiveWorkCwd, getActiveWsl } from "./lib/use-active-cwd"
+import { claudeWorkDirs, keepPrs, planGitPoll, settleInAnswers } from "./lib/agent-dirs"
 import { TerminalManager } from "./terminal/terminal-manager"
 import { activeTheme, useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
@@ -45,7 +46,7 @@ function App() {
   const rightView = useStore((s) => s.rightView)
   const rightPanelWidth = useStore((s) => s.rightPanelWidth)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
-  const activeCwd = useActiveCwd()
+  const activeCwd = useActiveWorkCwd() // Claude's folder while it runs (worktree), else the shell's
 
   // Load shells + settings, then restore the saved workspace (VS Code-style) or open a tab.
   // Settings first: a restored pane spawns with the theme's bg (COLORFGBG light/dark), and
@@ -316,9 +317,10 @@ function App() {
     })
   }, [])
 
-  // Branch + GitHub PR for every terminal (sidebar). Main caches/dedupes, so this is cheap;
-  // still paused while the sidebar is collapsed or the window hidden. Re-polls soon after a
-  // cwd changes (cd / new terminal) or the sidebar is shown again.
+  // Branch + GitHub PR for every terminal (sidebar), and Claude's checkout when it moved (the
+  // sidebar's `in` line; also what the status bar / panels follow). Main caches/dedupes, so
+  // this is cheap; collapsed sidebar → moved terminals only, no PRs; hidden window → paused.
+  // Re-polls soon after a cwd changes (cd / new terminal / Claude moving) or on sidebar show.
   useEffect(() => {
     let stopped = false
     let soon: ReturnType<typeof setTimeout> | undefined
@@ -326,22 +328,25 @@ function App() {
     let seq = 0 // polls can overlap (a slow gh); only the newest may write
     const poll = async () => {
       const s = useStore.getState()
-      if (s.sidebarCollapsed || document.visibilityState === "hidden") return
-      const reqs = Object.values(s.sessions)
-        .flatMap((x) =>
-          x.cwd ? [{ paneId: x.id, cwd: x.cwd, wsl: wslContext(x.command, x.args) }] : [],
-        )
-        .slice(0, 64) // main answers at most 64 — keep `polled` in step with what was sent
-      if (reqs.length === 0) return
+      if (document.visibilityState === "hidden") return
+      const { reqs, polled, inCwd } = planGitPoll(
+        Object.values(s.sessions),
+        claudeWorkDirs(s.agents),
+        s.sidebarCollapsed,
+      )
+      if (reqs.length === 0) {
+        if (polled.length) useStore.getState().setPaneGit({}, polled) // still clear stale `in`s
+        return
+      }
       const mine = ++seq
       const res = await ipc.paneGitInfo(reqs).catch(() => null)
       if (!res || stopped || mine !== seq) return // a newer poll has (or will have) the truth
       const pending = Object.values(res).some((i) => i.prPending)
       for (const i of Object.values(res)) delete i.prPending // transport flag, not state
-      useStore.getState().setPaneGit(
-        res,
-        reqs.map((r) => r.paneId),
-      )
+      const known = useStore.getState().paneGit
+      settleInAnswers(res, inCwd, known)
+      if (s.sidebarCollapsed) keepPrs(res, known) // no-PR lookups: don't blank the PR lines
+      useStore.getState().setPaneGit(res, polled)
       if (pending) pollSoon(1500) // a PR is being fetched in main — pick it up shortly
     }
     const pollSoon = (ms = 400) => {
@@ -351,9 +356,10 @@ function App() {
     const every = setInterval(() => void poll(), 10_000)
     const unsub = useStore.subscribe((state, prev) => {
       if (state.sidebarCollapsed !== prev.sidebarCollapsed && !state.sidebarCollapsed) pollSoon()
-      if (state.sessions === prev.sessions) return
+      if (state.sessions === prev.sessions && state.agents === prev.agents) return
+      const work = claudeWorkDirs(state.agents) // memoized: cheap on every hook event
       const key = Object.values(state.sessions)
-        .map((x) => `${x.id}=${x.cwd ?? ""}`)
+        .map((x) => `${x.id}=${x.cwd ?? ""}>${work[x.id]?.cwd ?? ""}`)
         .join("|")
       if (key !== lastKey) {
         lastKey = key

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, act } from "@testing-library/react"
 import { AgentsPanel } from "./agents-panel"
 import { useStore } from "../store"
 import { reduceAgentEvents } from "../lib/agent-graph"
@@ -28,6 +28,27 @@ describe("AgentsPanel", () => {
     render(<AgentsPanel />)
     expect(screen.getByText("app")).toBeInTheDocument() // base(/repo/app)
     expect(screen.getByText("feat/x")).toBeInTheDocument() // worktree branch
+  })
+
+  it("marks the worktree Claude works in now (`in`), not the others", () => {
+    const { container } = render(<AgentsPanel />)
+    expect(container.textContent).not.toContain("· in")
+    const moveIn = { event: "CwdChanged", sessionId: "s", paneId: "p", cwd: "/repo/.wt/feat/" }
+    act(() => useStore.getState().applyAgentEvents([moveIn]))
+    expect(container.textContent).toContain("feat/x · in")
+    const deeper = { ...moveIn, cwd: "/repo/.wt/feat/src" } // a subfolder of that worktree
+    act(() => useStore.getState().applyAgentEvents([deeper]))
+    expect(container.textContent).toContain("feat/x · in")
+    // a worktree nested inside it: only the deepest one is `in`
+    const nested = "/repo/.wt/feat/.claude/worktrees/b"
+    act(() =>
+      useStore.getState().applyAgentEvents([
+        { event: "WorktreeCreate", sessionId: "s", worktreePath: nested, baseBranch: "feat/b" },
+        { ...moveIn, cwd: nested },
+      ]),
+    )
+    expect(container.textContent).toContain("feat/b · in")
+    expect(container.textContent).not.toContain("feat/x · in")
   })
 
   it("clicking the folder opens a terminal there (agent's pane context)", () => {

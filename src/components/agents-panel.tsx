@@ -1,4 +1,5 @@
 import { X, TreeStructure, GitBranch } from "@phosphor-icons/react"
+import { isInside, samePath } from "../lib/agent-dirs"
 import { useStore } from "../store"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { displaySessionTitle } from "../lib/session-label"
@@ -148,6 +149,10 @@ export function AgentsPanel() {
             .map((cid) => agents.nodes[cid])
             .filter((c): c is AgentNode => !!c)
           const wts = root.worktrees ?? []
+          // The worktree Claude is in: the deepest containing its cwd (worktrees can nest).
+          const inWt = wts
+            .filter((w) => root.cwd && (samePath(root.cwd, w.path) || isInside(root.cwd, w.path)))
+            .sort((a, b) => b.path.length - a.path.length)[0]?.path
           const hasKids = childNodes.length > 0 || wts.length > 0
           const lastChildIdx = wts.length ? -1 : childNodes.length - 1
           const active = !!root.paneId && root.paneId === activePaneId
@@ -190,7 +195,11 @@ export function AgentsPanel() {
                 >
                   <GitBranch size={12} color="var(--blue)" />
                   <div className="tree-labels">
-                    <span className="tree-primary">{w.branch ?? base(w.path)}</span>
+                    <span className="tree-primary">
+                      {w.branch ?? base(w.path)}
+                      {/* Claude works in this one now — the sidebar's `in` line. */}
+                      {w.path === inWt && <span className="status-faint"> · in</span>}
+                    </span>
                     <button
                       className="tree-sub folder-link"
                       title={`Open a terminal here — ${w.path}`}

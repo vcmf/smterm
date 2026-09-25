@@ -342,3 +342,24 @@ describe("claudePaneIds / dropPaneSessions", () => {
     expect(claudePaneIds(g)).toBe(claudePaneIds(g))
   })
 })
+
+describe("SessionStart re-homes a session", () => {
+  it("the same session started again in another pane (resume after a crash) moves there", () => {
+    const g = reduceAgentEvents([
+      { event: "SessionStart", sessionId: "s", paneId: "a" },
+      { event: "SessionStart", sessionId: "s", paneId: "b", source: "resume" },
+    ])
+    expect(claudePaneIds(g)).toEqual(["b"])
+  })
+
+  it("a restart never reorders the board (/compact, resume in place or in another pane)", () => {
+    const g = reduceAgentEvents([
+      { event: "SessionStart", sessionId: "a", paneId: "p" },
+      { event: "SessionStart", sessionId: "b", paneId: "q" },
+      { event: "SessionStart", sessionId: "a", paneId: "p", source: "compact" },
+    ])
+    expect(g.rootIds).toEqual(["root:a", "root:b"])
+    const moved = reduceAgentEvent(g, { event: "SessionStart", sessionId: "a", paneId: "r" })
+    expect(moved.rootIds).toEqual(["root:a", "root:b"])
+  })
+})

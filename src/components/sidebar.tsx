@@ -11,14 +11,21 @@ import {
 import { activeTheme, useStore } from "../store"
 import { sessionColor } from "../lib/session-color"
 import { claudePaneIds } from "../lib/agent-graph"
+import { claudeWorkFlat, inGitFor, inGitKey, inLabel, worksElsewhere } from "../lib/agent-dirs"
 import { ClaudeIcon } from "./claude-icon"
-import { messageSnippet, prStateUi, type PrInfo } from "../lib/pane-git"
+import { messageSnippet, prStateUi, type PaneGitInfo, type PrInfo } from "../lib/pane-git"
 import { ipc } from "../lib/ipc"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { allPanes } from "../lib/pane-tree"
 import { resolveDefaultShell } from "../lib/shells"
 import { statusUi } from "../lib/status-ui"
-import { tabTitle, sessionSubline, displaySessionTitle, shellType } from "../lib/session-label"
+import {
+  tabTitle,
+  sessionSubline,
+  branchLine,
+  displaySessionTitle,
+  shellType,
+} from "../lib/session-label"
 
 /** Left sidebar: a tree of real sessions (tabs) → panes, with live status dots. */
 export function Sidebar() {
@@ -48,6 +55,12 @@ export function Sidebar() {
   const accentOf = (id: string) => sessionColor(agentMeta[id], scheme)
   // Terminals running Claude (shallow-compared list: re-render only when the set changes).
   const claudePanes = useStore(useShallow((s) => claudePaneIds(s.agents)))
+  // Where each pane's Claude works, as memoized primitives: the shallow compare re-renders
+  // only when a folder changes, not on every hook event.
+  const workFlat = useStore(useShallow((s) => claudeWorkFlat(s.agents)))
+  const work: Record<string, { cwd: string; others: string }> = {}
+  for (let i = 0; i + 2 < workFlat.length; i += 3)
+    work[workFlat[i]!] = { cwd: workFlat[i + 1]!, others: workFlat[i + 2]! }
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
@@ -168,10 +181,13 @@ export function Sidebar() {
                             </span>
                           )
                         )}
-                        <span className="tree-sub">
-                          {sessionSubline(s.cwd, home, paneGit[id]?.branch) || "shell"}
-                        </span>
-                        {paneGit[id]?.pr && <PrLine pr={paneGit[id].pr} />}
+                        <DirLines
+                          shellCwd={s.cwd}
+                          home={home}
+                          shellGit={paneGit[id]}
+                          inGit={paneGit[inGitKey(id)]}
+                          work={work[id]}
+                        />
                       </div>
                       {s.status !== "attention" && (
                         <span className="tree-meta" style={{ color: `var(--${ui.dot})` }}>
@@ -199,6 +215,66 @@ export function Sidebar() {
         </span>
       </div>
     </div>
+  )
+}
+
+/** The folder line(s): one when Claude works where it started (or isn't running); else
+ *  `from` (the shell's folder — where the session is saved) + `in` (where Claude works now). */
+function DirLines({
+  shellCwd,
+  home,
+  shellGit,
+  inGit,
+  work,
+}: {
+  shellCwd: string | undefined
+  home: string
+  shellGit: PaneGitInfo | undefined
+  inGit: PaneGitInfo | undefined
+  work: { cwd: string; others: string } | undefined
+}) {
+  const extra = work?.others ? work.others.split("\n").length : 0
+  const more = extra > 0 && (
+    <span className="tree-more" title={`Other worktrees of this session:\n${work!.others}`}>
+      +{extra}
+    </span>
+  )
+  if (!shellCwd || !work || !worksElsewhere(shellCwd, work.cwd, shellGit, inGit)) {
+    return (
+      <>
+        <span className="tree-sub tree-dir">
+          <span className="tree-dir-path">
+            {sessionSubline(shellCwd, home, shellGit?.branch) || "shell"}
+          </span>
+          {more}
+        </span>
+        {shellGit?.pr && <PrLine pr={shellGit.pr} />}
+      </>
+    )
+  }
+  // Each line keeps its own PR: the session belongs to `from`'s branch, the work to `in`'s.
+  return (
+    <>
+      <span
+        className="tree-sub tree-dir"
+        title="Claude started here. The session is saved under this folder."
+      >
+        <span className="tree-dir-label">from</span>
+        <span className="tree-dir-path">{sessionSubline(shellCwd, home, shellGit?.branch)}</span>
+      </span>
+      {shellGit?.pr && <PrLine pr={shellGit.pr} />}
+      <span className="tree-sub tree-dir" title={`Claude is working here now: ${work.cwd}`}>
+        <span className="tree-dir-label">in</span>
+        <span className="tree-dir-path">
+          {branchLine(
+            inGitFor(inGit, work.cwd)?.branch,
+            inLabel(shellCwd, work.cwd, home, shellGit?.real),
+          )}
+        </span>
+        {more}
+      </span>
+      {inGitFor(inGit, work.cwd)?.pr && <PrLine pr={inGit!.pr!} />}
+    </>
   )
 }
 
