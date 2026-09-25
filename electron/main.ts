@@ -31,6 +31,7 @@ import {
 import { gitStatus, gitDiff } from "./git"
 import { OutputCoalescer } from "./coalescer"
 import { OutputBuffer } from "./output-buffer"
+import { drainPtys } from "./pty-drain"
 import { appendDiag } from "./diagnostics"
 import { applyLoginShellEnv } from "./shell-env"
 import { buildEditorCommand, winQuote } from "./editor-command"
@@ -77,6 +78,7 @@ interface PtySession {
   shell: string
   wslDistro?: string // for a WSL pane: the distro, so its Linux paths resolve to the right UNC share
   integrated: boolean // our shell integration (OSC 133 marks, claude wrapper) was injected
+  exited: Promise<void> // resolves in onExit — quitting waits for it (see pty-drain.ts)
 }
 const sessions = new Map<string, PtySession>()
 let mainWindow: BrowserWindow | null = null
@@ -100,6 +102,8 @@ let ledger: SessionLedger | null = null
 const sessionLedger = () =>
   (ledger ??= new SessionLedger(path.join(configDir(), "agent-sessions.json")))
 let quitConfirmed = false
+let draining = false // quit: waiting for the PTYs to exit
+let ptysDrained = false // …done — the next before-quit lets the quit through
 
 // PTY output batching (see electron/coalescer.ts + docs/PERF.md).
 const PTY_FLUSH_MS = 4
@@ -384,6 +388,8 @@ function registerIpc() {
         env: spawnEnv,
       })
       const coalesce = process.env.SMTERM_NO_COALESCE !== "1"
+      let markExited!: () => void
+      const exited = new Promise<void>((res) => (markExited = res))
       const rec: PtySession = {
         id: opts.id,
         proc,
@@ -394,6 +400,7 @@ function registerIpc() {
         // Linux transcript path against the right distro's UNC share (not just the default).
         wslDistro: wsl ? (parseWslDistroArg(opts.args ?? []) ?? defaultWslDistro()) : undefined,
         integrated: !!inj,
+        exited,
       }
       if (coalesce) {
         rec.coalescer = new OutputCoalescer(PTY_FLUSH_MS, PTY_MAX_FLUSH_BYTES, (d) => emit(rec, d))
@@ -409,6 +416,7 @@ function registerIpc() {
         sessions.delete(opts.id)
         agentMeta.untrack(opts.id) // shell (and any claude in it) gone — drop the accent
         sessionLedger().drop(opts.id) // …and nothing to resume there (no-op during a quit)
+        markExited()
       })
       sessions.set(opts.id, rec)
       diag("pty-spawn", { id: opts.id, pid: proc.pid, shell: path.basename(shellCmd) })
@@ -876,18 +884,18 @@ app.on("will-quit", () => {
 })
 app.on("quit", () => diag("quit"))
 
-function killAllPtys() {
-  // Quit: keep every "inside Claude" entry for the relaunch BEFORE our kill makes Claude
-  // fire SessionEnd (which would otherwise clear them).
+/** Quit: end every PTY and wait for their exits, so none calls back into a Node that's being
+ *  torn down (node-pty → uncaught C++ exception → SIGABRT). Bounded: always resolves. */
+async function shutdownPtys(): Promise<void> {
+  // Keep every "inside Claude" entry for the relaunch BEFORE our kill makes Claude fire
+  // SessionEnd (which would otherwise clear them).
   sessionLedger().freeze()
-  for (const rec of sessions.values()) {
-    rec.coalescer?.dispose()
-    try {
-      rec.proc.kill()
-    } catch {
-      // already gone
-    }
-  }
+  const recs = [...sessions.values()]
+  for (const rec of recs) rec.coalescer?.dispose()
+  const clean = await drainPtys(
+    recs.map((rec) => ({ kill: (sig?: string) => rec.proc.kill(sig), exited: rec.exited })),
+  )
+  diag("ptys-drained", { count: recs.length, clean })
   sessions.clear()
 }
 
@@ -922,9 +930,18 @@ function disableConfirmQuit() {
 
 // Guard quit (⌘Q or the close button) when live sessions would be killed.
 app.on("before-quit", (e) => {
+  if (ptysDrained) return // second pass, after the drain below: let the quit proceed
   diag("before-quit", { ptys: sessions.size, confirmed: quitConfirmed })
   if (quitConfirmed || sessions.size === 0 || !confirmQuitEnabled() || !mainWindow) {
-    killAllPtys()
+    // Hold the quit until every PTY has exited (≤ ~2 s), then quit for real.
+    e.preventDefault()
+    if (draining) return
+    draining = true
+    mainWindow?.hide() // feels instant while the shells wind down
+    void shutdownPtys().finally(() => {
+      ptysDrained = true
+      app.quit()
+    })
     return
   }
   e.preventDefault()

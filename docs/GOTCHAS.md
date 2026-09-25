@@ -159,6 +159,12 @@ After install / Electron upgrades run `npx electron-rebuild -o node-pty` (in
 there — push logic into pure modules (`output-buffer`, `coalescer`, shell-integration
 parsers) and test those; verify the PTY path manually / via the diagnostics log.
 
+**Quit must wait for every PTY's exit.** node-pty reports a child's exit from a background
+thread back into JS; if that lands while Electron is tearing Node down, node-pty throws a C++
+exception nobody catches → `abort()` (a SIGABRT crash report on ⌘Q). `before-quit` therefore
+holds the quit, drains the PTYs (`pty-drain.ts`: SIGHUP, then SIGKILL after 1.5 s, always
+resolves) and only then quits. Never quit/exit with PTYs still alive.
+
 ## GUI launch has a bare PATH — import the login-shell env {#shell-env}
 
 A macOS/Linux app launched from Finder/Dock inherits a minimal `launchd` PATH
