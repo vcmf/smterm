@@ -30,7 +30,7 @@ describe("claudeWorkDirs", () => {
   it("other worktrees exclude the one Claude is in; the newest session of a pane wins", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "old", paneId: "p", cwd: "/old" },
-      { event: "SessionStart", sessionId: "s", paneId: "p", cwd: "/r" },
+      { event: "SessionStart", sessionId: "s", paneId: "p", cwd: "/r", source: "resume" }, // /resume
       { event: "WorktreeCreate", sessionId: "s", paneId: "p", worktreePath: "/r/wt/a" },
       { event: "WorktreeCreate", sessionId: "s", paneId: "p", worktreePath: "/r/wt/b" },
       { event: "CwdChanged", sessionId: "s", paneId: "p", cwd: "/r/wt/a/" },
@@ -61,7 +61,7 @@ describe("claudeWorkDirs", () => {
   it("a newest session with no folder yet hides the pane's older folder", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
-      { event: "SessionStart", sessionId: "b", paneId: "p" },
+      { event: "SessionStart", sessionId: "b", paneId: "p", source: "clear" },
     ])
     expect(claudeWorkDirs(g).p).toBeUndefined()
   })
@@ -69,7 +69,7 @@ describe("claudeWorkDirs", () => {
   it("an older session restarting in the same pane (/resume back) is the live one again", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
-      { event: "SessionStart", sessionId: "b", paneId: "p", cwd: "/b" },
+      { event: "SessionStart", sessionId: "b", paneId: "p", cwd: "/b", source: "resume" },
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a", source: "resume" },
     ])
     expect(claudeWorkDirs(g).p?.cwd).toBe("/a")
@@ -79,7 +79,7 @@ describe("claudeWorkDirs", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
       { event: "SessionStart", sessionId: "b", paneId: "q", cwd: "/b" },
-      { event: "SessionStart", sessionId: "a", paneId: "q", cwd: "/a2" }, // resumed in q
+      { event: "SessionStart", sessionId: "a", paneId: "q", cwd: "/a2", source: "resume" }, // in q
     ])
     expect(claudeWorkDirs(g).q?.cwd).toBe("/a2")
     expect(claudeWorkFlat(g)).toBe(claudeWorkFlat(g))
@@ -225,5 +225,53 @@ describe("planGitPoll / settleInAnswers", () => {
     const res = { a: { branch: "x" }, b: { branch: "y" } }
     keepPrs(res, { a: { branch: "x", pr }, b: { branch: "z", pr } })
     expect(res).toEqual({ a: { branch: "x", pr }, b: { branch: "y" } })
+  })
+})
+
+describe("background agents don't take the pane over", () => {
+  it("a startup while the lead runs is nested: `in` keeps following the lead", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", source: "resume" },
+      { event: "SessionStart", sessionId: "agent", paneId: "p", cwd: "/dimo", source: "startup" },
+      { event: "CwdChanged", sessionId: "agent", paneId: "p", cwd: "/tmp/agent/scratchpad" },
+    ])
+    expect(g.nodes["root:agent"]?.nested).toBe(true)
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/dimo")
+  })
+
+  it("the lead's own restart (/compact, resume) isn't nested; a first session isn't either", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/a" },
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/a", source: "compact" },
+    ])
+    expect(g.nodes["root:lead"]?.nested).toBe(false)
+  })
+
+  it("once the lead is gone, a new session leads again", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "old", paneId: "p", cwd: "/a" },
+      { event: "SessionEnd", sessionId: "old", paneId: "p" },
+      { event: "SessionStart", sessionId: "new", paneId: "p", cwd: "/b" },
+    ])
+    expect(g.nodes["root:new"]?.nested).toBe(false)
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/b")
+  })
+})
+
+describe("a stray SessionStart from another folder doesn't move the lead", () => {
+  it("keeps the lead's folder when a SessionStart's folder isn't where Claude filed it", () => {
+    const tr = "/Users/me/.claude/projects/-dimo/lead.jsonl"
+    const g = graph([
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", transcriptPath: tr },
+      {
+        event: "SessionStart",
+        sessionId: "lead",
+        paneId: "p",
+        cwd: "/tmp/x/scratchpad",
+        transcriptPath: tr,
+        source: "resume",
+      },
+    ])
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/dimo")
   })
 })

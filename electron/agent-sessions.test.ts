@@ -310,3 +310,62 @@ describe("SessionLedger persistence", () => {
     expect(new SessionLedger(file).get("p1")).toBeUndefined()
   })
 })
+
+describe("SessionLedger — the folder must be where Claude filed the session", () => {
+  const DIMO = "/Users/me/workspace/dimo"
+  const tr = (dir: string, id = ID) => `/Users/me/.claude/projects/${dir}/${id}.jsonl`
+  const T_DIMO = tr("-Users-me-workspace-dimo")
+  const PAD = "/private/tmp/claude-501/-Users-me-workspace-dimo/7aaf8a32/scratchpad"
+
+  it("a SessionStart carrying another folder (a background agent's scratchpad) is rejected", () => {
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: DIMO, transcriptPath: T_DIMO }))
+    expect(l.apply(start({ cwd: PAD, transcriptPath: T_DIMO, source: "resume" }))).toBe("rejected")
+    expect(l.get("p1")?.cwd).toBe(DIMO)
+  })
+
+  it("later events never move the folder to a non-matching one (cd into a subfolder / scratchpad)", () => {
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: DIMO, transcriptPath: T_DIMO }))
+    l.apply({ event: "CwdChanged", sessionId: ID, paneId: "p1", cwd: PAD, transcriptPath: T_DIMO })
+    l.apply({
+      event: "PreToolUse",
+      sessionId: ID,
+      paneId: "p1",
+      cwd: `${DIMO}/src`,
+      transcriptPath: T_DIMO,
+    })
+    expect(l.get("p1")?.cwd).toBe(DIMO)
+  })
+
+  it("a session re-filed under a worktree's folder follows it (resume must cd there)", () => {
+    const l = new SessionLedger(null)
+    const repo = "/Users/me/up/asianf"
+    const wt = `${repo}/.claude/worktrees/x`
+    l.apply(start({ cwd: repo, transcriptPath: tr("-Users-me-up-asianf") }))
+    l.apply({
+      event: "CwdChanged",
+      sessionId: ID,
+      paneId: "p1",
+      cwd: wt,
+      transcriptPath: tr("-Users-me-up-asianf--claude-worktrees-x"),
+    })
+    expect(l.get("p1")).toMatchObject({
+      cwd: wt,
+      transcriptPath: tr("-Users-me-up-asianf--claude-worktrees-x"),
+    })
+  })
+
+  it("an entry recorded with a mismatching folder (before this check) is skipped, never cd'd into", async () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "smterm-ledger-m-")), "l.json")
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ p1: { sessionId: ID, cwd: PAD, transcriptPath: T_DIMO } }),
+    )
+    const l = new SessionLedger(file)
+    expect((await plan(l)).p1).toMatchObject({
+      status: "skip",
+      reason: "its folder doesn't match the session",
+    })
+  })
+})

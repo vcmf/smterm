@@ -117,6 +117,18 @@ const PTY_MAX_FLUSH_BYTES = 256 * 1024
 const PTY_REPLAY_BYTES = 256 * 1024
 
 // Send PTY output to the session's current renderer (skips a destroyed one).
+const TRACED_HOOKS = new Set(["SessionStart", "SessionEnd", "CwdChanged", "WorktreeCreate"])
+/** A hook event's diagnostics fields: which session, from which pane, where. */
+function hookTrace(ev: AgentEvent): Record<string, string> {
+  return {
+    ev: ev.event,
+    sid: ev.sessionId.slice(0, 8),
+    pane: (ev.paneId ?? "-").slice(0, 8),
+    src: ev.source ?? ev.reason ?? "",
+    cwd: ev.cwd ?? "",
+  }
+}
+
 function emit(rec: PtySession, data: string): void {
   // Quitting: the dying shells' last output (a bell, OSC 9) mustn't reach the hidden window.
   if (draining()) return
@@ -237,12 +249,22 @@ async function startAgentObservability(): Promise<void> {
         mainWindow?.webContents.send("agents:events", events)
         // Which pane is inside which Claude session (+ its WSL distro, for the transcript).
         for (const ev of events) {
-          sessionLedger().apply(ev, ev.paneId ? sessions.get(ev.paneId)?.wslDistro : undefined)
+          // Session lifecycle only (never per-tool events): traceable when resume goes wrong.
+          if (TRACED_HOOKS.has(ev.event)) diag("hook", hookTrace(ev))
+          const verdict = sessionLedger().apply(
+            ev,
+            ev.paneId ? sessions.get(ev.paneId)?.wslDistro : undefined,
+          )
+          if (verdict === "rejected") diag("hook-cwd-rejected", hookTrace(ev))
         }
         // Session-level events locate each Claude pane's transcript → track its /color and
         // /rename for the pane accent (async + debounced; SessionEnd stops it).
         for (const ev of events) {
           if (!ev.paneId || !ev.transcriptPath || ev.agentId) continue
+          // Only the pane's own session: a background agent inherits the pane but mustn't
+          // switch its accent to the agent's transcript.
+          const lead = sessionLedger().get(ev.paneId)?.sessionId
+          if (lead && lead !== ev.sessionId) continue
           if (ev.event === "SessionEnd") agentMeta.untrack(ev.paneId, true, ev.transcriptPath)
           else
             agentMeta.track(

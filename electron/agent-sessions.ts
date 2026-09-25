@@ -15,6 +15,7 @@
 //     SessionEnd). Only a quit/shutdown (freeze) or an app crash leaves entries to resume.
 //   - Closing the pane / the shell exiting drops it (unless frozen).
 
+import { cwdMatchesTranscript } from "../src/lib/claude-project"
 import fs from "node:fs"
 import path from "node:path"
 import type { AgentEvent } from "../src/lib/agent-graph"
@@ -89,11 +90,15 @@ export class SessionLedger {
   }
 
   /** Fold a hook event (session-root events from a known pane only). */
-  apply(ev: AgentEvent, wslDistro?: string): void {
+  /** Fold one hook event; "rejected" = a SessionStart whose folder isn't the session's. */
+  apply(ev: AgentEvent, wslDistro?: string): "rejected" | undefined {
     if (this.frozen || !ev.paneId || ev.agentId) return
     const cur = this.entries.get(ev.paneId)
     if (ev.event === "SessionStart") {
       if (!ev.cwd) return
+      // Resume must `cd` where Claude filed the session — a folder that doesn't encode to the
+      // transcript's project dir (a background agent's scratchpad…) would strand the resume.
+      if (cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === false) return "rejected"
       // A new `startup` while the pane's session (recorded THIS run) is live = a nested claude:
       // keep the parent. An entry carried over from the previous run is always replaceable —
       // the user started something new instead of resuming it.
@@ -116,12 +121,15 @@ export class SessionLedger {
       })
     } else if (ev.event === "SessionEnd") {
       if (cur?.sessionId === ev.sessionId) this.delete(ev.paneId)
-    } else if (
-      cur?.sessionId === ev.sessionId &&
-      ev.permissionMode &&
-      ev.permissionMode !== cur.permissionMode
-    ) {
-      this.set(ev.paneId, { ...cur, permissionMode: ev.permissionMode, updatedAt: this.now() })
+    } else if (cur?.sessionId === ev.sessionId) {
+      let next = cur
+      if (ev.permissionMode && ev.permissionMode !== cur.permissionMode)
+        next = { ...next, permissionMode: ev.permissionMode }
+      // Claude re-files a session that enters a worktree under the worktree's folder: follow
+      // it (only a folder matching the transcript's — a plain `cd src` never does).
+      if (ev.cwd && ev.cwd !== cur.cwd && cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === true)
+        next = { ...next, cwd: ev.cwd, transcriptPath: ev.transcriptPath }
+      if (next !== cur) this.set(ev.paneId, { ...next, updatedAt: this.now() })
     }
   }
 
@@ -178,6 +186,12 @@ export class SessionLedger {
         // as editing keys (^C aborts, CR submits) and could break out of the quoting.
         if (hasControlChars(e.cwd)) {
           out[id] = { ...base, status: "skip", reason: "its folder name can't be typed safely" }
+          return
+        }
+        // A folder that isn't where Claude filed the session: `claude --resume` can't find it
+        // there (older entries recorded before this check).
+        if (cwdMatchesTranscript(e.cwd, e.transcriptPath) === false) {
+          out[id] = { ...base, status: "skip", reason: "its folder doesn't match the session" }
           return
         }
         const pf = await preflight(e)

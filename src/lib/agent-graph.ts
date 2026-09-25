@@ -12,6 +12,8 @@
 // (UserPromptSubmit) drops the previous turn's finished sub-agents, and SessionEnd
 // evicts the whole session. So finished agents disappear rather than piling up.
 
+import { cwdMatchesTranscript } from "./claude-project"
+
 export type AgentStatus = "working" | "waiting" | "idle" | "done"
 
 /** Token usage read from a transcript (see electron/transcript-tokens.ts).
@@ -61,6 +63,7 @@ export interface AgentNode {
   recentFiles: string[] // most-recent-first, capped
   worktrees?: Worktree[] // worktrees created in this session (WorktreeCreate), root only
   started?: number // root: order of its latest SessionStart — the newest per pane is live
+  nested?: boolean // root: a `startup` while the pane's lead ran (background agent, claude -p)
   lastMessage?: string
   tokens?: TokenUsage // cumulative token usage (session root or sub-agent), off-band via hooks
   parentId?: string // undefined for a root
@@ -145,9 +148,24 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
       // pane's newest session (`started`); the board order (rootIds) never changes.
       set(rid, {
         status: "idle",
-        cwd: ev.cwd ?? at(rid).cwd,
+        // Not a folder Claude filed this session under (a stray event from a background
+        // agent's scratchpad): keep the known one — see claude-project.ts.
+        cwd:
+          ev.cwd && cwdMatchesTranscript(ev.cwd, ev.transcriptPath) !== false
+            ? ev.cwd
+            : at(rid).cwd,
         paneId: ev.paneId ?? at(rid).paneId,
         started: Math.max(0, ...rootIds.map((id) => nodes[id]?.started ?? 0)) + 1,
+        // A fresh session starting while the pane's lead is live was launched from inside it
+        // (a background agent inherits the pane) — it mustn't take the pane over. A resume /
+        // compact / clear is the pane's own session (re)starting.
+        nested:
+          (ev.source ?? "startup") === "startup" &&
+          !!ev.paneId &&
+          rootIds.some((id) => {
+            const r = nodes[id]
+            return id !== rid && r?.paneId === ev.paneId && !r?.nested
+          }),
       })
       break
     case "UserPromptSubmit": {
