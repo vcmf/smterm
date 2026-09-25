@@ -38,9 +38,9 @@ export function claudeWorkDirs(graph: AgentGraph): Record<string, WorkDir> {
   const best: Record<string, number> = {}
   for (const rid of graph.rootIds) {
     const n = graph.nodes[rid]
-    if (!n?.paneId) continue
-    // The pane's lead (not a nested agent) wins; among equals, the newest-started.
-    const rank = (n.nested ? 0 : 1e9) + (n.started ?? 0)
+    // Never a nested session (a background agent), even alone: it isn't the pane's Claude.
+    if (!n?.paneId || n.nested) continue
+    const rank = n.started ?? 0 // the newest-started lead wins
     if (rank < (best[n.paneId] ?? -1)) continue
     best[n.paneId] = rank
     const cwd = n.cwd

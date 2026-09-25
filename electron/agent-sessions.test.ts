@@ -381,10 +381,29 @@ describe("SessionLedger — the folder must be where Claude filed the session", 
     expect(l.get("p1")).toMatchObject({ sessionId: ID2, cwd: DIMO })
   })
 
-  it("no verified folder that fits → rejected (nothing to resume beats a wrong folder)", () => {
+  it("no verified folder fits → recorded as the pane's lead (so its agents stay nested) but never resumed", async () => {
     const l = new SessionLedger(null)
     expect(l.apply(start({ cwd: PAD, transcriptPath: T_DIMO }))).toEqual({ verdict: "rejected" })
+    expect(l.get("p1")?.sessionId).toBe(ID)
+    l.apply(start({ sessionId: ID2 })) // its background agent
+    expect(l.isNested("p1", ID2)).toBe(true)
+    expect((await plan(l)).p1).toMatchObject({
+      status: "skip",
+      reason: "its folder doesn't match the session",
+    })
+  })
+
+  it("the prompt returning after the lead ends keeps its agents nested (they may still run)", () => {
+    const l = new SessionLedger(null)
+    l.apply(start())
+    l.apply(start({ sessionId: ID2 }))
+    l.shellIdle("p1") // /exit → the shell prompt is back
     expect(l.get("p1")).toBeUndefined()
+    expect(l.isNested("p1", ID2)).toBe(true)
+    l.apply(start({ sessionId: ID2, source: "compact" }))
+    expect(l.get("p1")).toBeUndefined() // the agent never becomes the lead
+    l.drop("p1") // the pane itself closes → forgotten
+    expect(l.isNested("p1", ID2)).toBe(false)
   })
 
   it("later events never move the folder to a non-matching one (cd into a subfolder / scratchpad)", () => {

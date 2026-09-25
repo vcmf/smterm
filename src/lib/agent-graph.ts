@@ -257,8 +257,8 @@ export function claudePaneIds(graph: AgentGraph): string[] {
   if (hit) return hit
   const ids = new Set<string>()
   for (const rid of graph.rootIds) {
-    const pane = graph.nodes[rid]?.paneId
-    if (pane) ids.add(pane)
+    const n = graph.nodes[rid]
+    if (n?.paneId && !n.nested) ids.add(n.paneId) // a background agent alone isn't "Claude here"
   }
   const out = [...ids].sort()
   paneIdsMemo.set(graph, out)

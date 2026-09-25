@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { reduceAgentEvents, type AgentEvent } from "./agent-graph"
+import { reduceAgentEvents, claudePaneIds, type AgentEvent } from "./agent-graph"
 import {
   claudeWorkDirs,
   claudeWorkFlat,
@@ -268,6 +268,18 @@ describe("background agents don't take the pane over (main tags them nested)", (
       },
     ])
     expect(claudeWorkDirs(g).p?.cwd).toBe("/b")
+  })
+})
+
+describe("a background agent alone in a pane isn't the pane's Claude", () => {
+  it("after the lead ends, no `in` and no Claude icon from the agent", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", nested: false },
+      { event: "SessionStart", sessionId: "agent", paneId: "p", cwd: "/tmp/pad", nested: true },
+      { event: "SessionEnd", sessionId: "lead", paneId: "p" },
+    ])
+    expect(claudeWorkDirs(g).p).toBeUndefined()
+    expect(claudePaneIds(g)).toEqual([])
   })
 })
 

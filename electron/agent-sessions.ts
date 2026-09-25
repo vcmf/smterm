@@ -127,14 +127,20 @@ export class SessionLedger {
       // the same session keeps its recorded folder.
       let cwd = ev.cwd
       let verdict: "fallback" | undefined
+      let rejected = false
       const fits = cwdMatchesTranscript(cwd, ev.transcriptPath)
       if (fits === false) {
         const known = [this.verified.get(pane), cur?.cwd].find(
           (k) => k !== undefined && cwdMatchesTranscript(k, ev.transcriptPath) === true,
         )
-        if (!known) return { verdict: "rejected" }
-        cwd = known
-        verdict = "fallback"
+        if (known) {
+          cwd = known
+          verdict = "fallback"
+        } else {
+          // Nothing verified fits: still record the session — who leads the pane matters (else
+          // its first background agent would take over) — plan() won't resume a mismatch.
+          rejected = true
+        }
       } else if (fits === undefined && same) {
         cwd = cur.cwd
       }
@@ -150,6 +156,7 @@ export class SessionLedger {
         wslDistro,
         updatedAt: this.now(),
       })
+      if (rejected) return { verdict: "rejected" }
       return verdict ? { verdict, cwd } : {}
     }
     if (cur?.sessionId !== ev.sessionId) return {}
@@ -186,7 +193,8 @@ export class SessionLedger {
 
   /** The shell prompt returned after a command: the foreground program (Claude) exited. */
   shellIdle(paneId: string): void {
-    this.drop(paneId)
+    // Only the lead's entry: its background agents may still be running (they stay nested).
+    if (!this.frozen && this.entries.has(paneId)) this.delete(paneId)
   }
 
   /** The pane closed / its shell exited — nothing to resume there any more. */
