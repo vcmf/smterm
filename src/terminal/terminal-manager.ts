@@ -693,6 +693,12 @@ export const TerminalManager = {
 
   /** A Claude session started in this terminal (its SessionStart hook): a returning prompt
    *  now means Claude exited; and any earlier Ctrl-Z'd job no longer masks that. */
+  /** A hook event came from this pane: Claude runs (or ran) here. */
+  claudeActive(id: string) {
+    const entry = entries.get(id)
+    if (entry) entry.flow.claudeSeen = true
+  },
+
   claudeStarted(id: string) {
     const entry = entries.get(id)
     if (!entry) return

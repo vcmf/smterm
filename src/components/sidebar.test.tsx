@@ -74,12 +74,13 @@ describe("Sidebar — Claude icon", () => {
   it("a terminal running Claude shows the Claude icon; back to the terminal icon when it ends", () => {
     st().newTab(testShell)
     const id = allSessionIds(st().tabs[0]!.root)[0]!
-    render(<Sidebar />)
-    expect(screen.queryByLabelText("Claude Code")).toBeNull()
+    const { container } = render(<Sidebar />)
+    const icon = () => container.querySelector('[data-icon="claude"]')
+    expect(icon()).toBeNull()
     act(() => st().applyAgentEvents([{ event: "SessionStart", sessionId: "c1", paneId: id }]))
-    expect(screen.getByLabelText("Claude Code")).toBeInTheDocument()
+    expect(icon()).not.toBeNull()
     act(() => st().claudeExited(id)) // prompt came back without a SessionEnd (crash)
-    expect(screen.queryByLabelText("Claude Code")).toBeNull()
+    expect(icon()).toBeNull()
   })
 })
 

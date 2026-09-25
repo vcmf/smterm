@@ -260,19 +260,17 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
                   if (e.button === 1 && multi) useStore.getState().closeSurface(tabId, id)
                 }}
               >
-                {/* The session's colour when it has one (the tab "dot"), else focus/dim. */}
-                {claudeFlags[i] === "1" ? (
-                  <ClaudeIcon
-                    size={13}
-                    color={accents[i] ?? (active && focused ? "var(--accent)" : "var(--dim)")}
-                  />
-                ) : (
-                  <Terminal
-                    size={13}
-                    weight="fill"
-                    color={accents[i] ?? (active && focused ? "var(--accent)" : "var(--dim)")}
-                  />
-                )}
+                {(() => {
+                  const Icon = claudeFlags[i] === "1" ? ClaudeIcon : Terminal
+                  return (
+                    <Icon
+                      size={13}
+                      weight="fill"
+                      // The session's colour when it has one (the tab "dot"), else focus/dim.
+                      color={accents[i] ?? (active && focused ? "var(--accent)" : "var(--dim)")}
+                    />
+                  )
+                })()}
                 <span className="pane-title">{displaySessionTitle(s, home)}</span>
                 {/* Hidden surfaces surface their state on the tab (you can't see the pane). */}
                 {/* Static dot (no pulse): don't animate compositing next to a WebGL canvas. */}

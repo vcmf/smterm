@@ -337,7 +337,8 @@ describe("claudePaneIds / dropPaneSessions", () => {
     expect(next.rootIds).toHaveLength(2) // a + the pane-less d
   })
 
-  it("same reference when the pane had no session", () => {
+  it("same reference when the pane had no session; the pane list is memoized per graph", () => {
     expect(dropPaneSessions(g, "nope")).toBe(g)
+    expect(claudePaneIds(g)).toBe(claudePaneIds(g))
   })
 })

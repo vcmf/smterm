@@ -217,12 +217,7 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
     case "SessionEnd": {
       // Session closed → evict it from the live board (root + its sub-agents). Also
       // clears "opened-then-closed" sessions that never ran anything.
-      const root = nodes[rid]
-      if (root) {
-        for (const cid of root.childIds) delete nodes[cid]
-        delete nodes[rid]
-        rootIds = rootIds.filter((id) => id !== rid)
-      }
+      if (nodes[rid]) rootIds = evictRoot(nodes, rootIds, rid)
       break
     }
     default:
@@ -232,27 +227,37 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
   return { nodes, rootIds }
 }
 
-/** Panes with a live Claude session (a root node tagged with the pane), sorted + unique. */
+/** Delete a session root + its sub-agents from `nodes` (mutated); returns the new rootIds. */
+function evictRoot(nodes: Record<string, AgentNode>, rootIds: string[], rid: string): string[] {
+  for (const cid of nodes[rid]?.childIds ?? []) delete nodes[cid]
+  delete nodes[rid]
+  return rootIds.filter((id) => id !== rid)
+}
+
+const paneIdsMemo = new WeakMap<AgentGraph, string[]>()
+
+/** Panes with a live Claude session, sorted; memoized per graph (selectors run on every set). */
 export function claudePaneIds(graph: AgentGraph): string[] {
+  const hit = paneIdsMemo.get(graph)
+  if (hit) return hit
   const ids = new Set<string>()
   for (const rid of graph.rootIds) {
     const pane = graph.nodes[rid]?.paneId
     if (pane) ids.add(pane)
   }
-  return [...ids].sort()
+  const out = [...ids].sort()
+  paneIdsMemo.set(graph, out)
+  return out
 }
 
-/** Evict every session that ran in `paneId` — its shell prompt returned, so Claude exited
- *  even if no SessionEnd came (crash, kill). Same reference when nothing matched. */
+/** Evict a pane's sessions (its prompt returned: Claude exited, SessionEnd or not). */
 export function dropPaneSessions(graph: AgentGraph, paneId: string): AgentGraph {
   const gone = graph.rootIds.filter((rid) => graph.nodes[rid]?.paneId === paneId)
   if (gone.length === 0) return graph
   const nodes = { ...graph.nodes }
-  for (const rid of gone) {
-    for (const cid of nodes[rid]?.childIds ?? []) delete nodes[cid]
-    delete nodes[rid]
-  }
-  return { nodes, rootIds: graph.rootIds.filter((rid) => !gone.includes(rid)) }
+  let rootIds = graph.rootIds
+  for (const rid of gone) rootIds = evictRoot(nodes, rootIds, rid)
+  return { nodes, rootIds }
 }
 
 /** Fold a whole event stream (convenience over reduceAgentEvent). */

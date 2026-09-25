@@ -143,18 +143,16 @@ export function Sidebar() {
                       onMouseDown={() => focusPane(tab.id, id)}
                     >
                       <span className="tree-icon">
-                        {claudePanes.includes(id) ? (
-                          <ClaudeIcon
-                            size={14}
-                            color={accentOf(id) ?? (isActive ? "var(--accent)" : "var(--dim)")}
-                          />
-                        ) : (
-                          <Terminal
-                            size={14}
-                            weight="fill"
-                            color={accentOf(id) ?? (isActive ? "var(--accent)" : "var(--dim)")}
-                          />
-                        )}
+                        {(() => {
+                          const Icon = claudePanes.includes(id) ? ClaudeIcon : Terminal
+                          return (
+                            <Icon
+                              size={14}
+                              weight="fill"
+                              color={accentOf(id) ?? (isActive ? "var(--accent)" : "var(--dim)")}
+                            />
+                          )
+                        })()}
                       </span>
                       <div className="tree-labels">
                         <span className="tree-primary-row">

@@ -1,18 +1,21 @@
-// Claude Code's mark, drawn with currentColor so it takes the session colour like the
-// phosphor icons it stands in for (same size/color props).
-
-/** The Claude Code icon — shown instead of the terminal icon while Claude runs in a pane. */
-export function ClaudeIcon({ size = 14, color }: { size?: number; color?: string }) {
+/** Claude Code's mark in currentColor — stands in for the terminal icon while Claude runs. */
+export function ClaudeIcon({
+  size = 14,
+  color,
+}: {
+  size?: number
+  color?: string
+  weight?: string // accepted so it swaps in for a phosphor icon; the mark has one weight
+}) {
   return (
     <svg
-      className="claude-icon"
+      data-icon="claude"
       width={size}
       height={size}
       viewBox="0 0 24 24"
       fill="currentColor"
       style={{ color, flex: "none" }}
-      role="img"
-      aria-label="Claude Code"
+      aria-hidden="true"
     >
       <path
         fillRule="evenodd"

@@ -290,7 +290,9 @@ and `terminal-manager` types `claude --resume <id> [--permission-mode m]` at the
   fish, pwsh, cmd and others spawn in the session's dir instead. Typing waits for a real
   prompt on shells main reports as integrated (never guessed from the name).
 - Known limit: Ctrl-Z a Claude, then start a second one in the same pane — the second is
-  treated as nested (not recorded), so a relaunch offers the first.
+  treated as nested (not recorded), so a relaunch offers the first. When the second exits, the
+  returning prompt also drops the suspended one from the agents board + Claude icon (a prompt
+  can't tell which Claude ended); its next hook event brings it back.
 - A shell **without** integration (e.g. a cold WSL VM whose injection timed out) can't confirm
   a resume — no hooks, no OSC 133 — so after typing the banner only says it was **sent**; it
   never reports failure or offers buttons that would type into a possibly-running Claude.
