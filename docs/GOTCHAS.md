@@ -296,6 +296,21 @@ and `terminal-manager` types `claude --resume <id> [--permission-mode m]` at the
   never reports failure or offers buttons that would type into a possibly-running Claude.
 - Known limit: vi-mode users in **normal** mode — ^U doesn't clear the line there, so a banner
   button's keystrokes are read as vi commands. Stay in insert mode (the default) to use them.
+- **rc-time commands are fine** (`conda activate`, nvm, direnv in `.zshrc`): the first `D` only
+  comes after the whole rc ran, so the resume runs inside that environment. Two known limits:
+  an rc that hands the terminal over (`exec tmux`, `exec fish`, auto-ssh) never shows our
+  prompt, so after 20 s the banner only offers Resume (it won't type into tmux); and only the
+  session's **folder** is restored, not its **environment** — a hand-run `conda activate ml` /
+  venv comes back as whatever the rc activates (could record `CONDA_DEFAULT_ENV` /
+  `VIRTUAL_ENV` from the hook process's env, if it ever matters).
+- **Delivery by typing is deliberate — revisit only if a shell becomes a pain point.**
+  Alternatives weighed (2026-09): (a) the integration runs `SMTERM_RESUME_ID` at the first
+  prompt — nothing typed, but native only on zsh; (b) spawn the pane as
+  `$SHELL -ic 'claude --resume X; exec $SHELL -i'` — no typing, fixes fish/pwsh quoting, but
+  the rc runs twice, no history entry, weaker job control, and no prompt marks to detect a
+  failed resume; (c) `claude --continue` — picks the wrong session when two panes share a
+  repo. None handles an rc that execs tmux. If fish/pwsh users hit problems, (b) per shell
+  is the candidate.
 
 ## Agent-status reducer has a known flaw {#agent-status}
 
