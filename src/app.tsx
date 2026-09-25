@@ -188,6 +188,9 @@ function App() {
       useStore.getState().applyAgentEvents(events)
       // A resumed Claude announces itself: SessionStart from that pane → the resume worked.
       for (const ev of events) {
+        // Any event proves Claude runs there (after a reload no SessionStart comes) → the
+        // prompt returning later clears its icon, even if it crashes without a SessionEnd.
+        if (ev.paneId) TerminalManager.claudeActive(ev.paneId)
         if (ev.event !== "SessionStart" || !ev.paneId || ev.agentId) continue
         TerminalManager.claudeStarted(ev.paneId)
         const r = useStore.getState().resume[ev.paneId]

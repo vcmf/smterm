@@ -10,6 +10,8 @@ import {
 } from "@phosphor-icons/react"
 import { activeTheme, useStore } from "../store"
 import { sessionColor } from "../lib/session-color"
+import { claudePaneIds } from "../lib/agent-graph"
+import { ClaudeIcon } from "./claude-icon"
 import { messageSnippet, prStateUi, type PrInfo } from "../lib/pane-git"
 import { ipc } from "../lib/ipc"
 import { TerminalManager } from "../terminal/terminal-manager"
@@ -44,6 +46,8 @@ export function Sidebar() {
   const agentMeta = useStore((s) => s.agentMeta)
   const scheme = useStore((s) => activeTheme(s).scheme)
   const accentOf = (id: string) => sessionColor(agentMeta[id], scheme)
+  // Terminals running Claude (shallow-compared list: re-render only when the set changes).
+  const claudePanes = useStore(useShallow((s) => claudePaneIds(s.agents)))
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
@@ -139,11 +143,16 @@ export function Sidebar() {
                       onMouseDown={() => focusPane(tab.id, id)}
                     >
                       <span className="tree-icon">
-                        <Terminal
-                          size={14}
-                          weight="fill"
-                          color={accentOf(id) ?? (isActive ? "var(--accent)" : "var(--dim)")}
-                        />
+                        {(() => {
+                          const Icon = claudePanes.includes(id) ? ClaudeIcon : Terminal
+                          return (
+                            <Icon
+                              size={14}
+                              weight="fill"
+                              color={accentOf(id) ?? (isActive ? "var(--accent)" : "var(--dim)")}
+                            />
+                          )
+                        })()}
                       </span>
                       <div className="tree-labels">
                         <span className="tree-primary-row">

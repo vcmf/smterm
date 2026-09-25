@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest"
-import { reduceAgentEvent, reduceAgentEvents, emptyGraph } from "./agent-graph"
+import {
+  reduceAgentEvent,
+  reduceAgentEvents,
+  emptyGraph,
+  claudePaneIds,
+  dropPaneSessions,
+} from "./agent-graph"
 import type { AgentEvent } from "./agent-graph"
 
 // Authentic fixture: the interactive 6a spike run, where the root launched an
@@ -306,5 +312,33 @@ describe("agent-graph — worktrees", () => {
       { event: "WorktreeRemove", sessionId: S, worktreePath: "/wt/a" },
     ])
     expect(g.nodes["root:sess-1"]!.worktrees).toEqual([{ path: "/wt/b", branch: "b" }])
+  })
+})
+
+describe("claudePaneIds / dropPaneSessions", () => {
+  const g = reduceAgentEvents([
+    { event: "SessionStart", sessionId: "a", paneId: "p2" },
+    { event: "SessionStart", sessionId: "b", paneId: "p1" },
+    { event: "SubagentStart", sessionId: "b", agentId: "sub", agentType: "Explore" },
+    { event: "SessionStart", sessionId: "c", paneId: "p1" }, // a nested `claude -p`
+    { event: "SessionStart", sessionId: "d" }, // no pane (claude outside smterm's panes)
+  ])
+
+  it("lists each pane with a live session once, sorted; SessionEnd removes it", () => {
+    expect(claudePaneIds(g)).toEqual(["p1", "p2"])
+    const ended = reduceAgentEvent(g, { event: "SessionEnd", sessionId: "a", paneId: "p2" })
+    expect(claudePaneIds(ended)).toEqual(["p1"])
+  })
+
+  it("drops every session of a pane (incl. sub-agents) when its shell prompt returns", () => {
+    const next = dropPaneSessions(g, "p1")
+    expect(claudePaneIds(next)).toEqual(["p2"])
+    expect(next.nodes.sub).toBeUndefined()
+    expect(next.rootIds).toHaveLength(2) // a + the pane-less d
+  })
+
+  it("same reference when the pane had no session; the pane list is memoized per graph", () => {
+    expect(dropPaneSessions(g, "nope")).toBe(g)
+    expect(claudePaneIds(g)).toBe(claudePaneIds(g))
   })
 })

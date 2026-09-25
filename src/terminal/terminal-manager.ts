@@ -430,8 +430,10 @@ function spawn(session: Session, entry: Entry) {
       const { next, actions } = onMark(entry.flow, mark, resuming)
       entry.flow = next
       for (const a of actions) {
-        if (a.type === "shell-idle") ipc.shellIdle(session.id)
-        else if (a.type === "type-resume") typeResume(session.id, entry)
+        if (a.type === "shell-idle") {
+          ipc.shellIdle(session.id)
+          useStore.getState().claudeExited(session.id)
+        } else if (a.type === "type-resume") typeResume(session.id, entry)
         else failResume(session.id, entry, a.exitCode)
       }
     }
@@ -691,6 +693,12 @@ export const TerminalManager = {
 
   /** A Claude session started in this terminal (its SessionStart hook): a returning prompt
    *  now means Claude exited; and any earlier Ctrl-Z'd job no longer masks that. */
+  /** A hook event came from this pane: Claude runs (or ran) here. */
+  claudeActive(id: string) {
+    const entry = entries.get(id)
+    if (entry) entry.flow.claudeSeen = true
+  },
+
   claudeStarted(id: string) {
     const entry = entries.get(id)
     if (!entry) return

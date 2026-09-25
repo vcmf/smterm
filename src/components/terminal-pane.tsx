@@ -4,6 +4,7 @@ import { Terminal, TerminalWindow, X, Columns, Rows } from "@phosphor-icons/reac
 import { TerminalManager } from "../terminal/terminal-manager"
 import { activeTheme, useStore } from "../store"
 import { sessionColor } from "../lib/session-color"
+import { claudePaneIds } from "../lib/agent-graph"
 import { canMove, findPaneById, type MoveTarget } from "../lib/pane-tree"
 import { dropZone, insertIndex } from "../lib/drop-zone"
 import { displaySessionTitle, shellType } from "../lib/session-label"
@@ -12,6 +13,7 @@ import { newSurfaceKey } from "../lib/platform"
 import { resolveDefaultShell } from "../lib/shells"
 import type { DropZone, PaneLeaf } from "../types"
 import { ResumeBanner } from "./resume-banner"
+import { ClaudeIcon } from "./claude-icon"
 
 /** A pane: a strip of terminal tabs (surfaces) + a mount point for the visible one.
  *  Terminals live in TerminalManager, so switching surfaces re-attaches (no respawn). */
@@ -25,6 +27,12 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
   const agentMeta = useStore((s) => s.agentMeta) // stable ref — changes only on a meta update
   const scheme = useStore((s) => activeTheme(s).scheme)
   const accents = pane.sessionIds.map((id) => sessionColor(agentMeta[id], scheme))
+  // Which surfaces run Claude, as one string ("10…") so a hook event only re-renders the
+  // pane when that changes.
+  const claudeFlags = useStore((s) => {
+    const live = claudePaneIds(s.agents)
+    return pane.sessionIds.map((id) => (live.includes(id) ? "1" : "0")).join("")
+  })
   const home = useStore((s) => s.home)
   const session = surfaces[pane.sessionIds.indexOf(activeId)]
   const focused = useStore(
@@ -252,12 +260,17 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
                   if (e.button === 1 && multi) useStore.getState().closeSurface(tabId, id)
                 }}
               >
-                <Terminal
-                  size={13}
-                  weight="fill"
-                  // The session's colour when it has one (the tab "dot"), else focus/dim.
-                  color={accents[i] ?? (active && focused ? "var(--accent)" : "var(--dim)")}
-                />
+                {(() => {
+                  const Icon = claudeFlags[i] === "1" ? ClaudeIcon : Terminal
+                  return (
+                    <Icon
+                      size={13}
+                      weight="fill"
+                      // The session's colour when it has one (the tab "dot"), else focus/dim.
+                      color={accents[i] ?? (active && focused ? "var(--accent)" : "var(--dim)")}
+                    />
+                  )
+                })()}
                 <span className="pane-title">{displaySessionTitle(s, home)}</span>
                 {/* Hidden surfaces surface their state on the tab (you can't see the pane). */}
                 {/* Static dot (no pulse): don't animate compositing next to a WebGL canvas. */}

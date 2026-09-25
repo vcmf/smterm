@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, act } from "@testing-library/react"
 import { Sidebar } from "./sidebar"
 import { useStore } from "../store"
 import { allSessionIds } from "../lib/pane-tree"
@@ -67,6 +67,20 @@ describe("Sidebar", () => {
     render(<Sidebar />)
     fireEvent.mouseDown(screen.getByText("alpha"))
     expect(st().tabs[0]!.activeSessionId).toBe(ids[0])
+  })
+})
+
+describe("Sidebar — Claude icon", () => {
+  it("a terminal running Claude shows the Claude icon; back to the terminal icon when it ends", () => {
+    st().newTab(testShell)
+    const id = allSessionIds(st().tabs[0]!.root)[0]!
+    const { container } = render(<Sidebar />)
+    const icon = () => container.querySelector('[data-icon="claude"]')
+    expect(icon()).toBeNull()
+    act(() => st().applyAgentEvents([{ event: "SessionStart", sessionId: "c1", paneId: id }]))
+    expect(icon()).not.toBeNull()
+    act(() => st().claudeExited(id)) // prompt came back without a SessionEnd (crash)
+    expect(icon()).toBeNull()
   })
 })
 
