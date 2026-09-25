@@ -47,6 +47,7 @@ const smtermStub = {
     release: "test",
     home: "/Users/test",
   })),
+  paneGitInfo: vi.fn(async () => ({})),
   gitStatus: vi.fn(async () => ({
     isRepo: false,
     root: "",

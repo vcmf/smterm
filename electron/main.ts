@@ -45,6 +45,8 @@ import { colorfgbg } from "./color"
 import { TranscriptTokens } from "./transcript-tokens"
 import { tokenEventsForBatch } from "./agent-tokens"
 import { AgentMetaTracker } from "./agent-meta"
+import { PaneGitService } from "./pane-git"
+import type { PaneGitRequest } from "../src/lib/pane-git"
 import type { WslContext } from "../src/lib/wsl"
 import {
   classifyPreview,
@@ -84,6 +86,8 @@ let hookSettingsPathWsl: string | null = null
 let hookWatcher: { close: () => Promise<void> } | null = null
 // Accumulates per-transcript token totals across hook batches (session + sub-agent).
 const agentTokens = new TranscriptTokens()
+// Branch + GitHub PR per terminal (sidebar), via git + the user's `gh`.
+const paneGit = new PaneGitService()
 // Per-pane Claude `/color` + `/rename` (pane accent), read from each session's transcript.
 const agentMeta = new AgentMetaTracker((paneId, meta) =>
   mainWindow?.webContents.send("agents:meta", paneId, meta),
@@ -444,6 +448,10 @@ function registerIpc() {
   ipcMain.handle("window:is-maximized", async () => mainWindow?.isMaximized() ?? false)
 
   // Git — working-tree status + per-file diff for the changes panel.
+  // Branch + PR per terminal for the sidebar (cached/deduped; gh = the user's own login).
+  ipcMain.handle("pane:git-info", async (_e, reqs: PaneGitRequest[]) =>
+    Array.isArray(reqs) ? paneGit.lookup(reqs.slice(0, 64)) : {},
+  )
   ipcMain.handle("git:status", async (_e, cwd: string, wsl?: { distro?: string }) =>
     gitStatus(cwd, wsl),
   )

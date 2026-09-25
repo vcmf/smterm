@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron"
 import type { AgentEvent } from "../src/lib/agent-graph"
 import type { SessionMeta } from "../src/lib/session-color"
+import type { PaneGitInfo, PaneGitRequest } from "../src/lib/pane-git"
 import type { WslContext } from "../src/lib/wsl"
 
 const api = {
@@ -91,6 +92,8 @@ const api = {
       release: string
     }>,
 
+  paneGitInfo: (reqs: PaneGitRequest[]) =>
+    ipcRenderer.invoke("pane:git-info", reqs) as Promise<Record<string, PaneGitInfo>>,
   gitStatus: (cwd: string, wsl?: { distro?: string }) => ipcRenderer.invoke("git:status", cwd, wsl),
   gitDiff: (cwd: string, file: string, wsl?: { distro?: string }) =>
     ipcRenderer.invoke("git:diff", cwd, file, wsl),

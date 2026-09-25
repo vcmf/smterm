@@ -25,5 +25,6 @@ export function resetStore() {
     closePaneConfirm: null,
     dragging: null,
     agentMeta: {},
+    paneGit: {},
   })
 }

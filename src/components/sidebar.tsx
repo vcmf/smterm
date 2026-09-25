@@ -1,18 +1,22 @@
 import { useState } from "react"
-import { CaretDown, CaretRight, Plus, Terminal } from "@phosphor-icons/react"
+import { useShallow } from "zustand/react/shallow"
+import {
+  CaretDown,
+  CaretRight,
+  GitMerge,
+  GitPullRequest,
+  Plus,
+  Terminal,
+} from "@phosphor-icons/react"
 import { activeTheme, useStore } from "../store"
 import { sessionColor } from "../lib/session-color"
+import { messageSnippet, prStateUi, type PrInfo } from "../lib/pane-git"
+import { ipc } from "../lib/ipc"
 import { TerminalManager } from "../terminal/terminal-manager"
 import { allPanes } from "../lib/pane-tree"
 import { resolveDefaultShell } from "../lib/shells"
 import { statusUi } from "../lib/status-ui"
-import {
-  tabTitle,
-  shortCwd,
-  sessionSubline,
-  displaySessionTitle,
-  shellType,
-} from "../lib/session-label"
+import { tabTitle, sessionSubline, displaySessionTitle, shellType } from "../lib/session-label"
 
 /** Left sidebar: a tree of real sessions (tabs) → panes, with live status dots. */
 export function Sidebar() {
@@ -21,7 +25,20 @@ export function Sidebar() {
   const sessions = useStore((s) => s.sessions)
   const shells = useStore((s) => s.shells)
   const defaultShellPref = useStore((s) => s.settings.defaultShell)
-  const git = useStore((s) => s.git)
+  const paneGit = useStore((s) => s.paneGit) // branch + PR per terminal (polled in App)
+  // Claude's last reply per pane (newest session root that ran in it), as a flat
+  // [paneId, message, …] list of primitives: the shallow compare keeps the sidebar from
+  // re-rendering on every agent hook event — only when a reply actually changes.
+  const replies = useStore(
+    useShallow((s) => {
+      const latest: Record<string, string> = {}
+      for (const rid of s.agents.rootIds) {
+        const n = s.agents.nodes[rid]
+        if (n?.paneId && n.lastMessage) latest[n.paneId] = n.lastMessage
+      }
+      return Object.entries(latest).flat()
+    }),
+  )
   const home = useStore((s) => s.home)
   // Claude session colours per terminal (same as the pane border + tab icon).
   const agentMeta = useStore((s) => s.agentMeta)
@@ -50,14 +67,10 @@ export function Sidebar() {
     requestAnimationFrame(() => TerminalManager.focus(sessionId))
   }
 
-  // Branch is only known for the focused session's cwd (single git poller).
-  const branchFor = (sessionId: string) =>
-    activeTabId &&
-    tabs.find((t) => t.id === activeTabId)?.activeSessionId === sessionId &&
-    git?.isRepo &&
-    git.branch
-      ? git.branch
-      : undefined
+  const branchFor = (sessionId: string) => paneGit[sessionId]?.branch
+
+  const lastMessage: Record<string, string> = {}
+  for (let k = 0; k + 1 < replies.length; k += 2) lastMessage[replies[k]!] = replies[k + 1]!
 
   return (
     <div className="sidebar">
@@ -140,8 +153,16 @@ export function Sidebar() {
                         {s.status === "attention" && s.detail ? (
                           <span className="tree-sub attn">{s.detail}</span>
                         ) : (
-                          <span className="tree-sub">{shortCwd(s.cwd, home) || "shell"}</span>
+                          lastMessage[id] && (
+                            <span className="tree-snippet" title={lastMessage[id]}>
+                              {messageSnippet(lastMessage[id])}
+                            </span>
+                          )
                         )}
+                        <span className="tree-sub">
+                          {sessionSubline(s.cwd, home, paneGit[id]?.branch) || "shell"}
+                        </span>
+                        {paneGit[id]?.pr && <PrLine pr={paneGit[id].pr} />}
                       </div>
                       {s.status !== "attention" && (
                         <span className="tree-meta" style={{ color: `var(--${ui.dot})` }}>
@@ -169,5 +190,26 @@ export function Sidebar() {
         </span>
       </div>
     </div>
+  )
+}
+
+/** "⎇ PR #51 merged" — the number opens the PR in the browser; the state is colour-coded. */
+function PrLine({ pr }: { pr: PrInfo }) {
+  const ui = prStateUi(pr.state)
+  const Icon = pr.state === "merged" ? GitMerge : GitPullRequest
+  return (
+    <span className="tree-pr">
+      <Icon size={12} color={`var(--${ui.color})`} />
+      <button
+        className="tree-pr-link"
+        title={pr.url}
+        // Don't let the row's mousedown focus the pane — this is a link.
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={() => ipc.openExternal(pr.url)}
+      >
+        PR #{pr.number}
+      </button>
+      <span style={{ color: `var(--${ui.color})` }}>{ui.word}</span>
+    </span>
   )
 }

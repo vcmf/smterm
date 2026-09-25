@@ -113,19 +113,15 @@ export interface WslCtx {
   distro?: string // undefined = the default distro
 }
 
-/** `wsl.exe` args to run `git <gitArgs>` in <distro> at Linux <cwd>. Pure — tested.
+/** `wsl.exe` args to run `<cmd> <args>` in <distro> at Linux <cwd>. Pure — tested.
  *  Uses `--cd` (the same mechanism we spawn WSL shells with). */
+export function wslArgs(distro: string | undefined, cwd: string, cmd: string, args: string[]) {
+  return [...(distro ? ["-d", distro] : []), "--cd", cwd, "--", cmd, ...args]
+}
+
+/** `wsl.exe` args to run `git <gitArgs>` in <distro> at Linux <cwd>. Pure — tested. */
 export function wslGitArgs(distro: string | undefined, cwd: string, gitArgs: string[]): string[] {
-  return [
-    ...(distro ? ["-d", distro] : []),
-    "--cd",
-    cwd,
-    "--",
-    "git",
-    "-c",
-    "core.quotepath=false",
-    ...gitArgs,
-  ]
+  return wslArgs(distro, cwd, "git", ["-c", "core.quotepath=false", ...gitArgs])
 }
 
 async function run(cwd: string, args: string[], wsl?: WslCtx): Promise<string> {
