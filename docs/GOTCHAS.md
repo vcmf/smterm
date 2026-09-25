@@ -164,9 +164,11 @@ thread back into JS; if that lands while Electron is tearing Node down, node-pty
 exception nobody catches → `abort()` (a SIGABRT crash report on ⌘Q). `before-quit` holds the
 quit and drains `livePtys` — every node-pty not yet exited, closed panes still winding down
 included (`pty-drain.ts`: SIGHUP, SIGKILL after 1.5 s; Windows: no signals + a 300 ms settle;
-always resolves), refusing new spawns meanwhile. Only a quit drains: an OS shutdown/logout
-event can be cancelled, and the app must stay usable then. Known gap: a Windows logoff that
-skips `before-quit`.
+always resolves), refusing new spawns meanwhile. The decision is the pure, tested
+`quit-plan.ts`. Two exceptions: an OS logout/restart (powerMonitor `shutdown`) is **not** held
+— macOS would report "smterm cancelled restart" — so it kills without waiting; and the shutdown
+event itself never drains (it can be cancelled; the app must stay usable). Known gap: a
+Windows logoff that skips `before-quit`.
 
 ## GUI launch has a bare PATH — import the login-shell env {#shell-env}
 
