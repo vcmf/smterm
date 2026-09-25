@@ -264,6 +264,39 @@ best-effort and ignore what you don't recognize; never throw (`transcript-fold.t
 - Hook-event drops are ingested **unordered**: a late `SessionEnd` of the previous session in a
   pane must not stop tracking the new one (compare the transcript path).
 
+## Resuming Claude sessions on relaunch {#resume}
+
+`electron/agent-sessions.ts` keeps a ledger (`agent-sessions.json`) of which Claude session
+each terminal is inside, from the `SessionStart` / `SessionEnd` hooks. On relaunch the
+renderer asks for a plan **before** restoring the workspace (so the shell spawns in the
+session's own cwd — `claude --resume <id>` only finds transcripts of the current project dir),
+and `terminal-manager` types `claude --resume <id> [--permission-mode m]` at the first prompt.
+
+- **Any `SessionEnd` while smterm runs clears the entry** — double Ctrl-C can report reason
+  `other`, so reasons can't tell "user quit Claude" from anything else. Only a quit (the ledger
+  is **frozen and flushed before** `killAllPtys`, whose kills would fire SessionEnds) or a
+  crash (no SessionEnd at all; the ledger is write-through) leaves entries to resume.
+- **Live PTYs are skipped** — after a renderer reload Claude is still running.
+- **One shot:** the entry is consumed on **failure or dismiss** — not when typed (a quit or
+  crash during the confirmation window must still resume next time); a failure shows the
+  banner, never a retry loop. Main only consumes the exact carried-over entry, so a late
+  success that re-recorded it this run is kept. Failure = a `D` that follows our command's own `C` (it exited — the code is in the
+  `D` payload; a `D` without a `C` is just the shell's first prompt arriving late) before
+  Claude's `SessionStart`, or 25 s passing. A later success still wins.
+- The command is typed from **validated** parts only (UUID id, one-word mode):
+  bypassPermissions is dropped unless `resumeBypassPermissions` is on.
+- Background tabs start lazily, so their entries wait (across quits) until first shown.
+- Only shells that take POSIX quoting get the typed `cd -- '…' &&` (zsh/bash/sh/dash/ksh, WSL);
+  fish, pwsh, cmd and others spawn in the session's dir instead. Typing waits for a real
+  prompt on shells main reports as integrated (never guessed from the name).
+- Known limit: Ctrl-Z a Claude, then start a second one in the same pane — the second is
+  treated as nested (not recorded), so a relaunch offers the first.
+- A shell **without** integration (e.g. a cold WSL VM whose injection timed out) can't confirm
+  a resume — no hooks, no OSC 133 — so after typing the banner only says it was **sent**; it
+  never reports failure or offers buttons that would type into a possibly-running Claude.
+- Known limit: vi-mode users in **normal** mode — ^U doesn't clear the line there, so a banner
+  button's keystrokes are read as vi commands. Stay in insert mode (the default) to use them.
+
 ## Agent-status reducer has a known flaw {#agent-status}
 
 `lib/session-status.ts`: `running` = OSC-133 C..D (process alive) ≠ actively working, so

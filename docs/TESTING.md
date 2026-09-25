@@ -59,8 +59,8 @@ events. Look at the screenshots — a blank or garbled frame is a failure even i
 
 ## 5. Coverage
 
-`make coverage` (v8 → `coverage/lcov.info`, uploaded to Codecov from CI). It measures `src/**`
-only — the `electron/*` tests run but aren't counted. Coverage is a floor,
+`make coverage` (v8 → `coverage/lcov.info`, uploaded to Codecov from CI). It measures `src/**` and the
+unit-tested `electron/*` modules (the `main.ts` / `preload.ts` wiring is left to the real-app checks). Coverage is a floor,
 not a goal: the pure modules should be near 100% including edge cases; UI glue and
 `terminal-manager.ts` are covered by the real-app checks above instead.
 

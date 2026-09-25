@@ -170,16 +170,16 @@ describe("shared history (cmux-like)", () => {
     // A system zshrc (e.g. macOS /etc/zshrc) runs before our rc with HISTFILE derived from
     // ZDOTDIR (= our injected dir), siloing history. Match ANY file inside our dir + keep
     // the basename, guarded by -n so it never fires when SMTERM_ZDOTDIR is empty.
-    expect(ZSH_ZSHRC).toContain('-n "$SMTERM_ZDOTDIR"')
-    expect(ZSH_ZSHRC).toContain('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')
+    expect(ZSH_ZSHRC).toContain('-n "${SMTERM_ZDOTDIR-}"')
+    expect(ZSH_ZSHRC).toContain('"${HISTFILE-}" == "${SMTERM_ZDOTDIR-}"/*')
     expect(ZSH_ZSHRC).toContain('HISTFILE="${SMTERM_USER_ZDOTDIR:-$HOME}/${HISTFILE:t}"')
     // The repoint must run before SHARE_HISTORY is enabled (so it reads/writes the right file)…
-    expect(ZSH_ZSHRC.indexOf('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')).toBeLessThan(
+    expect(ZSH_ZSHRC.indexOf('"${HISTFILE-}" == "${SMTERM_ZDOTDIR-}"/*')).toBeLessThan(
       ZSH_ZSHRC.indexOf("setopt SHARE_HISTORY"),
     )
     // …and OUTSIDE the shared-history opt-out gate — it's a correctness fix that must run
     // even when SMTERM_SHARE_HISTORY=0 (guards against a refactor folding it into that `if`).
-    expect(ZSH_ZSHRC.indexOf('"$HISTFILE" == "$SMTERM_ZDOTDIR"/*')).toBeLessThan(
+    expect(ZSH_ZSHRC.indexOf('"${HISTFILE-}" == "${SMTERM_ZDOTDIR-}"/*')).toBeLessThan(
       ZSH_ZSHRC.indexOf('"${SMTERM_SHARE_HISTORY:-1}" != "0"'),
     )
   })
@@ -190,5 +190,21 @@ describe("shared history (cmux-like)", () => {
     expect(BASH_RC).toContain('"${SMTERM_SHARE_HISTORY:-1}" != "0"')
     // The sync runs after `local ret=$?` so it can't clobber the reported exit code.
     expect(BASH_RC.indexOf("local ret=$?")).toBeLessThan(BASH_RC.indexOf("history -a; history -n"))
+  })
+
+  it("bash: PROMPT_COMMAND pieces (starship, direnv…) never emit a spurious command-start", () => {
+    expect(BASH_RC).toContain('[[ "$BASH_COMMAND" == __smterm_* ]] && return')
+    expect(BASH_RC).toContain("[[ $__smterm_in_pc == 1 ]] && return")
+    // newline-joined (a user value ending in ';' must not become '; ;' — a syntax error),
+    // and array-form PROMPT_COMMAND (bash 5.1+) wrapped element-wise
+    expect(BASH_RC).toContain("__smterm_pc_end'")
+    expect(BASH_RC).not.toContain("; __smterm_pc_end")
+    expect(BASH_RC).toContain(
+      'PROMPT_COMMAND=(__smterm_precmd "${PROMPT_COMMAND[@]}" __smterm_pc_end)',
+    )
+    // starts armed: the rc's own remaining lines must not emit a C before the first prompt
+    expect(BASH_RC).toContain("__smterm_armed=1")
+    // precmd opens the window AFTER capturing $? (the D exit code must be the user's command's)
+    expect(BASH_RC.indexOf("local ret=$?")).toBeLessThan(BASH_RC.indexOf("__smterm_in_pc=1"))
   })
 })

@@ -685,3 +685,18 @@ describe("store — sidebar branch/PR", () => {
     expect(st().paneGit.ghost).toBeUndefined()
   })
 })
+
+describe("store — resume banner state", () => {
+  beforeEach(resetStore)
+  it("setResume sets/clears per terminal, ignores unknown panes, drops with the terminal", () => {
+    st().newTab(shell)
+    const id = firstTab().activeSessionId
+    const plan = { status: "resume" as const, sessionId: "x", cwd: "/r" }
+    st().setResume("ghost", { phase: "pending", plan })
+    expect(st().resume.ghost).toBeUndefined()
+    st().setResume(id, { phase: "pending", plan })
+    expect(st().resume[id]?.phase).toBe("pending")
+    st().closeTab(firstTab().id)
+    expect(st().resume[id]).toBeUndefined()
+  })
+})

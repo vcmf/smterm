@@ -1,0 +1,272 @@
+// Which Claude Code session each terminal is inside — persisted, so a relaunch can type
+// `claude --resume <id>` back into the right pane (cmux-style). Fed by the hook events we
+// already receive (SessionStart / SessionEnd carry session_id, cwd, transcript_path,
+// permission_mode, and the pane id from the drop file's name).
+//
+// Rules (see docs/GOTCHAS.md#resume):
+//   - SessionStart sets the pane's entry when there is none, or when it continues the same
+//     conversation line (/clear, /compact, resume, fork). A fresh `startup` while an entry is
+//     live is a NESTED claude (e.g. `claude -p` run by the agent's Bash tool, which inherits
+//     the pane id) — ignored, so it can't overwrite (or, via its SessionEnd, delete) the parent.
+//   - Later events refresh the permission mode (Shift-Tab changes it mid-session).
+//   - ANY SessionEnd of the tracked session while smterm runs clears it (/exit, double Ctrl-C
+//     — which may report "other" — logout), and so does the shell's prompt returning
+//     (`shellIdle`: the foreground program exited — covers a Claude killed without a
+//     SessionEnd). Only a quit/shutdown (freeze) or an app crash leaves entries to resume.
+//   - Closing the pane / the shell exiting drops it (unless frozen).
+
+import fs from "node:fs"
+import path from "node:path"
+import type { AgentEvent } from "../src/lib/agent-graph"
+import type { ResumePlan } from "../src/lib/resume"
+
+export interface LedgerEntry {
+  sessionId: string // Claude's session id (→ `claude --resume <id>`)
+  cwd: string // where Claude ran — its transcripts are keyed by this project dir
+  transcriptPath?: string
+  permissionMode?: string
+  name?: string // /rename, for the banner
+  wslDistro?: string // the pane's distro (WSL) — its transcript lives on that distro's share
+  updatedAt: number
+  carried?: boolean // loaded from disk = the PREVIOUS run's (in memory only, never persisted)
+}
+
+// Claude session ids are UUIDs; permission modes are single words. Anything else never
+// reaches a command line we type into a shell.
+const SAFE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const SAFE_MODE = /^[A-Za-z]{1,32}$/
+
+/** C0 control characters or DEL — keys a line editor would act on if typed. */
+const hasControlChars = (s: string): boolean =>
+  [...s].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)
+
+/** The resume command for an entry (null if its id can't be trusted). */
+export function resumeCommand(e: LedgerEntry, allowBypass: boolean): string | null {
+  if (!SAFE_ID.test(e.sessionId)) return null
+  const mode = e.permissionMode
+  const keepMode =
+    mode &&
+    SAFE_MODE.test(mode) &&
+    mode !== "default" &&
+    (mode !== "bypassPermissions" || allowBypass)
+  return `claude --resume ${e.sessionId}${keepMode ? ` --permission-mode ${mode}` : ""}`
+}
+
+export class SessionLedger {
+  private entries = new Map<string, LedgerEntry>() // key: smterm pane (session) id
+  private frozen = false
+  private timer?: ReturnType<typeof setTimeout>
+  private thawTimer?: ReturnType<typeof setTimeout>
+  private version = 0 // bumped per change: a slow async write never lands over a newer state
+
+  constructor(
+    private readonly file: string | null, // null = in-memory (tests)
+    private readonly now: () => number = Date.now,
+  ) {
+    if (!file) return
+    try {
+      const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, LedgerEntry>
+      for (const [pane, e] of Object.entries(raw ?? {})) {
+        if (e && typeof e.sessionId === "string" && typeof e.cwd === "string") {
+          // Hand-edited / corrupted files: keep only well-typed fields (a non-string name would
+          // reach the banner's render).
+          const str = (v: unknown) => (typeof v === "string" ? v : undefined)
+          this.entries.set(pane, {
+            sessionId: e.sessionId,
+            cwd: e.cwd,
+            transcriptPath: str(e.transcriptPath),
+            permissionMode: str(e.permissionMode),
+            name: str(e.name),
+            wslDistro: str(e.wslDistro),
+            updatedAt: typeof e.updatedAt === "number" ? e.updatedAt : 0,
+            carried: true,
+          })
+        }
+      }
+    } catch {
+      // no ledger yet / unreadable — start empty
+    }
+  }
+
+  /** Fold a hook event (session-root events from a known pane only). */
+  apply(ev: AgentEvent, wslDistro?: string): void {
+    if (this.frozen || !ev.paneId || ev.agentId) return
+    const cur = this.entries.get(ev.paneId)
+    if (ev.event === "SessionStart") {
+      if (!ev.cwd) return
+      // A new `startup` while the pane's session (recorded THIS run) is live = a nested claude:
+      // keep the parent. An entry carried over from the previous run is always replaceable —
+      // the user started something new instead of resuming it.
+      if (
+        cur &&
+        !cur.carried &&
+        cur.sessionId !== ev.sessionId &&
+        (ev.source ?? "startup") === "startup"
+      ) {
+        return
+      }
+      this.set(ev.paneId, {
+        sessionId: ev.sessionId,
+        cwd: ev.cwd,
+        transcriptPath: ev.transcriptPath,
+        permissionMode: ev.permissionMode,
+        name: cur?.sessionId === ev.sessionId ? cur.name : undefined,
+        wslDistro,
+        updatedAt: this.now(),
+      })
+    } else if (ev.event === "SessionEnd") {
+      if (cur?.sessionId === ev.sessionId) this.delete(ev.paneId)
+    } else if (
+      cur?.sessionId === ev.sessionId &&
+      ev.permissionMode &&
+      ev.permissionMode !== cur.permissionMode
+    ) {
+      this.set(ev.paneId, { ...cur, permissionMode: ev.permissionMode, updatedAt: this.now() })
+    }
+  }
+
+  /** The session's /rename (from the transcript meta tracker), shown on the resume banner. */
+  setName(paneId: string, name: string | undefined): void {
+    const cur = this.entries.get(paneId)
+    if (cur && !this.frozen && cur.name !== name) this.set(paneId, { ...cur, name })
+  }
+
+  /** The shell prompt returned after a command: the foreground program (Claude) exited. */
+  shellIdle(paneId: string): void {
+    this.drop(paneId)
+  }
+
+  /** The pane closed / its shell exited — nothing to resume there any more. */
+  drop(paneId: string): void {
+    if (!this.frozen && this.entries.has(paneId)) this.delete(paneId)
+  }
+
+  /** Quit / OS shutdown: keep every entry and flush now; an OS-shutdown freeze thaws later. */
+  freeze(thawAfterMs?: number): void {
+    this.frozen = true
+    this.flushSync()
+    clearTimeout(this.thawTimer)
+    if (thawAfterMs) {
+      this.thawTimer = setTimeout(() => {
+        // Shutdown cancelled. Ends/exits during the freeze were ignored, so entries may be
+        // stale: make them replaceable (as if carried over) instead of blocking new sessions.
+        for (const [id, e] of this.entries) this.entries.set(id, { ...e, carried: true })
+        this.frozen = false
+      }, thawAfterMs)
+    }
+  }
+
+  /** What to resume in restored terminals (live PTYs skipped; preflight per entry). */
+  async plan(
+    paneIds: string[],
+    isLive: (paneId: string) => boolean,
+    preflight: (e: LedgerEntry) => Promise<{ skip?: string; unverified?: boolean }>,
+    allowBypass: boolean,
+  ): Promise<Record<string, ResumePlan>> {
+    const out: Record<string, ResumePlan> = {}
+    await Promise.all(
+      paneIds.map(async (id) => {
+        const e = this.entries.get(id)
+        if (!e || isLive(id)) return
+        const command = resumeCommand(e, allowBypass)
+        const base = { cwd: e.cwd, name: e.name, sessionId: e.sessionId }
+        if (!command) {
+          out[id] = { ...base, status: "skip", reason: "unrecognised session id" }
+          return
+        }
+        // The cwd may be TYPED into a line editor (`cd -- '…'`): control characters there act
+        // as editing keys (^C aborts, CR submits) and could break out of the quoting.
+        if (hasControlChars(e.cwd)) {
+          out[id] = { ...base, status: "skip", reason: "its folder name can't be typed safely" }
+          return
+        }
+        const pf = await preflight(e)
+        out[id] = pf.skip
+          ? { ...base, status: "skip", reason: pf.skip, command }
+          : {
+              ...base,
+              status: "resume",
+              command,
+              ...(pf.unverified ? { cwdUnverified: true } : {}),
+            }
+      }),
+    )
+    return out
+  }
+
+  /** Failed/dismissed → forget the exact carried-over entry (one shot; a live one stays). */
+  consume(paneId: string, sessionId: string): void {
+    const e = this.entries.get(paneId)
+    if (e?.carried && e.sessionId === sessionId) this.delete(paneId)
+  }
+
+  /** Drop entries for panes no longer in the workspace (closed while smterm wasn't running). */
+  prune(keep: Set<string>): void {
+    for (const id of [...this.entries.keys()]) if (!keep.has(id)) this.delete(id)
+  }
+
+  get(paneId: string): LedgerEntry | undefined {
+    return this.entries.get(paneId)
+  }
+
+  private set(paneId: string, e: LedgerEntry) {
+    this.entries.set(paneId, { ...e, carried: false })
+    this.schedule()
+  }
+
+  private delete(paneId: string) {
+    this.entries.delete(paneId)
+    this.schedule()
+  }
+
+  // Write-through (debounced, async — never blocks the main process that carries PTY
+  // output): a crash must still leave the live sessions on disk.
+  private schedule() {
+    this.version++
+    if (!this.file) return
+    clearTimeout(this.timer)
+    this.timer = setTimeout(() => void this.flushAsync(), 500)
+  }
+
+  private serialize(): string {
+    const out: Record<string, Omit<LedgerEntry, "carried">> = {}
+    for (const [id, e] of this.entries) {
+      const { carried, ...persisted } = e
+      void carried // in-memory only
+      out[id] = persisted
+    }
+    return JSON.stringify(out, null, 2)
+  }
+
+  // temp + rename: a crash / power loss mid-write can't leave truncated JSON (which would
+  // lose every entry — the very case this file exists for).
+  private async flushAsync(): Promise<void> {
+    if (!this.file || this.frozen) return // a freeze wrote synchronously; don't race it
+    const v = this.version
+    const tmp = `${this.file}.${v}.tmp`
+    try {
+      await fs.promises.mkdir(path.dirname(this.file), { recursive: true })
+      await fs.promises.writeFile(tmp, this.serialize())
+      if (v === this.version && !this.frozen) {
+        await fs.promises.rename(tmp, this.file)
+        if (this.frozen) this.flushSync() // a freeze raced this rename: rewrite its final state
+      } else await fs.promises.rm(tmp, { force: true })
+    } catch {
+      // best-effort — a missed write only means no resume for that session
+    }
+  }
+
+  /** Synchronous write — only on quit / shutdown, when the process may die right after. */
+  flushSync(): void {
+    clearTimeout(this.timer)
+    if (!this.file) return
+    try {
+      fs.mkdirSync(path.dirname(this.file), { recursive: true })
+      const tmp = `${this.file}.tmp`
+      fs.writeFileSync(tmp, this.serialize())
+      fs.renameSync(tmp, this.file)
+    } catch {
+      // best-effort
+    }
+  }
+}

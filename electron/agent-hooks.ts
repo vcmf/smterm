@@ -40,6 +40,9 @@ export function normalizeHookEvent(raw: unknown, paneId?: string): AgentEvent | 
     baseBranch: str(r.base_branch),
     transcriptPath: str(r.transcript_path),
     agentTranscriptPath: str(r.agent_transcript_path),
+    source: str(r.source),
+    reason: str(r.reason),
+    permissionMode: str(r.permission_mode),
   }
 }
 
@@ -62,13 +65,15 @@ const MAX_DROP_BYTES = 1024 * 1024 // ignore a pathologically large drop (bound 
  *  claim makes watcher + sweep consume each file exactly once. Best-effort per file. */
 export async function startHookWatcher(opts: HookWatcherOptions): Promise<HookWatcher> {
   const coalesceMs = opts.coalesceMs ?? 50
-  let pending: AgentEvent[] = []
+  // Each drop is read asynchronously, so files finish out of order; keep the drop timestamp
+  // (from the filename) and deliver a batch sorted by it — Start/End pairs stay in order.
+  let pending: { ev: AgentEvent; ts: number }[] = []
   let timer: ReturnType<typeof setTimeout> | null = null
 
   const flush = () => {
     timer = null
     if (pending.length === 0) return
-    const batch = pending
+    const batch = pending.sort((a, b) => a.ts - b.ts).map((p) => p.ev)
     pending = []
     try {
       opts.onBatch(batch)
@@ -98,10 +103,12 @@ export async function startHookWatcher(opts: HookWatcherOptions): Promise<HookWa
             return // partial/corrupt drop — skip
           }
           // Filename is `<paneId>.<pid>.<ts>.<rand>.json`; pane ids are UUIDs (no dots).
-          const paneId = path.basename(file).split(".")[0] || undefined
+          const parts = path.basename(file).split(".")
+          const paneId = parts[0] || undefined
           const ev = normalizeHookEvent(raw, paneId)
           if (ev) {
-            pending.push(ev)
+            const ts = Number(parts[2])
+            pending.push({ ev, ts: Number.isFinite(ts) ? ts : Date.now() })
             schedule()
           }
         } finally {

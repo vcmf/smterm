@@ -96,4 +96,11 @@ describe("parseSettings", () => {
     })
     expect(mergeSettings({ theme: "catppuccin-latte", appearance: "dark" }).appearance).toBe("dark")
   })
+
+  it("resumeAgents: auto (default) | ask | off; bypass restore off by default", () => {
+    expect(defaultSettings.resumeAgents).toBe("auto")
+    expect(defaultSettings.resumeBypassPermissions).toBe(false)
+    expect(mergeSettings({ resumeAgents: "ask" }).resumeAgents).toBe("ask")
+    expect(mergeSettings({ resumeAgents: "sometimes" }).resumeAgents).toBe("auto")
+  })
 })

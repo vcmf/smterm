@@ -26,5 +26,6 @@ export function resetStore() {
     dragging: null,
     agentMeta: {},
     paneGit: {},
+    resume: {},
   })
 }

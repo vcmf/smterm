@@ -9,6 +9,8 @@ vi.mock("./terminal/terminal-manager", () => ({
   TerminalManager: {
     attach: vi.fn(),
     detach: vi.fn(),
+    resumeSettled: vi.fn(),
+    claudeStarted: vi.fn(),
     ensureRunning: vi.fn(),
     followSize: vi.fn(),
     fit: vi.fn(),
@@ -54,5 +56,123 @@ describe("App (integration)", () => {
     expect(ipc.setWindowBackground).toHaveBeenCalledWith("#f9f5d7")
     expect(ipc.setWindowBackground).not.toHaveBeenCalledWith("#0b0b0d")
     expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#f9f5d7")
+  })
+
+  it("resume on relaunch: the pane spawns in the session's cwd and gets a pending resume", async () => {
+    const sid = "s1"
+    vi.mocked(ipc.readWorkspace).mockResolvedValue(
+      JSON.stringify({
+        version: 2,
+        activeTabId: "t",
+        tabs: [
+          {
+            id: "t",
+            title: "",
+            root: { type: "leaf", id: "p", sessionIds: [sid], activeSessionId: sid },
+            activeSessionId: sid,
+          },
+        ],
+        sessions: [{ id: sid, title: "zsh", command: "/bin/zsh", args: [], cwd: "/elsewhere" }],
+      }),
+    )
+    const plan = {
+      status: "resume" as const,
+      sessionId: "7fe87f63-8ccf-437e-b991-94aa4ee44a0e",
+      cwd: "/repo",
+      command: "claude --resume 7fe87f63-8ccf-437e-b991-94aa4ee44a0e",
+    }
+    vi.mocked(ipc.resumePlan).mockResolvedValue({ [sid]: plan })
+    render(<App />)
+    await waitFor(() => expect(useStore.getState().resume[sid]?.phase).toBe("pending"))
+    expect(useStore.getState().sessions[sid]?.cwd).toBe("/repo")
+    expect(ipc.resumePlan).toHaveBeenCalledWith([sid], false)
+  })
+
+  it("ask mode keeps the pane's own cwd", async () => {
+    const sid = "s2"
+    vi.mocked(ipc.readSettings).mockResolvedValueOnce('{"resumeAgents":"ask"}')
+    vi.mocked(ipc.readWorkspace).mockResolvedValue(
+      JSON.stringify({
+        version: 2,
+        activeTabId: "t",
+        tabs: [
+          {
+            id: "t",
+            title: "",
+            root: { type: "leaf", id: "p", sessionIds: [sid], activeSessionId: sid },
+            activeSessionId: sid,
+          },
+        ],
+        sessions: [{ id: sid, title: "zsh", command: "/bin/zsh", args: [], cwd: "/repo/sub" }],
+      }),
+    )
+    vi.mocked(ipc.resumePlan).mockResolvedValue({
+      [sid]: { status: "resume", sessionId: "x", cwd: "/repo", command: "claude --resume x" },
+    })
+    render(<App />)
+    await waitFor(() => expect(useStore.getState().resume[sid]?.phase).toBe("offer"))
+    // ask mode: the pane stays where it was (a Dismiss leaves it there); the typed command
+    // cd's into the session's dir itself (terminal-manager, POSIX shells)
+    expect(useStore.getState().sessions[sid]?.cwd).toBe("/repo/sub")
+  })
+
+  it("Claude's SessionStart from the pane confirms the resume — only for the same session", async () => {
+    const sid = "s3"
+    const id = "7fe87f63-8ccf-437e-b991-94aa4ee44a0e"
+    vi.mocked(ipc.readWorkspace).mockResolvedValue(
+      JSON.stringify({
+        version: 2,
+        activeTabId: "t",
+        tabs: [
+          {
+            id: "t",
+            title: "",
+            root: { type: "leaf", id: "p", sessionIds: [sid], activeSessionId: sid },
+            activeSessionId: sid,
+          },
+        ],
+        sessions: [{ id: sid, title: "zsh", command: "/bin/zsh", args: [], cwd: "/repo" }],
+      }),
+    )
+    vi.mocked(ipc.resumePlan).mockResolvedValue({
+      [sid]: { status: "resume", sessionId: id, cwd: "/repo", command: `claude --resume ${id}` },
+    })
+    render(<App />)
+    await waitFor(() => expect(useStore.getState().resume[sid]?.phase).toBe("pending"))
+    const plan = useStore.getState().resume[sid]!.plan
+    useStore.getState().setResume(sid, { phase: "resuming", plan }) // the command was typed
+    const calls = vi.mocked(ipc.onAgentEvents).mock.calls
+    const onEvents = calls[calls.length - 1]![0]
+    // a different Claude started instead (e.g. the user typed `claude`) → not a resume
+    onEvents([{ event: "SessionStart", sessionId: "other", paneId: sid }])
+    expect(useStore.getState().resume[sid]?.phase).toBe("resuming")
+    // the resumed session itself → resumed
+    onEvents([{ event: "SessionStart", sessionId: id, paneId: sid, source: "resume" }])
+    expect(useStore.getState().resume[sid]?.phase).toBe("resumed")
+  })
+
+  it("a skipped plan (transcript gone) shows the banner and is consumed right away", async () => {
+    const sid = "s4"
+    vi.mocked(ipc.readWorkspace).mockResolvedValue(
+      JSON.stringify({
+        version: 2,
+        activeTabId: "t",
+        tabs: [
+          {
+            id: "t",
+            title: "",
+            root: { type: "leaf", id: "p", sessionIds: [sid], activeSessionId: sid },
+            activeSessionId: sid,
+          },
+        ],
+        sessions: [{ id: sid, title: "zsh", command: "/bin/zsh", args: [], cwd: "/repo" }],
+      }),
+    )
+    vi.mocked(ipc.resumePlan).mockResolvedValue({
+      [sid]: { status: "skip", sessionId: "x", cwd: "/repo", reason: "its transcript is gone" },
+    })
+    render(<App />)
+    await waitFor(() => expect(useStore.getState().resume[sid]?.phase).toBe("skipped"))
+    expect(ipc.resumeConsume).toHaveBeenCalledWith(sid, "x")
   })
 })

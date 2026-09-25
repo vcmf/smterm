@@ -117,4 +117,21 @@ describe("startHookWatcher", () => {
       fs.rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it("carries SessionStart source, SessionEnd reason and the permission mode (resume ledger)", () => {
+    const ev = normalizeHookEvent(
+      {
+        hook_event_name: "SessionStart",
+        session_id: "s",
+        source: "resume",
+        permission_mode: "plan",
+      },
+      "p",
+    )
+    expect(ev).toMatchObject({ source: "resume", permissionMode: "plan" })
+    expect(
+      normalizeHookEvent({ hook_event_name: "SessionEnd", session_id: "s", reason: "other" })
+        ?.reason,
+    ).toBe("other")
+  })
 })

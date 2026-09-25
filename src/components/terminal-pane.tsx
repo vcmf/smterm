@@ -11,6 +11,7 @@ import { statusUi } from "../lib/status-ui"
 import { newSurfaceKey } from "../lib/platform"
 import { resolveDefaultShell } from "../lib/shells"
 import type { DropZone, PaneLeaf } from "../types"
+import { ResumeBanner } from "./resume-banner"
 
 /** A pane: a strip of terminal tabs (surfaces) + a mount point for the visible one.
  *  Terminals live in TerminalManager, so switching surfaces re-attaches (no respawn). */
@@ -329,6 +330,7 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
           <X size={13} />
         </button>
       </div>
+      <ResumeBanner sessionId={activeId} />
       <div className="terminal-mount" ref={mountRef} />
       {/* While dragging: a transparent layer over the terminal (xterm's canvas would swallow
           the drag events) that shows where the surface would land. No animation — it sits
