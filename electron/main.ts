@@ -116,8 +116,8 @@ const PTY_MAX_FLUSH_BYTES = 256 * 1024
 // Recent output kept per session for replay when a reloaded renderer reattaches.
 const PTY_REPLAY_BYTES = 256 * 1024
 
-// Send PTY output to the session's current renderer (skips a destroyed one).
-const TRACED_HOOKS = new Set(["SessionStart", "SessionEnd", "CwdChanged", "WorktreeCreate"])
+// Session lifecycle only (rare; never per-tool events or cwd changes): enough to trace resume.
+const TRACED_HOOKS = new Set(["SessionStart", "SessionEnd", "WorktreeCreate"])
 /** A hook event's diagnostics fields: which session, from which pane, where. */
 function hookTrace(ev: AgentEvent): Record<string, string> {
   return {
@@ -129,6 +129,7 @@ function hookTrace(ev: AgentEvent): Record<string, string> {
   }
 }
 
+// Send PTY output to the session's current renderer (skips a destroyed one).
 function emit(rec: PtySession, data: string): void {
   // Quitting: the dying shells' last output (a bell, OSC 9) mustn't reach the hidden window.
   if (draining()) return
@@ -255,7 +256,7 @@ async function startAgentObservability(): Promise<void> {
             ev,
             ev.paneId ? sessions.get(ev.paneId)?.wslDistro : undefined,
           )
-          if (verdict === "rejected") diag("hook-cwd-rejected", hookTrace(ev))
+          if (verdict) diag(`hook-cwd-${verdict}`, hookTrace(ev))
         }
         // Session-level events locate each Claude pane's transcript → track its /color and
         // /rename for the pane accent (async + debounced; SessionEnd stops it).

@@ -54,6 +54,8 @@ export function resumeCommand(e: LedgerEntry, allowBypass: boolean): string | nu
 }
 
 export class SessionLedger {
+  // Per pane: the last folder that matched its session's transcript (in memory only).
+  private verified = new Map<string, string>()
   private entries = new Map<string, LedgerEntry>() // key: smterm pane (session) id
   private frozen = false
   private timer?: ReturnType<typeof setTimeout>
@@ -89,16 +91,24 @@ export class SessionLedger {
     }
   }
 
-  /** Fold a hook event (session-root events from a known pane only). */
-  /** Fold one hook event; "rejected" = a SessionStart whose folder isn't the session's. */
-  apply(ev: AgentEvent, wslDistro?: string): "rejected" | undefined {
+  /** Fold one hook event; says when a SessionStart's folder wasn't the session's. */
+  apply(ev: AgentEvent, wslDistro?: string): "rejected" | "fallback" | undefined {
     if (this.frozen || !ev.paneId || ev.agentId) return
     const cur = this.entries.get(ev.paneId)
     if (ev.event === "SessionStart") {
       if (!ev.cwd) return
-      // Resume must `cd` where Claude filed the session — a folder that doesn't encode to the
-      // transcript's project dir (a background agent's scratchpad…) would strand the resume.
-      if (cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === false) return "rejected"
+      // Resume must `cd` where Claude filed the session. A folder that doesn't encode to the
+      // transcript's project dir — a background agent's scratchpad, or Claude sitting in a
+      // subfolder when /clear starts a new session — falls back to the pane's last verified
+      // folder if that one fits, else the event is rejected.
+      let cwd = ev.cwd
+      let verdict: "fallback" | undefined
+      if (cwdMatchesTranscript(cwd, ev.transcriptPath) === false) {
+        const known = this.verified.get(ev.paneId) ?? cur?.cwd
+        if (!known || cwdMatchesTranscript(known, ev.transcriptPath) !== true) return "rejected"
+        cwd = known
+        verdict = "fallback"
+      }
       // A new `startup` while the pane's session (recorded THIS run) is live = a nested claude:
       // keep the parent. An entry carried over from the previous run is always replaceable —
       // the user started something new instead of resuming it.
@@ -110,15 +120,20 @@ export class SessionLedger {
       ) {
         return
       }
+      if (cwdMatchesTranscript(cwd, ev.transcriptPath) === true) this.verified.set(ev.paneId, cwd)
+      const same = cur?.sessionId === ev.sessionId
       this.set(ev.paneId, {
         sessionId: ev.sessionId,
-        cwd: ev.cwd,
-        transcriptPath: ev.transcriptPath,
-        permissionMode: ev.permissionMode,
-        name: cur?.sessionId === ev.sessionId ? cur.name : undefined,
+        cwd,
+        // The same session restarting keeps what the event doesn't say (a stray event carries
+        // no permission mode — it mustn't drop the session's `auto`).
+        transcriptPath: ev.transcriptPath ?? (same ? cur.transcriptPath : undefined),
+        permissionMode: ev.permissionMode ?? (same ? cur.permissionMode : undefined),
+        name: same ? cur.name : undefined,
         wslDistro,
         updatedAt: this.now(),
       })
+      return verdict
     } else if (ev.event === "SessionEnd") {
       if (cur?.sessionId === ev.sessionId) this.delete(ev.paneId)
     } else if (cur?.sessionId === ev.sessionId) {
@@ -127,8 +142,14 @@ export class SessionLedger {
         next = { ...next, permissionMode: ev.permissionMode }
       // Claude re-files a session that enters a worktree under the worktree's folder: follow
       // it (only a folder matching the transcript's — a plain `cd src` never does).
-      if (ev.cwd && ev.cwd !== cur.cwd && cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === true)
+      if (
+        ev.cwd &&
+        ev.cwd !== cur.cwd &&
+        cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === true
+      ) {
         next = { ...next, cwd: ev.cwd, transcriptPath: ev.transcriptPath }
+        this.verified.set(ev.paneId, ev.cwd)
+      }
       if (next !== cur) this.set(ev.paneId, { ...next, updatedAt: this.now() })
     }
   }

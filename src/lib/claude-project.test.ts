@@ -37,7 +37,11 @@ describe("cwdMatchesTranscript", () => {
     expect(cwdMatchesTranscript("/r", undefined)).toBeUndefined()
     expect(cwdMatchesTranscript("/r", "/tmp/a.jsonl")).toBeUndefined()
     const long = "/" + "a".repeat(250)
-    expect(cwdMatchesTranscript(long, T("x"))).toBeUndefined()
+    expect(cwdMatchesTranscript(long, T("-" + "a".repeat(200)))).toBeUndefined() // maybe shortened
+  })
+  it("a long scratchpad path vs a short project folder is a clear mismatch", () => {
+    const pad = `/private/tmp/claude-501/-Users-me-${"x".repeat(150)}/7aaf8a32/scratchpad`
+    expect(cwdMatchesTranscript(pad, T(`-Users-me-${"x".repeat(150)}`))).toBe(false)
   })
   it("Windows transcript paths", () => {
     const t = "C:\\Users\\me\\.claude\\projects\\C--Users-me-repo\\1.jsonl"

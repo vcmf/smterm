@@ -317,11 +317,37 @@ describe("SessionLedger — the folder must be where Claude filed the session", 
   const T_DIMO = tr("-Users-me-workspace-dimo")
   const PAD = "/private/tmp/claude-501/-Users-me-workspace-dimo/7aaf8a32/scratchpad"
 
-  it("a SessionStart carrying another folder (a background agent's scratchpad) is rejected", () => {
+  it("a SessionStart carrying another folder (a background agent's scratchpad) keeps the real one", () => {
     const l = new SessionLedger(null)
     l.apply(start({ cwd: DIMO, transcriptPath: T_DIMO }))
-    expect(l.apply(start({ cwd: PAD, transcriptPath: T_DIMO, source: "resume" }))).toBe("rejected")
+    expect(
+      l.apply(
+        start({ cwd: PAD, transcriptPath: T_DIMO, source: "resume", permissionMode: undefined }),
+      ),
+    ).toBe("fallback")
     expect(l.get("p1")?.cwd).toBe(DIMO)
+    expect(l.get("p1")?.permissionMode).toBe("default") // kept, not wiped by the stray event
+  })
+
+  it("/clear while Claude sits in a subfolder: the new session is recorded at the verified folder", () => {
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: DIMO, transcriptPath: T_DIMO }))
+    l.apply(end({ reason: "clear" }))
+    l.apply(
+      start({
+        sessionId: ID2,
+        cwd: `${DIMO}/src`,
+        transcriptPath: tr("-Users-me-workspace-dimo", ID2),
+        source: "clear",
+      }),
+    )
+    expect(l.get("p1")).toMatchObject({ sessionId: ID2, cwd: DIMO })
+  })
+
+  it("no verified folder that fits → rejected (nothing to resume beats a wrong folder)", () => {
+    const l = new SessionLedger(null)
+    expect(l.apply(start({ cwd: PAD, transcriptPath: T_DIMO }))).toBe("rejected")
+    expect(l.get("p1")).toBeUndefined()
   })
 
   it("later events never move the folder to a non-matching one (cd into a subfolder / scratchpad)", () => {

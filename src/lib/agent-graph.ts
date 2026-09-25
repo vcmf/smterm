@@ -104,7 +104,8 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
   const at = (id: string) => nodes[id] as AgentNode
 
   // Every event belongs to a session → ensure that session's root node exists.
-  if (!nodes[rid]) {
+  const isNew = !nodes[rid]
+  if (isNew) {
     nodes[rid] = {
       id: rid,
       sessionId: ev.sessionId,
@@ -144,16 +145,14 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
 
   switch (ev.event) {
     case "SessionStart":
+      // A SessionStart for a session we know, from a folder Claude didn't file it under, is
+      // a stray (a background agent's scratchpad): ignore it — status and folder alike.
+      if (!isNew && cwdMatchesTranscript(ev.cwd, ev.transcriptPath) === false) break
       // A (re)start — also in another pane (`claude --resume` after a crash) — makes it its
       // pane's newest session (`started`); the board order (rootIds) never changes.
       set(rid, {
         status: "idle",
-        // Not a folder Claude filed this session under (a stray event from a background
-        // agent's scratchpad): keep the known one — see claude-project.ts.
-        cwd:
-          ev.cwd && cwdMatchesTranscript(ev.cwd, ev.transcriptPath) !== false
-            ? ev.cwd
-            : at(rid).cwd,
+        cwd: ev.cwd ?? at(rid).cwd,
         paneId: ev.paneId ?? at(rid).paneId,
         started: Math.max(0, ...rootIds.map((id) => nodes[id]?.started ?? 0)) + 1,
         // A fresh session starting while the pane's lead is live was launched from inside it
