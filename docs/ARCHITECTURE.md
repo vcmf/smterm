@@ -4,9 +4,8 @@
 > browser — links open in the OS default browser. Native desktop notifications. Runs on **macOS,
 > Linux, Windows, and WSL**.
 
-Status: **migrating Tauri → Electron** (2026-07-07). M0–M3a were built on Tauri; we're porting to
-Electron for rendering fidelity + cross-platform consistency (see §3.5). This doc describes the
-**Electron** target.
+Status: **Electron** (ported from Tauri in July 2026 for rendering fidelity + cross-platform
+consistency — see §3.5). Shipping as v0.x; progress in `ROADMAP.md`, traps in `GOTCHAS.md`.
 
 ### Decisions locked
 
@@ -226,9 +225,26 @@ Output stream: main → renderer via `webContents.send('pty:data:'+id, Uint8Arra
   Claude pane's transcript (located via its hook events; `fs.watch` + debounced incremental fold,
   `electron/agent-meta.ts`) and pushes `{paneId, meta}` → a 2px top border + tab/sidebar icon in
   that colour; a renamed session without `/color` gets a stable colour from its name.
+- **Theming:** each theme is a **family** with a dark and a light variant (Minimal, Tokyo Night,
+  Catppuccin, Gruvbox); `settings.appearance` = `dark` | `light` | `system` (follows the OS live)
+  picks the variant, resolved by `activeTheme()`. A variant is UI tokens (→ CSS vars) + an xterm
+  palette; light palettes keep ANSI black dark. Launch never flashes dark: an inline
+  `index.html` script applies the cached tokens pre-paint, theming waits for `settingsLoaded`,
+  and the native window bg follows the theme (GOTCHAS #first-paint-theme).
+- **Sidebar meta:** per terminal — Claude's last reply (from the `Stop` hook), `branch • cwd`,
+  and `PR #n <state>` (`electron/pane-git.ts`: `git rev-parse` + the user's own `gh pr view`
+  for the checked-out branch; cached per folder / repo+branch with state-based TTLs, deduped,
+  ≤2 gh processes; branches return immediately while PRs load in the background). Polled by the
+  renderer every 10 s + on `cd`, paused while the sidebar is collapsed or the window hidden.
 - **`terminal-manager.ts`:** owns xterm instances **outside the React tree**, keyed by session id, so
   splits/tab-switches re-attach (never respawn). Loads addons (webgl, fit, web-links); registers the
-  ligature character-joiner; wires OSC 9 / OSC 133.
+  ligature character-joiner; wires OSC 9 / OSC 133. Off-screen terminals are **parked** (opened
+  in an inert off-viewport element — GOTCHAS #hidden-terminals).
+- **Agent observability** (design: `docs/design/AGENT_OBSERVABILITY.md`): Claude Code hooks are
+  injected per launch and write each event as a **file** into a nonce-named drop dir
+  (`agent-hooks.ts`) — no ports, crosses the WSL boundary. Events feed the Agents board, the
+  sidebar snippet and, via the session transcript (read incrementally, best-effort —
+  `transcript-fold.ts`), the token badge and the session colour.
 - **IPC:** all backend calls go through `lib/ipc.ts` → `window.smterm.*` (preload). Components never
   touch Electron directly (keeps them testable + portable).
 - **Chrome:** tab bar, sidebar tree, status bar, ⌘K palette (mux reskin — ROADMAP M3.5).
@@ -299,24 +315,43 @@ CI: GitHub Actions matrix (macos/ubuntu/windows). Auto-update later via `electro
 
 ## 11. IPC / event model
 
-- **Renderer → main:** `ipcRenderer.invoke` behind a preload `contextBridge` API (`window.smterm`):
-  `ptySpawn/ptyWrite/ptyResize/ptyKill`, `listShells`, `readSettings/writeSettings/settingsPath`,
-  `openExternal`, `notify`.
-- **Main → renderer:** `webContents.send` for the per-session PTY byte stream (`pty:data:<id>`) and
-  app events (`settings-changed`). High-throughput sessions can use a `MessageChannelMain` port.
+- **The seam:** every channel is declared twice — the runtime in `electron/preload.ts`
+  (`window.smterm`) and the types in `src/lib/ipc.ts`; change both together. Components never
+  import Electron.
+- **Renderer → main** (`invoke` for answers, `send` for fire-and-forget), by family: `pty:*`
+  (spawn = attach-or-spawn, write, resize, kill) · `shells:list` · `settings:*` / `workspace:*`
+  (read/write the JSON files) · `git:status` / `git:diff` (changes panel) · `pane:git-info`
+  (sidebar branch + PR) · `agents:meta-snapshot` · `fs:*` / `file:*` / `dialog:pick-directory` /
+  `editor:info` (files panel, links, preview) · `window:*` (frameless controls, native bg) ·
+  `platform:info` · `app:*` (version, update check, metrics) · `open-external` / `open-path` /
+  `notify` / `clipboard:*`.
+- **Main → renderer** (`webContents.send`): `pty:data:<id>` (coalesced PTY bytes — the hot path;
+  nothing else rides it) · `agents:events` (hook batches + token totals) · `agents:meta`
+  (per-pane Claude colour/name) · `settings-changed` · `window:maximize-change`.
 - **Security:** `contextIsolation: true`, `nodeIntegration: false`; the renderer only sees the
-  minimal typed API the preload exposes.
+  typed API the preload exposes.
 
 ---
 
 ## 12. Persistence & session lifetime
 
-- **Persist:** window size, tabs (title/shell/cwd), split tree, theme/font, notification prefs →
-  `~/.config/smterm/settings.json` (`%APPDATA%\smterm\` on Windows). A `chokidar` watcher makes
-  hand-edits apply live; the settings panel writes the same file.
-- **Do NOT persist (v1):** live process state — PTYs die on quit; relaunch recreates tabs with fresh
-  shells at saved cwd.
-- **Future — reattach to running sessions:** a detached daemon (Appendix A). Out of scope for v1.
+Config dir: `~/.config/smterm/` (`%APPDATA%\smterm\` on Windows).
+
+- **`settings.json`** — the source of truth for preferences (font, theme family + appearance,
+  renderer, shell, …). A `chokidar` watcher applies hand-edits live; the settings panel writes
+  the same file. `mergeSettings` validates everything and maps legacy values.
+- **`workspace.json`** — the layout: tabs, pane trees with their surfaces, focus, right-panel
+  width, and enough per session to respawn it (shell, args, cwd). **v2** leaves are
+  `{id, sessionIds, activeSessionId}` plus a legacy `sessionId` mirror so an older build still
+  restores every pane; v1 files migrate on read. A file from a **newer** build is not parsed
+  and not overwritten. Restore de-duplicates / prunes broken entries.
+- **Small caches:** `window-bg` (native window colour for the next launch), `claude-hooks.json`
+  and the per-launch `hook-events/` drop dir, and localStorage `smterm:theme-vars` (first paint).
+- **Process lifetime:** PTYs live in the main process, so they **survive a renderer reload**
+  (attach-or-spawn reattach + replay). They **die on a full quit** (guarded by a confirm
+  dialog); relaunch respawns shells at the saved cwd. Surviving a quit needs the daemon
+  (Appendix A, ROADMAP M5). Terminals start lazily per tab: after a restore only the active
+  tab's panes spawn; a background tab's shells start when it's first shown.
 
 ---
 

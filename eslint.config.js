@@ -36,7 +36,14 @@ export default tseslint.config(
   },
   {
     // Config files, Electron main/preload, build scripts, and test setup run in Node.
-    files: ["*.{ts,js,mjs,cjs}", "electron/**", "src/test/**", "build/**", "scripts/**"],
+    files: [
+      "*.{ts,js,mjs,cjs}",
+      "electron/**",
+      "src/test/**",
+      "build/**",
+      "scripts/**",
+      ".claude/**", // agent skills' driver scripts
+    ],
     languageOptions: { globals: { ...globals.node } },
   },
   {

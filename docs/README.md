@@ -11,7 +11,7 @@ Code — nested `electron/CLAUDE.md` too).
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System design, seams, decisions (incl. the Tauri→Electron pivot, Appendix A daemon). |
 | [ROADMAP.md](./ROADMAP.md)           | Milestones + status. Update as we go.                                                |
 | [GOTCHAS.md](./GOTCHAS.md)           | The non-obvious traps, with the _why_. Each has a one-line flag in `CLAUDE.md`.      |
-| [TESTING.md](./TESTING.md)           | Quality bar; what earns real tests.                                                  |
+| [TESTING.md](./TESTING.md)           | Where tests live, patterns, gates; real-app checks via the `run-smterm` skill.       |
 | [PERF.md](./PERF.md)                 | Performance methodology + baselines (`SMTERM_PERF=1` harness).                       |
 
 ## Research

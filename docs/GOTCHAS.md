@@ -199,6 +199,71 @@ row only (a path wrapped across rows isn't matched); forward-slash paths (no Win
 backslash); extensionless files (`Makefile`) unless they contain a slash; **WSL** panes don't open
 links yet (needs the WSL cwd context — see `#windows` / the WSL git PR).
 
+## Hidden terminals are parked, not hidden {#hidden-terminals}
+
+A pane holds several terminals (surfaces) but mounts only the visible one. Every other
+**started** terminal — a hidden surface, a background tab you've visited — is **parked**: its
+xterm is opened inside an off-screen, `inert` element in the document (`parkingLot()` in
+`terminal-manager.ts`). `detach()` parks; `attach()` moves the host back; `ensureRunning()`
+starts a pane's hidden surfaces straight into the lot. The invariant: **once started, a
+terminal is mounted or parked — never unopened**, and never disposed on unmount (only when its
+session leaves the store).
+
+Starting is **lazy per tab**: only the active tab's `PaneLayout` renders, so after a restore or
+a renderer reload a background tab's terminals have no xterm entry (and, after a full quit, no
+PTY) until the tab is first shown — no status, notifications or cwd from them before that.
+Code must tolerate a missing entry (e.g. `dispose()` still kills the PTY by id).
+
+Why not the obvious alternatives:
+
+- **Unopened until shown** (the first design): an unopened xterm has no theme service, so it
+  never answers OSC 10/11 colour queries (agents pick the wrong light/dark), and
+  `registerCharacterJoiner` throws "Terminal must be opened first" — with ligatures on, any
+  settings change crashed the app.
+- **`visibility:hidden` inside the pane:** xterm pauses rendering via an IntersectionObserver,
+  which ignores `visibility`, so every hidden terminal would keep painting its output — a
+  hot-path cost per surface. Off-viewport parking gets the pause for free.
+
+Parked terminals can't measure themselves: they take their pane's grid via `followSize`
+(`syncHiddenSizes` on pane resize / font change), resizing the PTY only when the grid really
+changes. WebGL is never acquired while parked (`acquireWebgl` checks the host's parent) — a live
+canvas that gets reparented can lose its context. Keyboard focus follows the store's focus:
+`attach()` only focuses the tab's focused session, never whatever just mounted.
+
+## Theme on first paint {#first-paint-theme}
+
+`settings.json` loads asynchronously, but a light theme must not flash the dark CSS defaults.
+Three pieces, all needed:
+
+1. **`index.html` inline script** applies the last theme's CSS vars (localStorage
+   `smterm:theme-vars`, written by `applyThemeVars`) before first paint. Doing it in
+   `main.tsx` is too late — module scripts are deferred.
+2. **The theme effect waits for `settingsLoaded`** — running once with defaults would
+   overwrite the cache with dark. Settings also load _before_ the workspace restore, so
+   restored panes spawn with the right `COLORFGBG`.
+3. **The native window background** (`window:set-background`) follows the theme and is saved to
+   `window-bg` in the config dir, so the next launch's `BrowserWindow` opens light.
+
+A running shell's env can't change, so `COLORFGBG` is stale for panes opened before a
+light/dark switch (incl. `appearance: "system"` following the OS); native shells get the live
+answer via xterm's OSC 11 reply.
+
+## Claude Code integration reads internal formats {#claude-transcript}
+
+Hook payloads and the session transcript JSONL are **undocumented Claude internals** — parse
+best-effort and ignore what you don't recognize; never throw (`transcript-fold.ts` and friends).
+
+- `/color` and `/rename` are recorded **only** in the transcript
+  (`{"type":"agent-color","agentColor":"orange"}`, `{"type":"custom-title","customTitle":"…"}`,
+  latest wins, `default` = reset). Claude sends no terminal escape for either, and **slash
+  commands fire no hook** — `agent-meta.ts` finds the transcript via the pane's hook events,
+  then `fs.watch`es that one file. `/rename` never sets a colour in Claude itself; the
+  name-derived colour is smterm's (cmux does the same).
+- The transcript is read incrementally in bounded chunks (`TranscriptFold`) — a resumed session
+  can be 90 MB+, and a synchronous parse would stall PTY forwarding.
+- Hook-event drops are ingested **unordered**: a late `SessionEnd` of the previous session in a
+  pane must not stop tracking the new one (compare the transcript path).
+
 ## Agent-status reducer has a known flaw {#agent-status}
 
 `lib/session-status.ts`: `running` = OSC-133 C..D (process alive) ≠ actively working, so
