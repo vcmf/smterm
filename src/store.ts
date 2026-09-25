@@ -17,7 +17,7 @@ import {
 import { inheritShell } from "./lib/shells"
 import { reduceSignals } from "./lib/session-status"
 import type { SignalEvent } from "./lib/session-status"
-import { reduceAgentEvent, emptyGraph } from "./lib/agent-graph"
+import { reduceAgentEvent, emptyGraph, dropPaneSessions } from "./lib/agent-graph"
 import type { AgentEvent, AgentGraph } from "./lib/agent-graph"
 import { defaultSettings, mergeSettings } from "./settings/schema"
 import { saveSettings } from "./settings/io"
@@ -105,6 +105,7 @@ interface AppState {
   setSessionOscTitle: (sessionId: string, title: string) => void
   setGit: (git: GitStatus | null) => void
   applyAgentEvents: (events: AgentEvent[]) => void
+  claudeExited: (paneId: string) => void // the pane's shell prompt came back after Claude
   setRightView: (view: RightView) => void
   setSessionCwd: (sessionId: string, cwd: string) => void
   setPaletteOpen: (open: boolean) => void
@@ -314,6 +315,11 @@ export const useStore = create<AppState>((set, get) => ({
   // Fold a coalesced batch of hook events into the agent tree (one re-render per batch).
   applyAgentEvents: (events) =>
     set((state) => ({ agents: events.reduce(reduceAgentEvent, state.agents) })),
+  claudeExited: (paneId) =>
+    set((state) => {
+      const agents = dropPaneSessions(state.agents, paneId)
+      return agents === state.agents ? state : { agents }
+    }),
   setRightView: (rightView) => set({ rightView }),
   setSessionCwd: (sessionId, cwd) =>
     set((state) => {

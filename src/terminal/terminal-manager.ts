@@ -430,8 +430,10 @@ function spawn(session: Session, entry: Entry) {
       const { next, actions } = onMark(entry.flow, mark, resuming)
       entry.flow = next
       for (const a of actions) {
-        if (a.type === "shell-idle") ipc.shellIdle(session.id)
-        else if (a.type === "type-resume") typeResume(session.id, entry)
+        if (a.type === "shell-idle") {
+          ipc.shellIdle(session.id)
+          useStore.getState().claudeExited(session.id)
+        } else if (a.type === "type-resume") typeResume(session.id, entry)
         else failResume(session.id, entry, a.exitCode)
       }
     }

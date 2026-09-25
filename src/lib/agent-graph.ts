@@ -232,6 +232,29 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
   return { nodes, rootIds }
 }
 
+/** Panes with a live Claude session (a root node tagged with the pane), sorted + unique. */
+export function claudePaneIds(graph: AgentGraph): string[] {
+  const ids = new Set<string>()
+  for (const rid of graph.rootIds) {
+    const pane = graph.nodes[rid]?.paneId
+    if (pane) ids.add(pane)
+  }
+  return [...ids].sort()
+}
+
+/** Evict every session that ran in `paneId` — its shell prompt returned, so Claude exited
+ *  even if no SessionEnd came (crash, kill). Same reference when nothing matched. */
+export function dropPaneSessions(graph: AgentGraph, paneId: string): AgentGraph {
+  const gone = graph.rootIds.filter((rid) => graph.nodes[rid]?.paneId === paneId)
+  if (gone.length === 0) return graph
+  const nodes = { ...graph.nodes }
+  for (const rid of gone) {
+    for (const cid of nodes[rid]?.childIds ?? []) delete nodes[cid]
+    delete nodes[rid]
+  }
+  return { nodes, rootIds: graph.rootIds.filter((rid) => !gone.includes(rid)) }
+}
+
 /** Fold a whole event stream (convenience over reduceAgentEvent). */
 export const reduceAgentEvents = (
   events: AgentEvent[],
