@@ -1,6 +1,7 @@
 import { useStore } from "../store"
 import { defaultSettings } from "../settings/schema"
 import type { ShellOption } from "../types"
+import { emptyGraph } from "../lib/agent-graph"
 
 export const testShell: ShellOption = { id: "sh", label: "sh", command: "/bin/sh", args: [] }
 
@@ -25,6 +26,7 @@ export function resetStore() {
     closePaneConfirm: null,
     dragging: null,
     agentMeta: {},
+    agents: emptyGraph,
     paneGit: {},
     resume: {},
   })

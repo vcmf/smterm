@@ -13,7 +13,9 @@ import { SettingsPanel } from "./components/settings-panel"
 import { FilePreview } from "./components/file-preview"
 import { ClosePaneDialog } from "./components/close-pane-dialog"
 import { RightPanelResizer } from "./components/right-panel-resizer"
-import { useActiveCwd, getActiveWsl } from "./lib/use-active-cwd"
+import { useActiveWorkCwd, getActiveWsl } from "./lib/use-active-cwd"
+import { claudeWorkDirs, inGitKey, samePath } from "./lib/agent-dirs"
+import type { PaneGitRequest } from "./lib/pane-git"
 import { TerminalManager } from "./terminal/terminal-manager"
 import { activeTheme, useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
@@ -45,7 +47,7 @@ function App() {
   const rightView = useStore((s) => s.rightView)
   const rightPanelWidth = useStore((s) => s.rightPanelWidth)
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed)
-  const activeCwd = useActiveCwd()
+  const activeCwd = useActiveWorkCwd() // Claude's folder while it runs (worktree), else the shell's
 
   // Load shells + settings, then restore the saved workspace (VS Code-style) or open a tab.
   // Settings first: a restored pane spawns with the theme's bg (COLORFGBG light/dark), and
@@ -327,11 +329,18 @@ function App() {
     const poll = async () => {
       const s = useStore.getState()
       if (s.sidebarCollapsed || document.visibilityState === "hidden") return
-      const reqs = Object.values(s.sessions)
-        .flatMap((x) =>
-          x.cwd ? [{ paneId: x.id, cwd: x.cwd, wsl: wslContext(x.command, x.args) }] : [],
-        )
-        .slice(0, 64) // main answers at most 64 — keep `polled` in step with what was sent
+      const work = claudeWorkDirs(s.agents)
+      const shellReqs: PaneGitRequest[] = []
+      const inReqs: PaneGitRequest[] = [] // Claude working elsewhere (worktree, cd) → `in` line
+      for (const x of Object.values(s.sessions)) {
+        if (!x.cwd) continue
+        const wsl = wslContext(x.command, x.args)
+        shellReqs.push({ paneId: x.id, cwd: x.cwd, wsl })
+        const w = work[x.id]?.cwd
+        if (w && !samePath(w, x.cwd)) inReqs.push({ paneId: inGitKey(x.id), cwd: w, wsl })
+      }
+      // main answers at most 64 — keep `polled` in step with what was sent
+      const reqs = [...shellReqs, ...inReqs].slice(0, 64)
       if (reqs.length === 0) return
       const mine = ++seq
       const res = await ipc.paneGitInfo(reqs).catch(() => null)
@@ -351,9 +360,10 @@ function App() {
     const every = setInterval(() => void poll(), 10_000)
     const unsub = useStore.subscribe((state, prev) => {
       if (state.sidebarCollapsed !== prev.sidebarCollapsed && !state.sidebarCollapsed) pollSoon()
-      if (state.sessions === prev.sessions) return
+      if (state.sessions === prev.sessions && state.agents === prev.agents) return
+      const work = claudeWorkDirs(state.agents) // memoized: cheap on every hook event
       const key = Object.values(state.sessions)
-        .map((x) => `${x.id}=${x.cwd ?? ""}`)
+        .map((x) => `${x.id}=${x.cwd ?? ""}>${work[x.id]?.cwd ?? ""}`)
         .join("|")
       if (key !== lastKey) {
         lastKey = key

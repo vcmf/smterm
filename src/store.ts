@@ -17,6 +17,7 @@ import {
 import { inheritShell } from "./lib/shells"
 import { reduceSignals } from "./lib/session-status"
 import type { SignalEvent } from "./lib/session-status"
+import { inGitKey, paneOfGitKey } from "./lib/agent-dirs"
 import { reduceAgentEvent, emptyGraph, dropPaneSessions } from "./lib/agent-graph"
 import type { AgentEvent, AgentGraph } from "./lib/agent-graph"
 import { defaultSettings, mergeSettings } from "./settings/schema"
@@ -234,6 +235,7 @@ function dropSessions(
   for (const id of ids) {
     delete resume[id]
     delete paneGit[id]
+    delete paneGit[inGitKey(id)] // …and its Claude `in` folder's
     delete sessions[id]
     delete paneRoot[id] // don't leak the pane's root override
     delete agentMeta[id] // …or its Claude accent
@@ -488,7 +490,8 @@ export const useStore = create<AppState>((set, get) => ({
       // Drop results for terminals that closed while the poll was in flight (else they'd
       // be re-added after dropSessions cleared them, and never removed).
       const live: typeof fresh = {}
-      for (const [id, info] of Object.entries(fresh)) if (state.sessions[id]) live[id] = info
+      for (const [id, info] of Object.entries(fresh))
+        if (state.sessions[paneOfGitKey(id)]) live[id] = info
       let next = mergePaneGit(state.paneGit, live)
       for (const id of polled) {
         if (id in live || !(id in next)) continue
