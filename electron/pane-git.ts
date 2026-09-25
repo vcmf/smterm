@@ -104,7 +104,7 @@ export class PaneGitService {
         if (!head) return // not a repo: just the real path
         if (head.branch) info.branch = head.branch
         info.root = head.root
-        if (head.branch) {
+        if (head.branch && !r.noPr) {
           const hit = this.prs.get(this.prKey(r, head.root, head.branch))
           if (hit?.value) info.pr = hit.value // (a stale value beats a blank while refreshing)
           if (!hit || this.now() - hit.at >= hit.ttl) {

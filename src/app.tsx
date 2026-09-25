@@ -317,9 +317,10 @@ function App() {
     })
   }, [])
 
-  // Branch + GitHub PR for every terminal (sidebar). Main caches/dedupes, so this is cheap;
-  // still paused while the sidebar is collapsed or the window hidden. Re-polls soon after a
-  // cwd changes (cd / new terminal) or the sidebar is shown again.
+  // Branch + GitHub PR for every terminal (sidebar), and Claude's checkout when it moved (the
+  // sidebar's `in` line; also what the status bar / panels follow). Main caches/dedupes, so
+  // this is cheap; collapsed sidebar → moved terminals only, no PRs; hidden window → paused.
+  // Re-polls soon after a cwd changes (cd / new terminal / Claude moving) or on sidebar show.
   useEffect(() => {
     let stopped = false
     let soon: ReturnType<typeof setTimeout> | undefined

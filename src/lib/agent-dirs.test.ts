@@ -7,6 +7,7 @@ import {
   workCwd,
   worksElsewhere,
   isInside,
+  inGitFor,
   planGitPoll,
   settleInAnswers,
   samePath,
@@ -56,6 +57,15 @@ describe("claudeWorkDirs", () => {
     expect(workCwd(g, {}, "other", "/x")).toBe("/x")
   })
 
+  it("an older session restarting in the same pane (/resume back) is the live one again", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
+      { event: "SessionStart", sessionId: "b", paneId: "p", cwd: "/b" },
+      { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a", source: "resume" },
+    ])
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/a")
+  })
+
   it("the newest-started session of a pane wins, even one resumed from another pane", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
@@ -65,6 +75,20 @@ describe("claudeWorkDirs", () => {
     expect(claudeWorkDirs(g).q?.cwd).toBe("/a2")
     expect(claudeWorkFlat(g)).toBe(claudeWorkFlat(g))
     expect(claudeWorkFlat(g)).toEqual(["q", "/a2", ""])
+  })
+})
+
+describe("inGitFor / workCwd follow the checkout, not Claude's subfolder", () => {
+  it("an answer stays valid while Claude moves inside that repo (no flicker on `cd src`)", () => {
+    const ans = { root: "/r/wt", forCwd: "/r/wt" }
+    expect(inGitFor(ans, "/r/wt/src")).toBe(ans)
+    expect(inGitFor(ans, "/elsewhere")).toBeUndefined()
+    expect(inGitFor({ real: "/x", forCwd: "/x" }, "/x/sub")).toBeUndefined() // no repo: exact only
+  })
+  it("git views follow the checkout root while Claude is in a subfolder of it", () => {
+    const g = graph([{ event: "SessionStart", sessionId: "s", paneId: "p", cwd: "/r/wt/src" }])
+    const git = { p: { root: "/r" }, "p@in": { root: "/r/wt", forCwd: "/r/wt" } }
+    expect(workCwd(g, git, "p", "/r")).toBe("/r/wt")
   })
 })
 
@@ -149,13 +173,16 @@ describe("planGitPoll / settleInAnswers", () => {
       "b@in:/b/wt",
       "c:/c",
     ])
-    expect(p.polled).toEqual(["a", "a@in", "b", "c", "c@in"])
+    expect(p.polled).toEqual(["a@in", "a", "b", "c@in", "c"])
+    expect(p.reqs.every((r) => !r.noPr)).toBe(true)
     expect(p.inCwd).toEqual({ "b@in": "/b/wt" })
   })
 
   it("sidebar collapsed: only terminals whose Claude moved", () => {
     const p = planGitPoll([sh("a", "/a"), sh("b", "/b")], work, true)
     expect(p.reqs.map((r) => r.paneId)).toEqual(["b", "b@in"])
+    expect(p.reqs.every((r) => r.noPr)).toBe(true) // no gh calls: no PR is on screen
+    expect(p.polled).toContain("a@in") // a stale `in` of an unmoved terminal still clears
   })
 
   it("the 64 cap skips a pair that doesn't fit but still fills with single terminals", () => {
@@ -165,11 +192,16 @@ describe("planGitPoll / settleInAnswers", () => {
     expect(p.reqs[63]?.paneId).toBe("z")
   })
 
-  it("tags answers with their folder; a failed lookup keeps the last answer for it", () => {
-    const res: Record<string, { root?: string; forCwd?: string }> = { "b@in": {} }
-    settleInAnswers(res, { "b@in": "/b/wt" }, { "b@in": { root: "/b/wt", forCwd: "/b/wt" } })
-    expect(res).toEqual({}) // kept (not overwritten)
-    const fresh: Record<string, { root?: string; forCwd?: string }> = { "b@in": { root: "/b/wt" } }
+  it("tags answers with their folder; a failed lookup keeps the last answer once", () => {
+    type R = Record<string, { root?: string; forCwd?: string; kept?: boolean }>
+    const prev = { root: "/b/wt", forCwd: "/b/wt" }
+    const res: R = { "b@in": {} }
+    settleInAnswers(res, { "b@in": "/b/wt" }, { "b@in": prev })
+    expect(res["b@in"]).toEqual({ ...prev, kept: true })
+    const again: R = { "b@in": {} } // still nothing: the folder really left git → accept
+    settleInAnswers(again, { "b@in": "/b/wt" }, { "b@in": { ...prev, kept: true } })
+    expect(again["b@in"]).toEqual({ forCwd: "/b/wt" })
+    const fresh: R = { "b@in": { root: "/b/wt" } }
     settleInAnswers(fresh, { "b@in": "/b/wt" }, {})
     expect(fresh["b@in"]?.forCwd).toBe("/b/wt")
   })

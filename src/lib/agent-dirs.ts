@@ -34,12 +34,15 @@ export function claudeWorkDirs(graph: AgentGraph): Record<string, WorkDir> {
   const hit = memo.get(graph)
   if (hit) return hit
   const out: Record<string, WorkDir> = {}
+  const newest: Record<string, number> = {}
   for (const rid of graph.rootIds) {
     const n = graph.nodes[rid]
     if (!n?.paneId || !n.cwd) continue
+    if ((n.started ?? 0) < (newest[n.paneId] ?? -1)) continue // an older session of the pane
+    newest[n.paneId] = n.started ?? 0
     const cwd = n.cwd
     const others = (n.worktrees ?? []).filter((w) => !samePath(w.path, cwd))
-    out[n.paneId] = { cwd, others } // later roots win: SessionStart moves a root to the end
+    out[n.paneId] = { cwd, others }
   }
   memo.set(graph, out)
   return out
@@ -47,8 +50,7 @@ export function claudeWorkDirs(graph: AgentGraph): Record<string, WorkDir> {
 
 const flatMemo = new WeakMap<AgentGraph, string[]>()
 
-/** claudeWorkDirs as [paneId, cwd, other worktree paths "\n"-joined, …] — primitives for a
- *  shallow-compared selector; memoized per graph. */
+/** claudeWorkDirs flattened to primitives [paneId, cwd, others…] for useShallow; memoized. */
 export function claudeWorkFlat(graph: AgentGraph): string[] {
   const hit = flatMemo.get(graph)
   if (hit) return hit
@@ -61,15 +63,16 @@ export function claudeWorkFlat(graph: AgentGraph): string[] {
   return out
 }
 
-/** Claude's `in` lookup, if it's for the folder Claude is in now (it moves; a stale or
- *  missing answer means "not known yet"). */
-export const inGitFor = (inGit: PaneGitInfo | undefined, work: string | undefined) =>
-  inGit && work && inGit.forCwd === work ? inGit : undefined
+/** Claude's `in` lookup if it still applies: asked for this folder, or Claude is inside its repo. */
+export function inGitFor(inGit: PaneGitInfo | undefined, work: string | undefined) {
+  if (!inGit || !work) return undefined
+  if (inGit.forCwd === work) return inGit
+  return inGit.root && (samePath(work, inGit.root) || isInside(work, inGit.root))
+    ? inGit
+    : undefined
+}
 
-/** Is Claude working in another checkout than the shell's? Decided only once Claude's folder
- *  has been looked up (no flicker): a different repo root, or a repo the shell isn't in →
- *  yes; same root (a `cd src`) → no; outside git → by real path (symlinks resolved), where a
- *  subfolder of the shell's folder is the same place. */
+/** Claude works in another checkout: other repo root, or by real path outside git; unknown → no. */
 export function worksElsewhere(
   shellCwd: string | undefined,
   work: string | undefined,
@@ -79,12 +82,13 @@ export function worksElsewhere(
   const known = inGitFor(inGit, work)
   if (!shellCwd || !work || !known || samePath(shellCwd, work)) return false
   if (known.root) return !(shellGit?.root && samePath(shellGit.root, known.root))
+  // Outside git: symlinked spellings and subfolders of the shell's folder are the same place.
   const from = shellGit?.real ?? shellCwd
   const to = known.real ?? work
   return !samePath(from, to) && !isInside(to, from)
 }
 
-/** The folder a pane works in: Claude's while it works in another checkout, else the shell's. */
+/** The folder a pane's git views follow: Claude's checkout root while it works elsewhere. */
 export function workCwd(
   graph: AgentGraph,
   paneGit: Record<string, PaneGitInfo>,
@@ -92,13 +96,12 @@ export function workCwd(
   shellCwd?: string,
 ): string | undefined {
   const work = claudeWorkDirs(graph)[paneId]?.cwd
-  return worksElsewhere(shellCwd, work, paneGit[paneId], paneGit[inGitKey(paneId)])
-    ? work
-    : shellCwd
+  const inGit = paneGit[inGitKey(paneId)]
+  if (!worksElsewhere(shellCwd, work, paneGit[paneId], inGit)) return shellCwd
+  return inGit?.root ?? work // the checkout, not Claude's current subfolder (stable views)
 }
 
-/** The `in` line's path: relative to `from` when inside it (`.claude/worktrees/x`) — also via
- *  `from`'s real path (shell on a symlink, Claude on the resolved path) — else `~`-shortened. */
+/** The `in` path: relative to `from` (or its real path) when inside it, else `~`-shortened. */
 export function inLabel(shellCwd: string, work: string, home: string, fromReal?: string): string {
   const to = normalizeRootPath(work)
   for (const base of fromReal ? [shellCwd, fromReal] : [shellCwd]) {
@@ -114,10 +117,7 @@ export const inGitKey = (paneId: string) => `${paneId}@in`
 /** The pane a paneGit key belongs to. */
 export const paneOfGitKey = (key: string) => (key.endsWith("@in") ? key.slice(0, -3) : key)
 
-/** One branch/PR poll: per terminal its shell folder, then Claude's folder when it differs
- *  (the `in` lookup). Paired so the 64 cap drops whole terminals. Sidebar collapsed: only
- *  terminals whose Claude moved — the status bar / changes / Files panels need that answer.
- *  `polled` = keys this poll speaks for (an `in` no longer asked for gets cleared). */
+/** One poll's requests: shell folder + Claude's when it moved, paired under the 64 cap. */
 export function planGitPoll(
   sessions: Pick<Session, "id" | "cwd" | "command" | "args">[],
   work: Record<string, WorkDir>,
@@ -130,20 +130,23 @@ export function planGitPoll(
     if (!x.cwd) continue
     const w = work[x.id]?.cwd
     const moved = !!w && !samePath(w, x.cwd)
+    if (!moved) polled.push(inGitKey(x.id)) // Claude left (or never moved): clear its `in`
+    // Sidebar collapsed: only moved terminals (the status bar / panels follow Claude's
+    // checkout) and no PR lookups — nothing on screen shows a PR.
     if ((onlyIn && !moved) || reqs.length + (moved ? 2 : 1) > 64) continue // main answers ≤ 64
     const wsl = wslContext(x.command, x.args)
-    reqs.push({ paneId: x.id, cwd: x.cwd, wsl })
+    const noPr = onlyIn || undefined
+    reqs.push({ paneId: x.id, cwd: x.cwd, wsl, noPr })
     polled.push(x.id)
     if (moved) {
-      reqs.push({ paneId: inGitKey(x.id), cwd: w, wsl })
+      reqs.push({ paneId: inGitKey(x.id), cwd: w, wsl, noPr })
       inCwd[inGitKey(x.id)] = w
-    } else polled.push(inGitKey(x.id))
+    }
   }
   return { reqs, polled, inCwd }
 }
 
-/** Tag each `in` answer with its folder (mutates `res`). A failed lookup (nothing resolved)
- *  keeps the last answer for that folder, so panels following Claude's checkout don't flip. */
+/** Tag `in` answers with their folder; a failed lookup keeps the last one (once, not forever). */
 export function settleInAnswers(
   res: Record<string, PaneGitInfo>,
   inCwd: Record<string, string>,
@@ -151,7 +154,12 @@ export function settleInAnswers(
 ): void {
   for (const [key, cwd] of Object.entries(inCwd)) {
     const r = res[key]
-    if (!r || (!r.root && !r.real && known[key]?.forCwd === cwd)) delete res[key]
+    const prev = known[key]
+    if (!r) delete res[key]
+    // Nothing resolved: a hiccup, or the folder really left git (WSL has no real path) —
+    // keep the last answer for one poll only.
+    else if (!r.root && !r.real && prev?.forCwd === cwd && !prev.kept)
+      res[key] = { ...prev, kept: true }
     else r.forCwd = cwd
   }
 }

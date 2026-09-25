@@ -15,6 +15,7 @@ export interface PaneGitInfo {
   root?: string // the repo's top-level folder (symlinks resolved) — identifies the checkout
   real?: string // the looked-up folder itself, symlinks resolved (host only)
   forCwd?: string // renderer-side: the cwd this answer is for (Claude's `in` folder moves)
+  kept?: boolean // renderer-side: a failed lookup kept this previous answer (only once)
   pr?: PrInfo
   prPending?: boolean // the PR is being fetched — ask again shortly
 }
@@ -24,6 +25,7 @@ export interface PaneGitRequest {
   paneId: string
   cwd: string
   wsl?: { distro?: string }
+  noPr?: boolean // branch/root only — no gh call (nothing on screen shows the PR)
 }
 
 /** A PR state's label + colour token (theme var name) for the sidebar. */
@@ -62,6 +64,7 @@ const sameInfo = (a: PaneGitInfo | undefined, b: PaneGitInfo | undefined): boole
   a?.root === b?.root &&
   a?.real === b?.real &&
   a?.forCwd === b?.forCwd &&
+  a?.kept === b?.kept &&
   a?.pr?.number === b?.pr?.number &&
   a?.pr?.state === b?.pr?.state &&
   a?.pr?.url === b?.pr?.url

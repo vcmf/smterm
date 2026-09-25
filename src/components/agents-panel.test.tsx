@@ -36,6 +36,9 @@ describe("AgentsPanel", () => {
     const moveIn = { event: "CwdChanged", sessionId: "s", paneId: "p", cwd: "/repo/.wt/feat/" }
     act(() => useStore.getState().applyAgentEvents([moveIn]))
     expect(container.textContent).toContain("feat/x · in")
+    const deeper = { ...moveIn, cwd: "/repo/.wt/feat/src" } // a subfolder of that worktree
+    act(() => useStore.getState().applyAgentEvents([deeper]))
+    expect(container.textContent).toContain("feat/x · in")
   })
 
   it("clicking the folder opens a terminal there (agent's pane context)", () => {

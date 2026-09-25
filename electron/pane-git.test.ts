@@ -58,6 +58,16 @@ const PR51 = { number: 51, state: "MERGED", url: "https://x/pull/51", isDraft: f
 const tick = () => new Promise((r) => setTimeout(r, 15))
 
 describe("PaneGitService", () => {
+  it("noPr: branch + root only, no gh call (collapsed sidebar)", async () => {
+    const f = fake({ heads: { "/r": "main\n/r" }, prs: { main: PR51 } })
+    const svc = new PaneGitService(f.run, Date.now, async (p) => p)
+    expect(await svc.lookup([{ paneId: "a", cwd: "/r", noPr: true }])).toEqual({
+      a: { branch: "main", root: "/r", real: "/r" },
+    })
+    await tick()
+    expect(f.gh()).toBe(0)
+  })
+
   it("resolves symlinks for the real path (host only, cached; WSL paths aren't resolvable)", async () => {
     const f = fake({})
     let calls = 0
