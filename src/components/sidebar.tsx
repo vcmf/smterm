@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useShallow } from "zustand/react/shallow"
 import {
   CaretDown,
@@ -13,6 +13,14 @@ import { sessionColor } from "../lib/session-color"
 import { claudePaneIds } from "../lib/agent-graph"
 import { claudeWorkFlat, inGitFor, inGitKey, inLabel, worksElsewhere } from "../lib/agent-dirs"
 import { ClaudeIcon } from "./claude-icon"
+import { ContextMenu } from "./context-menu"
+import {
+  folderMenuItems,
+  isAbsoluteHostPath,
+  revealLabel,
+  type FileActionId,
+} from "../lib/file-actions"
+import { wslContext } from "../lib/wsl"
 import { messageSnippet, prStateUi, type PaneGitInfo, type PrInfo } from "../lib/pane-git"
 import { ipc } from "../lib/ipc"
 import { TerminalManager } from "../terminal/terminal-manager"
@@ -49,6 +57,7 @@ export function Sidebar() {
     }),
   )
   const home = useStore((s) => s.home)
+  const platform = useStore((s) => s.platform)
   // Claude session colours per terminal (same as the pane border + tab icon).
   const agentMeta = useStore((s) => s.agentMeta)
   const scheme = useStore((s) => activeTheme(s).scheme)
@@ -82,6 +91,50 @@ export function Sidebar() {
     store.setActiveTab(tabId)
     store.setActivePane(tabId, sessionId)
     requestAnimationFrame(() => TerminalManager.focus(sessionId))
+  }
+
+  // Right-click on a folder line: copy it, open a terminal there, or reveal it.
+  const [dirMenu, setDirMenu] = useState<{
+    x: number
+    y: number
+    path: string
+    sessionId: string
+    revealHint?: string // why Reveal is unavailable (undefined = available)
+  } | null>(null)
+  const openDirMenu = (e: React.MouseEvent, path: string, sessionId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const s = useStore.getState().sessions[sessionId]
+    const wsl = s ? wslContext(s.command, s.args) : undefined
+    // Reveal needs a path the host OS can open: not a WSL one, nor a POSIX-style path on
+    // Windows (Git Bash's /c/…).
+    const revealHint = wsl
+      ? "WSL path"
+      : !isAbsoluteHostPath(path, platform)
+        ? "not a host path"
+        : undefined
+    setDirMenu({ x: e.clientX, y: e.clientY, path, sessionId, revealHint })
+  }
+  // Closing the menu (Escape, outside click, any action) returns focus to the active terminal
+  // — the one you were typing in, or the split "Open terminal here" just made.
+  const closeDirMenu = useCallback(() => {
+    setDirMenu(null)
+    // …unless something else (a text field) still has focus — leave it there.
+    const el = document.activeElement
+    if (el && el !== document.body) return
+    const s = useStore.getState()
+    const sid = s.tabs.find((t) => t.id === s.activeTabId)?.activeSessionId
+    if (sid) requestAnimationFrame(() => TerminalManager.focus(sid))
+  }, [])
+  const onDirAction = (id: FileActionId) => {
+    if (!dirMenu) return
+    if (id === "copyPath") ipc.clipboardWrite(dirMenu.path)
+    else if (id === "reveal") ipc.revealPath(dirMenu.path)
+    else if (id === "openHere") {
+      // Split beside that terminal, with its shell (a WSL path opens in WSL); the new split
+      // takes focus. A pane closed meanwhile → no-op.
+      useStore.getState().splitPaneAt(dirMenu.sessionId, dirMenu.path)
+    }
   }
 
   const branchFor = (sessionId: string) => paneGit[sessionId]?.branch
@@ -134,7 +187,11 @@ export function Sidebar() {
                     <span className="tree-primary session">{tabTitle(tab, sessions, home)}</span>
                     {focused && <span className="pane-badge">{shellType(focused.command)}</span>}
                   </span>
-                  {groupSub && <span className="tree-sub">{groupSub}</span>}
+                  {groupSub && (
+                    <span className="tree-sub" title={focused?.cwd}>
+                      {groupSub}
+                    </span>
+                  )}
                 </div>
                 <span className="tree-meta status-faint">
                   {paneCount} {paneCount === 1 ? "pane" : "panes"}
@@ -153,7 +210,14 @@ export function Sidebar() {
                       // A surface hidden behind another in its pane reads dimmer.
                       className={`tree-row${isActive ? " active" : ""}${visible.has(id) ? "" : " surface-hidden"}`}
                       style={{ paddingLeft: 32 }}
-                      onMouseDown={() => focusPane(tab.id, id)}
+                      // Left button only: a right-click (folder menu) mustn't switch tabs or
+                      // focus the terminal (Escape closing the menu would reach a running Claude).
+                      // (macOS Ctrl-click is a right-click that reports button 0.)
+                      onMouseDown={(e) =>
+                        e.button === 0 &&
+                        !(e.ctrlKey && platform === "darwin") &&
+                        focusPane(tab.id, id)
+                      }
                     >
                       <span className="tree-icon">
                         {(() => {
@@ -187,6 +251,7 @@ export function Sidebar() {
                           shellGit={paneGit[id]}
                           inGit={paneGit[inGitKey(id)]}
                           work={work[id]}
+                          onMenu={(e, path) => openDirMenu(e, path, id)}
                         />
                       </div>
                       {s.status !== "attention" && (
@@ -203,6 +268,15 @@ export function Sidebar() {
         })}
       </div>
 
+      {dirMenu && (
+        <ContextMenu
+          x={dirMenu.x}
+          y={dirMenu.y}
+          items={folderMenuItems(revealLabel(platform), dirMenu.revealHint)}
+          onSelect={onDirAction}
+          onClose={closeDirMenu}
+        />
+      )}
       <div className="legend">
         <span className="legend-item">
           <span className="dot accent" /> running
@@ -226,13 +300,17 @@ function DirLines({
   shellGit,
   inGit,
   work,
+  onMenu,
 }: {
   shellCwd: string | undefined
   home: string
   shellGit: PaneGitInfo | undefined
   inGit: PaneGitInfo | undefined
   work: { cwd: string; others: string } | undefined
+  onMenu: (e: React.MouseEvent, path: string) => void
 }) {
+  const menuFor = (path: string | undefined) =>
+    path ? (e: React.MouseEvent) => onMenu(e, path) : undefined
   const extra = work?.others ? work.others.split("\n").length : 0
   const more = extra > 0 && (
     <span className="tree-more" title={`Other worktrees of this session:\n${work!.others}`}>
@@ -242,7 +320,7 @@ function DirLines({
   if (!shellCwd || !work || !worksElsewhere(shellCwd, work.cwd, shellGit, inGit)) {
     return (
       <>
-        <span className="tree-sub tree-dir">
+        <span className="tree-sub tree-dir" title={shellCwd} onContextMenu={menuFor(shellCwd)}>
           <span className="tree-dir-path">
             {sessionSubline(shellCwd, home, shellGit?.branch) || "shell"}
           </span>
@@ -257,13 +335,18 @@ function DirLines({
     <>
       <span
         className="tree-sub tree-dir"
-        title="Claude started here. The session is saved under this folder."
+        title={`Claude started here (the session is saved under it):\n${shellCwd}`}
+        onContextMenu={menuFor(shellCwd)}
       >
         <span className="tree-dir-label">from</span>
         <span className="tree-dir-path">{sessionSubline(shellCwd, home, shellGit?.branch)}</span>
       </span>
       {shellGit?.pr && <PrLine pr={shellGit.pr} />}
-      <span className="tree-sub tree-dir" title={`Claude is working here now: ${work.cwd}`}>
+      <span
+        className="tree-sub tree-dir"
+        title={`Claude is working here now:\n${work.cwd}`}
+        onContextMenu={menuFor(work.cwd)}
+      >
         <span className="tree-dir-label">in</span>
         <span className="tree-dir-path">
           {branchLine(

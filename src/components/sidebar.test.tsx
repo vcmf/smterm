@@ -180,3 +180,91 @@ describe("Sidebar — from / in folders", () => {
     expect(st().paneGit[`${id}@in`]).toBeUndefined()
   })
 })
+
+describe("Sidebar — folder lines: full path + right-click menu", () => {
+  const setup = () => {
+    st().newTab(testShell)
+    const id = st().tabs[0]!.activeSessionId
+    st().setSessionCwd(id, "/Users/test/work/term")
+    return id
+  }
+
+  it("every folder line shows its full path on hover (one line, and from / in)", () => {
+    const id = setup()
+    const { unmount, container } = render(<Sidebar />)
+    const line = container.querySelector(".tree-dir")!
+    expect(line).toHaveAttribute("title", "/Users/test/work/term")
+    unmount()
+    st().applyAgentEvents([{ event: "SessionStart", sessionId: "c", paneId: id, cwd: "/w/api" }])
+    st().setPaneGit({ [`${id}@in`]: { real: "/w/api", forCwd: "/w/api" } }, [])
+    render(<Sidebar />)
+    expect(screen.getByText("from").parentElement).toHaveAttribute(
+      "title",
+      expect.stringContaining("/Users/test/work/term"),
+    )
+    expect(screen.getByText("in").parentElement).toHaveAttribute(
+      "title",
+      expect.stringContaining("/w/api"),
+    )
+  })
+
+  it("right-click: copy the path, or open a terminal there beside that pane", async () => {
+    const { ipc } = await import("../lib/ipc")
+    const id = setup()
+    const { container } = render(<Sidebar />)
+    const line = () => container.querySelector(".tree-dir")!
+    fireEvent.contextMenu(line())
+    fireEvent.mouseDown(screen.getByText("Copy path"))
+    expect(ipc.clipboardWrite).toHaveBeenCalledWith("/Users/test/work/term")
+    fireEvent.contextMenu(line())
+    fireEvent.mouseDown(screen.getByText("Open terminal here"))
+    const tab = st().tabs[0]!
+    expect(allSessionIds(tab.root)).toHaveLength(2) // split beside that pane…
+    expect(tab.activeSessionId).not.toBe(id) // …and the new one is focused
+    expect(st().sessions[tab.activeSessionId]?.cwd).toBe("/Users/test/work/term")
+  })
+
+  it("a right-click doesn't switch to / focus that pane (Escape would reach its Claude)", () => {
+    const id = setup()
+    st().newTab(testShell) // a second tab is now active
+    const other = st().activeTabId
+    useStore.setState({ platform: "darwin" }) // Ctrl-click = right-click there
+    const { container } = render(<Sidebar />)
+    const line = [...container.querySelectorAll(".tree-dir")].find((el) =>
+      el.getAttribute("title")?.includes("/Users/test/work/term"),
+    )!
+    fireEvent.mouseDown(line, { button: 2 })
+    fireEvent.mouseDown(line, { button: 0, ctrlKey: true }) // macOS Ctrl-click = right-click
+    fireEvent.contextMenu(line)
+    expect(st().activeTabId).toBe(other)
+    fireEvent.mouseDown(line, { button: 0 }) // a plain left click still focuses it
+    expect(st().activeTabId).not.toBe(other)
+    void id
+  })
+
+  it("Open terminal here keeps the source pane's attention (you never looked at it)", () => {
+    const id = setup()
+    useStore.setState((x) => ({
+      sessions: {
+        ...x.sessions,
+        [id]: { ...x.sessions[id]!, status: "attention", detail: "permission" },
+      },
+    }))
+    const before = st().sessions[id]?.status
+    expect(before).toBe("attention")
+    const { container } = render(<Sidebar />)
+    fireEvent.contextMenu(container.querySelector(".tree-dir")!)
+    fireEvent.mouseDown(screen.getByText("Open terminal here"))
+    expect(st().sessions[id]?.status).toBe(before)
+  })
+
+  it("Reveal is unavailable for a WSL pane's path", () => {
+    st().newTab({ id: "wsl", label: "Ubuntu", command: "wsl.exe", args: ["-d", "Ubuntu"] })
+    const id = st().tabs[0]!.activeSessionId
+    st().setSessionCwd(id, "/home/u/repo")
+    const { container } = render(<Sidebar />)
+    fireEvent.contextMenu(container.querySelector(".tree-dir")!)
+    expect(screen.getByText("WSL path")).toBeInTheDocument()
+    expect(screen.getByText(/Reveal in|Show in/).closest("button")).toBeDisabled()
+  })
+})

@@ -25,9 +25,16 @@ export function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
   }, [x, y])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    // Capture phase + swallow: Escape closes the menu and never reaches a focused terminal
+    // (it would send ESC to the PTY — interrupting a running Claude).
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    }
+    window.addEventListener("keydown", onKey, true)
+    return () => window.removeEventListener("keydown", onKey, true)
   }, [onClose])
 
   return (

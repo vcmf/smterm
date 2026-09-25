@@ -40,7 +40,7 @@ export function useFileMenu(): {
     // The actions run on the host fs (reveal/open/copy), so skip when we don't have a
     // resolvable host path: a repo-relative path (empty git root) or a WSL pane whose
     // paths the Windows/macOS host can't reach.
-    if (getActiveWsl() || !isAbsoluteHostPath(target.abs)) return
+    if (getActiveWsl() || !isAbsoluteHostPath(target.abs, platform)) return
     setMenu({ ...target, x: e.clientX, y: e.clientY })
     // Re-probe on open so an editor installed mid-session (without a settings change)
     // is reflected in the label/enabled state; main memoises so this stays cheap.

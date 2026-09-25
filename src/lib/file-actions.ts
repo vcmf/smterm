@@ -13,8 +13,9 @@ export interface EditorInfo {
 // A path we can safely hand to the OS on the host: POSIX-absolute (/…) or a Windows
 // drive path (C:\… / C:/…). Guards the file menu against repo-relative paths (empty
 // git root) and WSL paths that the Windows/macOS host can't resolve.
-export function isAbsoluteHostPath(p: string): boolean {
-  return /^\//.test(p) || /^[A-Za-z]:[\\/]/.test(p) || /^\\\\/.test(p)
+export function isAbsoluteHostPath(p: string, platform?: string): boolean {
+  if (/^[A-Za-z]:[\\/]/.test(p) || /^\\\\/.test(p)) return true
+  return /^\//.test(p) && platform !== "win32" // on Windows a /… path is Git Bash's, not the host's
 }
 
 // Platform-appropriate label for the reveal-in-file-manager action.
@@ -24,7 +25,8 @@ export function revealLabel(platform: string): string {
   return "Show in File Manager"
 }
 
-export type FileActionId = "preview" | "open" | "setRoot" | "reveal" | "copyPath" | "copyRel"
+export type FileActionId =
+  "preview" | "open" | "setRoot" | "reveal" | "copyPath" | "copyRel" | "openHere"
 
 export interface MenuItemSpec {
   id: FileActionId
@@ -60,6 +62,21 @@ export function fileMenuItems(input: FileMenuInput): MenuItemSpec[] {
   items.push({ id: "copyPath", label: "Copy path", separatorBefore: true })
   items.push({ id: "copyRel", label: "Copy relative path" })
   return items
+}
+
+/** The sidebar's folder-line menu; `revealHint` = why Reveal is unavailable (e.g. a WSL path). */
+export function folderMenuItems(revealLabel: string, revealHint?: string): MenuItemSpec[] {
+  return [
+    { id: "copyPath", label: "Copy path" },
+    { id: "openHere", label: "Open terminal here" },
+    {
+      id: "reveal",
+      label: revealLabel,
+      disabled: !!revealHint,
+      hint: revealHint,
+      separatorBefore: true,
+    },
+  ]
 }
 
 /** Clamp a menu's top-left so it stays fully inside the viewport (flip/nudge in). */

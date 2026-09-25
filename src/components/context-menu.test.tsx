@@ -40,3 +40,19 @@ describe("ContextMenu", () => {
     expect(onClose).toHaveBeenCalled()
   })
 })
+
+describe("ContextMenu — Escape", () => {
+  it("closes on Escape and swallows it before a focused terminal sees it", () => {
+    const onClose = vi.fn()
+    const seen = vi.fn()
+    const input = document.createElement("textarea") // stands in for xterm's focused textarea
+    document.body.appendChild(input)
+    input.addEventListener("keydown", seen)
+    input.focus()
+    render(<ContextMenu x={0} y={0} items={[]} onSelect={() => {}} onClose={onClose} />)
+    fireEvent.keyDown(input, { key: "Escape" })
+    expect(onClose).toHaveBeenCalled()
+    expect(seen).not.toHaveBeenCalled()
+    input.remove()
+  })
+})
