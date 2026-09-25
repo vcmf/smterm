@@ -45,7 +45,11 @@ export function tabTitle(tab: Tab, sessions: Record<string, Session>, home: stri
 
 /** "branch • ~/dir" (branch optional) for a session's subline. */
 export function sessionSubline(cwd: string | undefined, home: string, branch?: string): string {
-  const dir = shortCwd(cwd, home)
+  return branchLine(branch, shortCwd(cwd, home))
+}
+
+/** "branch • dir" (either part may be missing). */
+export function branchLine(branch: string | undefined, dir: string): string {
   if (branch && dir) return `${branch} • ${dir}`
   return branch || dir
 }

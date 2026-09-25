@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest"
 import { reduceAgentEvents, type AgentEvent } from "./agent-graph"
-import { claudeWorkDirs, inLabel, workCwd, samePath, inGitKey, paneOfGitKey } from "./agent-dirs"
+import {
+  claudeWorkDirs,
+  claudeWorkFlat,
+  inLabel,
+  workCwd,
+  worksElsewhere,
+  samePath,
+  inGitKey,
+  paneOfGitKey,
+} from "./agent-dirs"
 
 const graph = (events: AgentEvent[]) => reduceAgentEvents(events)
 
@@ -35,26 +44,64 @@ describe("claudeWorkDirs", () => {
     expect(claudeWorkDirs(g)).toBe(claudeWorkDirs(g))
   })
 
-  it("workCwd: Claude's folder while it runs, else the shell's", () => {
+  it("workCwd: Claude's folder while it works in another checkout, else the shell's", () => {
     const g = graph([{ event: "SessionStart", sessionId: "s", paneId: "p", cwd: "/r/wt" }])
-    expect(workCwd(g, "p", "/r")).toBe("/r/wt")
-    expect(workCwd(g, "other", "/x")).toBe("/x")
+    const git = { p: { root: "/r" }, "p@in": { root: "/r/wt" } }
+    expect(workCwd(g, git, "p", "/r")).toBe("/r/wt")
+    expect(workCwd(g, { p: { root: "/r" }, "p@in": { root: "/r" } }, "p", "/r")).toBe("/r")
+    expect(workCwd(g, {}, "other", "/x")).toBe("/x")
+  })
+
+  it("the newest-started session of a pane wins, even one resumed from another pane", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
+      { event: "SessionStart", sessionId: "b", paneId: "q", cwd: "/b" },
+      { event: "SessionStart", sessionId: "a", paneId: "q", cwd: "/a2" }, // resumed in q
+    ])
+    expect(claudeWorkDirs(g).q?.cwd).toBe("/a2")
+    expect(claudeWorkFlat(g)).toBe(claudeWorkFlat(g))
+    expect(claudeWorkFlat(g)).toEqual(["q", "/a2", ""])
+  })
+})
+
+describe("worksElsewhere", () => {
+  it("by repo root when both are known: symlinks and a `cd src` are the same checkout", () => {
+    expect(
+      worksElsewhere(
+        "/tmp/p",
+        "/private/tmp/p",
+        { root: "/private/tmp/p" },
+        { root: "/private/tmp/p" },
+      ),
+    ).toBe(false)
+    expect(worksElsewhere("/r", "/r/src", { root: "/r" }, { root: "/r" })).toBe(false)
+    expect(
+      worksElsewhere(
+        "/r",
+        "/r/.claude/worktrees/a",
+        { root: "/r" },
+        { root: "/r/.claude/worktrees/a" },
+      ),
+    ).toBe(true)
+  })
+  it("otherwise by path: a subfolder is the same place, another folder isn't", () => {
+    expect(worksElsewhere("/r", "/r/src", undefined, undefined)).toBe(false)
+    expect(worksElsewhere("/r", "/api", undefined, undefined)).toBe(true)
+    expect(worksElsewhere("/r", "/r/", { root: "/r" }, undefined)).toBe(false)
+    expect(worksElsewhere(undefined, "/r", undefined, undefined)).toBe(false)
   })
 })
 
 describe("inLabel", () => {
   const home = "/Users/me"
-  it("one line (undefined) when Claude works where it started, or a side is unknown", () => {
-    expect(inLabel("/r", "/r/", home)).toBeUndefined()
-    expect(inLabel(undefined, "/r", home)).toBeUndefined()
-    expect(inLabel("/r", undefined, home)).toBeUndefined()
-  })
   it("relative inside `from`; ~-shortened elsewhere (another repo)", () => {
     expect(inLabel("/Users/me/term", "/Users/me/term/.claude/worktrees/x", home)).toBe(
       ".claude/worktrees/x",
     )
     expect(inLabel("/Users/me/term", "/Users/me/term-api", home)).toBe("~/term-api") // not a child
     expect(inLabel("C:\\r", "C:\\r\\wt", home)).toBe("wt")
+    // shell on the logical /tmp path, Claude on the physical one: relative to the repo root
+    expect(inLabel("/tmp/r", "/private/tmp/r/wt/a", home, "/private/tmp/r")).toBe("wt/a")
   })
 })
 

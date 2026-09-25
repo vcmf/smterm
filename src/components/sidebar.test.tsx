@@ -115,6 +115,16 @@ describe("Sidebar — from / in folders", () => {
     return id
   }
 
+  it("one folder line for a `cd` inside the same checkout (same repo root)", () => {
+    const id = setup()
+    st().applyAgentEvents([
+      { event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/term/src" },
+    ])
+    st().setPaneGit({ [id]: { root: "/w/term" }, [`${id}@in`]: { root: "/w/term" } }, [])
+    render(<Sidebar />)
+    expect(screen.queryByText("from")).toBeNull()
+  })
+
   it("one folder line while Claude works where it started", () => {
     const id = setup()
     st().applyAgentEvents([{ event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/term" }])
@@ -123,7 +133,7 @@ describe("Sidebar — from / in folders", () => {
     expect(screen.queryByText("in")).toBeNull()
   })
 
-  it("from + in once Claude moves into a worktree; the PR follows `in`; +N other worktrees", () => {
+  it("from + in once Claude moves into another checkout (a worktree); each keeps its PR; +N", () => {
     const id = setup()
     st().applyAgentEvents([
       { event: "SessionStart", sessionId: "c1", paneId: id, cwd: "/w/term" },
@@ -132,8 +142,16 @@ describe("Sidebar — from / in folders", () => {
     ])
     st().setPaneGit(
       {
-        [id]: { branch: "main", pr: { number: 1, state: "merged", url: "https://x/1" } },
-        [`${id}@in`]: { branch: "feat/a", pr: { number: 57, state: "open", url: "https://x/57" } },
+        [id]: {
+          branch: "main",
+          root: "/w/term",
+          pr: { number: 1, state: "merged", url: "https://x/1" },
+        },
+        [`${id}@in`]: {
+          branch: "feat/a",
+          root: "/w/term/.claude/worktrees/a",
+          pr: { number: 57, state: "open", url: "https://x/57" },
+        },
       },
       [id, `${id}@in`],
     )
@@ -142,7 +160,7 @@ describe("Sidebar — from / in folders", () => {
     expect(screen.getByText("in")).toBeInTheDocument()
     expect(screen.getByText(/feat\/a • \.claude\/worktrees\/a/)).toBeInTheDocument()
     expect(screen.getByText("PR #57")).toBeInTheDocument()
-    expect(screen.queryByText("PR #1")).toBeNull()
+    expect(screen.getByText("PR #1")).toBeInTheDocument() // the session's own branch PR stays
     expect(screen.getByText("+1")).toHaveAttribute("title", expect.stringContaining("/w/term/wt/b"))
   })
 

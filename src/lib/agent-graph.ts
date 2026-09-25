@@ -142,6 +142,9 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
     case "SessionStart":
       // The same session can start again in another pane (`claude --resume` after a crash).
       set(rid, { status: "idle", cwd: ev.cwd ?? at(rid).cwd, paneId: ev.paneId ?? at(rid).paneId })
+      // …and is now that pane's newest session: keep rootIds in last-started order.
+      if (rootIds[rootIds.length - 1] !== rid)
+        rootIds = [...rootIds.filter((id) => id !== rid), rid]
       break
     case "UserPromptSubmit": {
       // New turn: drop the previous turn's FINISHED sub-agents (they're per-turn), so

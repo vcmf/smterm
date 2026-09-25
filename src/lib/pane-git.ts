@@ -12,6 +12,7 @@ export interface PrInfo {
 /** What the sidebar knows about a terminal's repo: its branch and that branch's PR (if any). */
 export interface PaneGitInfo {
   branch?: string
+  root?: string // the repo's top-level folder (symlinks resolved) — identifies the checkout
   pr?: PrInfo
   prPending?: boolean // the PR is being fetched — ask again shortly
 }
@@ -56,6 +57,7 @@ export function messageSnippet(message: string | undefined): string {
 
 const sameInfo = (a: PaneGitInfo | undefined, b: PaneGitInfo | undefined): boolean =>
   a?.branch === b?.branch &&
+  a?.root === b?.root &&
   a?.pr?.number === b?.pr?.number &&
   a?.pr?.state === b?.pr?.state &&
   a?.pr?.url === b?.pr?.url

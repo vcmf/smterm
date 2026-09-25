@@ -2,6 +2,7 @@
 // where Claude saves the session; Claude's own cwd (`in`) moves with worktrees and `cd`s.
 // Pure — the sidebar, the branch/PR poll and the changes panel share these rules.
 import type { AgentGraph, Worktree } from "./agent-graph"
+import type { PaneGitInfo } from "./pane-git"
 import { shortCwd } from "./session-label"
 
 /** A live Claude session's working folder + the session's other worktrees. */
@@ -27,29 +28,65 @@ export function claudeWorkDirs(graph: AgentGraph): Record<string, WorkDir> {
     if (!n?.paneId || !n.cwd) continue
     const cwd = n.cwd
     const others = (n.worktrees ?? []).filter((w) => !samePath(w.path, cwd))
-    out[n.paneId] = { cwd, others } // later roots win: rootIds is in start order
+    out[n.paneId] = { cwd, others } // later roots win: SessionStart moves a root to the end
   }
   memo.set(graph, out)
   return out
 }
 
-/** The folder a pane works in: Claude's while it runs there, else the shell's. */
-export function workCwd(graph: AgentGraph, paneId: string, shellCwd?: string): string | undefined {
-  return claudeWorkDirs(graph)[paneId]?.cwd ?? shellCwd
+const flatMemo = new WeakMap<AgentGraph, string[]>()
+
+/** claudeWorkDirs as [paneId, cwd, other worktree paths "\n"-joined, …] — primitives for a
+ *  shallow-compared selector; memoized per graph. */
+export function claudeWorkFlat(graph: AgentGraph): string[] {
+  const hit = flatMemo.get(graph)
+  if (hit) return hit
+  const out = Object.entries(claudeWorkDirs(graph)).flatMap(([id, d]) => [
+    id,
+    d.cwd,
+    d.others.map((w) => w.path).join("\n"),
+  ])
+  flatMemo.set(graph, out)
+  return out
 }
 
-/** The `in` line's path, or undefined when Claude works in the shell's own folder (one line).
- *  Relative to `from` when inside it (`.claude/worktrees/x`), else `~`-shortened. */
-export function inLabel(
+/** Is Claude working in another checkout than the shell's? Compared by repo root (symlinks
+ *  resolved, and a plain `cd src` stays the same repo); outside git, by path — a subfolder of
+ *  the shell's folder counts as the same place. Until `in` is looked up: path rule. */
+export function worksElsewhere(
   shellCwd: string | undefined,
   work: string | undefined,
-  home: string,
-): string | undefined {
-  if (!shellCwd || !work || samePath(shellCwd, work)) return undefined
+  shellGit: PaneGitInfo | undefined,
+  inGit: PaneGitInfo | undefined,
+): boolean {
+  if (!shellCwd || !work || samePath(shellCwd, work)) return false
+  if (shellGit?.root && inGit?.root) return !samePath(shellGit.root, inGit.root)
   const from = trim(shellCwd)
+  return !trim(work).startsWith(from + (from.includes("\\") ? "\\" : "/"))
+}
+
+/** The folder a pane works in: Claude's while it works in another checkout, else the shell's. */
+export function workCwd(
+  graph: AgentGraph,
+  paneGit: Record<string, PaneGitInfo>,
+  paneId: string,
+  shellCwd?: string,
+): string | undefined {
+  const work = claudeWorkDirs(graph)[paneId]?.cwd
+  return worksElsewhere(shellCwd, work, paneGit[paneId], paneGit[inGitKey(paneId)])
+    ? work
+    : shellCwd
+}
+
+/** The `in` line's path: relative to `from` (or its repo root — symlinks resolved) when inside
+ *  it (`.claude/worktrees/x`), else `~`-shortened. */
+export function inLabel(shellCwd: string, work: string, home: string, fromRoot?: string): string {
   const to = trim(work)
-  const sep = from.includes("\\") ? "\\" : "/"
-  if (to.startsWith(from + sep)) return to.slice(from.length + 1)
+  for (const base of fromRoot ? [shellCwd, fromRoot] : [shellCwd]) {
+    const from = trim(base)
+    const sep = from.includes("\\") ? "\\" : "/"
+    if (to.startsWith(from + sep)) return to.slice(from.length + 1)
+  }
   return shortCwd(to, home)
 }
 

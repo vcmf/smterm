@@ -65,10 +65,16 @@ describe("PaneGitService", () => {
       { paneId: "a", cwd: "/repo" },
       { paneId: "b", cwd: "/tmp" }, // not a repo → omitted
     ]
-    expect(await svc.lookup(req)).toEqual({ a: { branch: "feat/x", prPending: true } })
+    expect(await svc.lookup(req)).toEqual({
+      a: { branch: "feat/x", root: "/repo", prPending: true },
+    })
     await tick()
     expect(await svc.lookup(req)).toEqual({
-      a: { branch: "feat/x", pr: { number: 51, state: "merged", url: "https://x/pull/51" } },
+      a: {
+        branch: "feat/x",
+        root: "/repo",
+        pr: { number: 51, state: "merged", url: "https://x/pull/51" },
+      },
     })
   })
 
@@ -96,7 +102,7 @@ describe("PaneGitService", () => {
     ]
     await svc.lookup(req)
     await tick()
-    expect(await svc.lookup(req)).toEqual({ a: { branch: "main" }, b: {} })
+    expect(await svc.lookup(req)).toEqual({ a: { branch: "main", root: "/r" }, b: { root: "/d" } })
     expect(f.gh()).toBe(1) // only for "main"
   })
 

@@ -96,6 +96,7 @@ export class PaneGitService {
         const head = await this.head(r)
         if (!head) return
         const info: PaneGitInfo = head.branch ? { branch: head.branch } : {}
+        info.root = head.root
         if (head.branch) {
           const hit = this.prs.get(this.prKey(r, head.root, head.branch))
           if (hit?.value) info.pr = hit.value // (a stale value beats a blank while refreshing)

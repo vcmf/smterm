@@ -17,7 +17,7 @@ export function useActiveWorkCwd(): string | undefined {
   return useStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId)
     const sid = tab?.activeSessionId
-    return sid ? workCwd(s.agents, sid, s.sessions[sid]?.cwd) : undefined
+    return sid ? workCwd(s.agents, s.paneGit, sid, s.sessions[sid]?.cwd) : undefined
   })
 }
 
@@ -35,7 +35,8 @@ export function useFilesRoot(): {
   sessionId: string | undefined
   diverged: boolean
 } {
-  const cwd = useActiveCwd()
+  // Claude's checkout while it works in another one — the same repo the git badges come from.
+  const cwd = useActiveWorkCwd()
   const sessionId = useActiveSessionId()
   const override = useStore((s) => (sessionId ? s.paneRoot[sessionId] : undefined))
   return { root: override ?? cwd, cwd, sessionId, diverged: !!override && override !== cwd }

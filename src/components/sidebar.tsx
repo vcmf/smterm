@@ -11,7 +11,7 @@ import {
 import { activeTheme, useStore } from "../store"
 import { sessionColor } from "../lib/session-color"
 import { claudePaneIds } from "../lib/agent-graph"
-import { claudeWorkDirs, inGitKey, inLabel } from "../lib/agent-dirs"
+import { claudeWorkFlat, inGitKey, inLabel, worksElsewhere } from "../lib/agent-dirs"
 import { ClaudeIcon } from "./claude-icon"
 import { messageSnippet, prStateUi, type PaneGitInfo, type PrInfo } from "../lib/pane-git"
 import { ipc } from "../lib/ipc"
@@ -19,7 +19,13 @@ import { TerminalManager } from "../terminal/terminal-manager"
 import { allPanes } from "../lib/pane-tree"
 import { resolveDefaultShell } from "../lib/shells"
 import { statusUi } from "../lib/status-ui"
-import { tabTitle, sessionSubline, displaySessionTitle, shellType } from "../lib/session-label"
+import {
+  tabTitle,
+  sessionSubline,
+  branchLine,
+  displaySessionTitle,
+  shellType,
+} from "../lib/session-label"
 
 /** Left sidebar: a tree of real sessions (tabs) → panes, with live status dots. */
 export function Sidebar() {
@@ -49,17 +55,9 @@ export function Sidebar() {
   const accentOf = (id: string) => sessionColor(agentMeta[id], scheme)
   // Terminals running Claude (shallow-compared list: re-render only when the set changes).
   const claudePanes = useStore(useShallow((s) => claudePaneIds(s.agents)))
-  // Where each pane's Claude works, flattened to [paneId, cwd, other-worktrees, …] strings so
-  // the shallow compare re-renders only when a folder changes, not on every hook event.
-  const workFlat = useStore(
-    useShallow((s) =>
-      Object.entries(claudeWorkDirs(s.agents)).flatMap(([id, d]) => [
-        id,
-        d.cwd,
-        d.others.map((w) => (w.branch ? `${w.branch} • ${w.path}` : w.path)).join("\n"),
-      ]),
-    ),
-  )
+  // Where each pane's Claude works, as memoized primitives: the shallow compare re-renders
+  // only when a folder changes, not on every hook event.
+  const workFlat = useStore(useShallow((s) => claudeWorkFlat(s.agents)))
   const work: Record<string, { cwd: string; others: string }> = {}
   for (let i = 0; i + 2 < workFlat.length; i += 3)
     work[workFlat[i]!] = { cwd: workFlat[i + 1]!, others: workFlat[i + 2]! }
@@ -235,14 +233,13 @@ function DirLines({
   inGit: PaneGitInfo | undefined
   work: { cwd: string; others: string } | undefined
 }) {
-  const inPath = inLabel(shellCwd, work?.cwd, home)
   const extra = work?.others ? work.others.split("\n").length : 0
   const more = extra > 0 && (
     <span className="tree-more" title={`Other worktrees of this session:\n${work!.others}`}>
       +{extra}
     </span>
   )
-  if (inPath === undefined) {
+  if (!shellCwd || !work || !worksElsewhere(shellCwd, work.cwd, shellGit, inGit)) {
     return (
       <>
         <span className="tree-sub tree-dir">
@@ -255,6 +252,7 @@ function DirLines({
       </>
     )
   }
+  // Each line keeps its own PR: the session belongs to `from`'s branch, the work to `in`'s.
   return (
     <>
       <span
@@ -264,14 +262,14 @@ function DirLines({
         <span className="tree-dir-label">from</span>
         <span className="tree-dir-path">{sessionSubline(shellCwd, home, shellGit?.branch)}</span>
       </span>
-      <span className="tree-sub tree-dir" title={`Claude is working here now: ${work!.cwd}`}>
+      {shellGit?.pr && <PrLine pr={shellGit.pr} />}
+      <span className="tree-sub tree-dir" title={`Claude is working here now: ${work.cwd}`}>
         <span className="tree-dir-label">in</span>
         <span className="tree-dir-path">
-          {inGit?.branch ? `${inGit.branch} • ${inPath}` : inPath}
+          {branchLine(inGit?.branch, inLabel(shellCwd, work.cwd, home, shellGit?.root))}
         </span>
         {more}
       </span>
-      {/* The PR follows where the work happens. */}
       {inGit?.pr && <PrLine pr={inGit.pr} />}
     </>
   )
