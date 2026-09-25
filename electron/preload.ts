@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron"
 import type { AgentEvent } from "../src/lib/agent-graph"
+import type { SessionMeta } from "../src/lib/session-color"
 import type { WslContext } from "../src/lib/wsl"
 
 const api = {
@@ -42,6 +43,14 @@ const api = {
     ipcRenderer.on("agents:events", listener)
     return () => ipcRenderer.removeListener("agents:events", listener)
   },
+  // Per-pane Claude /color + /rename (pane accent); snapshot = all current, for a reload.
+  onAgentMeta: (cb: (paneId: string, meta: SessionMeta | null) => void) => {
+    const listener = (_e: unknown, paneId: string, meta: SessionMeta | null) => cb(paneId, meta)
+    ipcRenderer.on("agents:meta", listener)
+    return () => ipcRenderer.removeListener("agents:meta", listener)
+  },
+  agentMetaSnapshot: () =>
+    ipcRenderer.invoke("agents:meta-snapshot") as Promise<[string, SessionMeta][]>,
 
   openExternal: (url: string) => ipcRenderer.send("open-external", url),
   appVersion: () => ipcRenderer.invoke("app:version") as Promise<string>,

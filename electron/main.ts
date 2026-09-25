@@ -44,6 +44,7 @@ import { wslUncCandidates, winToMnt, uncToWslPath } from "./wsl-paths"
 import { colorfgbg } from "./color"
 import { TranscriptTokens } from "./transcript-tokens"
 import { tokenEventsForBatch } from "./agent-tokens"
+import { AgentMetaTracker } from "./agent-meta"
 import type { WslContext } from "../src/lib/wsl"
 import {
   classifyPreview,
@@ -83,6 +84,10 @@ let hookSettingsPathWsl: string | null = null
 let hookWatcher: { close: () => Promise<void> } | null = null
 // Accumulates per-transcript token totals across hook batches (session + sub-agent).
 const agentTokens = new TranscriptTokens()
+// Per-pane Claude `/color` + `/rename` (pane accent), read from each session's transcript.
+const agentMeta = new AgentMetaTracker((paneId, meta) =>
+  mainWindow?.webContents.send("agents:meta", paneId, meta),
+)
 let quitConfirmed = false
 
 // PTY output batching (see electron/coalescer.ts + docs/PERF.md).
@@ -207,6 +212,18 @@ async function startAgentObservability(): Promise<void> {
         // resulting token totals as a follow-up batch. The read is off the terminal hot
         // path and incremental, so it never delays the events above or the agent's loop.
         mainWindow?.webContents.send("agents:events", events)
+        // Session-level events locate each Claude pane's transcript → track its /color and
+        // /rename for the pane accent (async + debounced; SessionEnd stops it).
+        for (const ev of events) {
+          if (!ev.paneId || !ev.transcriptPath || ev.agentId) continue
+          if (ev.event === "SessionEnd") agentMeta.untrack(ev.paneId, true, ev.transcriptPath)
+          else
+            agentMeta.track(
+              ev.paneId,
+              ev.transcriptPath,
+              transcriptTargets(ev.transcriptPath, ev.paneId),
+            )
+        }
         void tokenEventsForBatch(agentTokens, events, transcriptTargets).then((tokenEvents) => {
           if (tokenEvents.length) mainWindow?.webContents.send("agents:events", tokenEvents)
         })
@@ -373,6 +390,7 @@ function registerIpc() {
         diag("pty-exit", { id: opts.id, code: e.exitCode, signal: e.signal ?? 0 })
         rec.coalescer?.flush() // don't lose the final output
         sessions.delete(opts.id)
+        agentMeta.untrack(opts.id) // shell (and any claude in it) gone — drop the accent
       })
       sessions.set(opts.id, rec)
       diag("pty-spawn", { id: opts.id, pid: proc.pid, shell: path.basename(shellCmd) })
@@ -389,6 +407,7 @@ function registerIpc() {
   })
   // Explicit kill (pane/tab closed) — really terminate + free the replay buffer.
   ipcMain.on("pty:kill", (_e, id: string) => {
+    agentMeta.untrack(id, false) // the pane is gone — nothing left to accent
     const rec = sessions.get(id)
     if (!rec) return
     rec.coalescer?.dispose()
@@ -420,6 +439,8 @@ function registerIpc() {
       // best-effort — the next launch just opens with the default bg
     }
   })
+  // A (re)loaded renderer starts with no accents: hand it every tracked pane's current meta.
+  ipcMain.handle("agents:meta-snapshot", async () => agentMeta.snapshot())
   ipcMain.handle("window:is-maximized", async () => mainWindow?.isMaximized() ?? false)
 
   // Git — working-tree status + per-file diff for the changes panel.
@@ -786,6 +807,7 @@ app.on("window-all-closed", () => {
 
 app.on("will-quit", () => {
   diag("will-quit", { ptys: sessions.size })
+  agentMeta.dispose() // close transcript watchers
   void hookWatcher?.close() // stop the file-drop watcher
 })
 app.on("quit", () => diag("quit"))

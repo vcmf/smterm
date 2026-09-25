@@ -589,6 +589,14 @@ body {
 .terminal-pane.waiting {
   box-shadow: inset 0 2px 0 var(--amber);
 }
+/* Claude session colour (/color or from /rename): a static top border, set per pane via
+   --pane-accent — faded on unfocused panes of a split so focus still reads. */
+.terminal-pane.tinted {
+  box-shadow: inset 0 2px 0 var(--pane-accent);
+}
+.terminal-pane.tinted.dimmed {
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--pane-accent) 45%, transparent);
+}
 .pane-header {
   height: 32px;
   flex: 0 0 auto;

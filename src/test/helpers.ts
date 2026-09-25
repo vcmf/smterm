@@ -24,5 +24,6 @@ export function resetStore() {
     paneRoot: {},
     closePaneConfirm: null,
     dragging: null,
+    agentMeta: {},
   })
 }

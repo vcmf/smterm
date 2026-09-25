@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import { useShallow } from "zustand/react/shallow"
 import { Terminal, TerminalWindow, X, Columns, Rows } from "@phosphor-icons/react"
 import { TerminalManager } from "../terminal/terminal-manager"
-import { useStore } from "../store"
+import { activeTheme, useStore } from "../store"
+import { sessionColor } from "../lib/session-color"
 import { canMove, findPaneById, type MoveTarget } from "../lib/pane-tree"
 import { dropZone, insertIndex } from "../lib/drop-zone"
 import { displaySessionTitle, shellType } from "../lib/session-label"
@@ -19,6 +20,10 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
   const [menu, setMenu] = useState<{ x: number; y: number; hasSel: boolean } | null>(null)
   const activeId = pane.activeSessionId
   const surfaces = useStore(useShallow((s) => pane.sessionIds.map((id) => s.sessions[id])))
+  // Each surface's Claude session colour (/color, or derived from /rename) — undefined = none.
+  const agentMeta = useStore((s) => s.agentMeta) // stable ref — changes only on a meta update
+  const scheme = useStore((s) => activeTheme(s).scheme)
+  const accents = pane.sessionIds.map((id) => sessionColor(agentMeta[id], scheme))
   const home = useStore((s) => s.home)
   const session = surfaces[pane.sessionIds.indexOf(activeId)]
   const focused = useStore(
@@ -127,7 +132,19 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
   const leftFor = (e: React.DragEvent) =>
     !(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))
 
-  const railClass = !isSplit ? "" : focused ? " focused" : status === "attention" ? " waiting" : ""
+  // Top rail: an unfocused pane of a split that needs input shows amber first (the signal
+  // that says which agent is blocked); else a Claude session colour paints it — on any pane,
+  // split or not (faded on unfocused panes so focus still reads); else it only marks focus
+  // between split panes.
+  const accent = accents[pane.sessionIds.indexOf(activeId)]
+  const railClass =
+    isSplit && !focused && status === "attention"
+      ? " waiting"
+      : accent
+        ? ` tinted${isSplit && !focused ? " dimmed" : ""}`
+        : isSplit && focused
+          ? " focused"
+          : ""
 
   // Right-click clipboard menu. Copy is disabled without a selection.
   const openMenu = (e: React.MouseEvent) => {
@@ -144,6 +161,7 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
   return (
     <div
       className={`terminal-pane${railClass}`}
+      style={accent ? ({ "--pane-accent": accent } as React.CSSProperties) : undefined}
       onMouseDown={() => useStore.getState().setActivePane(tabId, visibleNow())}
       // Re-focus the terminal after any click/selection so keystrokes reach the
       // PTY (the textarea doesn't always keep focus after a selection).
@@ -236,7 +254,8 @@ export function TerminalPane({ pane, tabId }: { pane: PaneLeaf; tabId: string })
                 <Terminal
                   size={13}
                   weight="fill"
-                  color={active && focused ? "var(--accent)" : "var(--dim)"}
+                  // The session's colour when it has one (the tab "dot"), else focus/dim.
+                  color={accents[i] ?? (active && focused ? "var(--accent)" : "var(--dim)")}
                 />
                 <span className="pane-title">{displaySessionTitle(s, home)}</span>
                 {/* Hidden surfaces surface their state on the tab (you can't see the pane). */}

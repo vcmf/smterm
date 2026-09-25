@@ -640,3 +640,27 @@ describe("store — settings", () => {
     expect(ipc.writeSettings).toHaveBeenCalled()
   })
 })
+
+describe("store — Claude session accent", () => {
+  beforeEach(resetStore)
+
+  it("setAgentMeta stores a pane's meta; null clears it; unknown panes are ignored", () => {
+    st().newTab(shell)
+    const id = firstTab().activeSessionId
+    st().setAgentMeta(id, { color: "orange" })
+    expect(st().agentMeta[id]).toEqual({ color: "orange" })
+    st().setAgentMeta("ghost", { color: "red" })
+    expect(st().agentMeta.ghost).toBeUndefined()
+    st().setAgentMeta(id, null)
+    expect(st().agentMeta[id]).toBeUndefined()
+  })
+
+  it("closing the terminal drops its accent", () => {
+    st().newTab(shell)
+    st().newSurface()
+    const id = firstTab().activeSessionId
+    st().setAgentMeta(id, { name: "x" })
+    st().closeSurface(firstTab().id, id)
+    expect(st().agentMeta[id]).toBeUndefined()
+  })
+})

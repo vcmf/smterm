@@ -221,6 +221,11 @@ Output stream: main → renderer via `webContents.send('pty:data:'+id, Uint8Arra
   centre (join), or a slot in any pane's header strip (reorder / join there). Pure
   `dropZone`/`insertIndex` (geometry) + `canMove`/`moveSurface` (pane-tree); a transparent
   overlay covers the terminal only while dragging (xterm's canvas swallows drag events).
+- **Claude session colour:** Claude Code's `/color` / `/rename` are recorded only in its session
+  transcript (`agent-color` / `custom-title` JSONL lines — no terminal escape). Main tracks each
+  Claude pane's transcript (located via its hook events; `fs.watch` + debounced incremental fold,
+  `electron/agent-meta.ts`) and pushes `{paneId, meta}` → a 2px top border + tab/sidebar icon in
+  that colour; a renamed session without `/color` gets a stable colour from its name.
 - **`terminal-manager.ts`:** owns xterm instances **outside the React tree**, keyed by session id, so
   splits/tab-switches re-attach (never respawn). Loads addons (webgl, fit, web-links); registers the
   ligature character-joiner; wires OSC 9 / OSC 133.
