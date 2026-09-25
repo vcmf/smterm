@@ -15,15 +15,16 @@ export interface WorkDir {
 }
 
 /** Same folder, ignoring a trailing separator. */
-export const samePath = (a: string, b: string): boolean =>
-  normalizeRootPath(a) === normalizeRootPath(b)
+export const samePath = (a: string, b: string): boolean => norm(a) === norm(b)
+
+// normalizeRootPath + one separator ("C:/x" from git ≡ "C:\\x" from a Windows shell).
+const norm = (p: string) => normalizeRootPath(p).replace(/\\/g, "/")
 
 /** `child` is strictly inside `parent` (a root like "/" or "C:\\" included). */
 export function isInside(child: string, parent: string): boolean {
-  const p = normalizeRootPath(parent)
-  const c = normalizeRootPath(child)
-  const sep = p.includes("\\") ? "\\" : "/"
-  const prefix = p.endsWith(sep) ? p : p + sep
+  const p = norm(parent)
+  const c = norm(child)
+  const prefix = p.endsWith("/") ? p : p + "/"
   return c !== p && c.startsWith(prefix)
 }
 
@@ -37,10 +38,13 @@ export function claudeWorkDirs(graph: AgentGraph): Record<string, WorkDir> {
   const newest: Record<string, number> = {}
   for (const rid of graph.rootIds) {
     const n = graph.nodes[rid]
-    if (!n?.paneId || !n.cwd) continue
-    if ((n.started ?? 0) < (newest[n.paneId] ?? -1)) continue // an older session of the pane
+    if (!n?.paneId || (n.started ?? 0) < (newest[n.paneId] ?? -1)) continue // older session
     newest[n.paneId] = n.started ?? 0
     const cwd = n.cwd
+    if (!cwd) {
+      delete out[n.paneId] // the pane's newest session hasn't said where it is yet
+      continue
+    }
     const others = (n.worktrees ?? []).filter((w) => !samePath(w.path, cwd))
     out[n.paneId] = { cwd, others }
   }
@@ -67,9 +71,11 @@ export function claudeWorkFlat(graph: AgentGraph): string[] {
 export function inGitFor(inGit: PaneGitInfo | undefined, work: string | undefined) {
   if (!inGit || !work) return undefined
   if (inGit.forCwd === work) return inGit
-  return inGit.root && (samePath(work, inGit.root) || isInside(work, inGit.root))
-    ? inGit
-    : undefined
+  if (!inGit.root) return undefined
+  if (samePath(work, inGit.root)) return inGit
+  // Inside the repo — but a nested worktree (Claude's own layout) is a new checkout.
+  const rest = norm(work).slice(norm(inGit.root).length)
+  return isInside(work, inGit.root) && !rest.includes("/.claude/worktrees/") ? inGit : undefined
 }
 
 /** Claude works in another checkout: other repo root, or by real path outside git; unknown → no. */
@@ -156,10 +162,18 @@ export function settleInAnswers(
     const r = res[key]
     const prev = known[key]
     if (!r) delete res[key]
-    // Nothing resolved: a hiccup, or the folder really left git (WSL has no real path) —
-    // keep the last answer for one poll only.
-    else if (!r.root && !r.real && prev?.forCwd === cwd && !prev.kept)
+    // Lost its repo for the same folder: a git hiccup (timeout), or it really left git — keep
+    // the last answer for one poll only (then accept; no flip-flop: prev then has no root).
+    else if (!r.root && prev?.root && prev.forCwd === cwd && !prev.kept)
       res[key] = { ...prev, kept: true }
     else r.forCwd = cwd
+  }
+}
+
+/** noPr answers carry no PR: keep the known one so expanding the sidebar shows it at once. */
+export function keepPrs(res: Record<string, PaneGitInfo>, known: Record<string, PaneGitInfo>) {
+  for (const [key, r] of Object.entries(res)) {
+    const pr = known[key]?.pr
+    if (pr && !r.pr && r.branch === known[key]?.branch) r.pr = pr
   }
 }

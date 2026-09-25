@@ -39,6 +39,16 @@ describe("AgentsPanel", () => {
     const deeper = { ...moveIn, cwd: "/repo/.wt/feat/src" } // a subfolder of that worktree
     act(() => useStore.getState().applyAgentEvents([deeper]))
     expect(container.textContent).toContain("feat/x · in")
+    // a worktree nested inside it: only the deepest one is `in`
+    const nested = "/repo/.wt/feat/.claude/worktrees/b"
+    act(() =>
+      useStore.getState().applyAgentEvents([
+        { event: "WorktreeCreate", sessionId: "s", worktreePath: nested, baseBranch: "feat/b" },
+        { ...moveIn, cwd: nested },
+      ]),
+    )
+    expect(container.textContent).toContain("feat/b · in")
+    expect(container.textContent).not.toContain("feat/x · in")
   })
 
   it("clicking the folder opens a terminal there (agent's pane context)", () => {

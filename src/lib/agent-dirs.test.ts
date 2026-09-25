@@ -10,6 +10,7 @@ import {
   inGitFor,
   planGitPoll,
   settleInAnswers,
+  keepPrs,
   samePath,
   inGitKey,
   paneOfGitKey,
@@ -57,6 +58,14 @@ describe("claudeWorkDirs", () => {
     expect(workCwd(g, {}, "other", "/x")).toBe("/x")
   })
 
+  it("a newest session with no folder yet hides the pane's older folder", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
+      { event: "SessionStart", sessionId: "b", paneId: "p" },
+    ])
+    expect(claudeWorkDirs(g).p).toBeUndefined()
+  })
+
   it("an older session restarting in the same pane (/resume back) is the live one again", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
@@ -84,6 +93,11 @@ describe("inGitFor / workCwd follow the checkout, not Claude's subfolder", () =>
     expect(inGitFor(ans, "/r/wt/src")).toBe(ans)
     expect(inGitFor(ans, "/elsewhere")).toBeUndefined()
     expect(inGitFor({ real: "/x", forCwd: "/x" }, "/x/sub")).toBeUndefined() // no repo: exact only
+    // …but a worktree nested in the repo (EnterWorktree) is a new checkout: wait for its answer
+    expect(inGitFor({ root: "/p", forCwd: "/p" }, "/p/.claude/worktrees/f")).toBeUndefined()
+    // git on Windows answers C:/…, the shell says C:\…
+    const win = { root: "C:/u/wt", forCwd: "C:\\u\\wt" }
+    expect(inGitFor(win, "C:\\u\\wt\\src")).toBe(win)
   })
   it("git views follow the checkout root while Claude is in a subfolder of it", () => {
     const g = graph([{ event: "SessionStart", sessionId: "s", paneId: "p", cwd: "/r/wt/src" }])
@@ -192,17 +206,24 @@ describe("planGitPoll / settleInAnswers", () => {
     expect(p.reqs[63]?.paneId).toBe("z")
   })
 
-  it("tags answers with their folder; a failed lookup keeps the last answer once", () => {
-    type R = Record<string, { root?: string; forCwd?: string; kept?: boolean }>
+  it("tags answers with their folder; losing the repo for the same folder is kept once", () => {
+    type R = Record<string, { root?: string; real?: string; forCwd?: string; kept?: boolean }>
     const prev = { root: "/b/wt", forCwd: "/b/wt" }
-    const res: R = { "b@in": {} }
+    const res: R = { "b@in": { real: "/b/wt" } } // git timed out; realpath still worked
     settleInAnswers(res, { "b@in": "/b/wt" }, { "b@in": prev })
     expect(res["b@in"]).toEqual({ ...prev, kept: true })
-    const again: R = { "b@in": {} } // still nothing: the folder really left git → accept
+    const again: R = { "b@in": { real: "/b/wt" } } // still no repo: it really left git → accept
     settleInAnswers(again, { "b@in": "/b/wt" }, { "b@in": { ...prev, kept: true } })
-    expect(again["b@in"]).toEqual({ forCwd: "/b/wt" })
-    const fresh: R = { "b@in": { root: "/b/wt" } }
-    settleInAnswers(fresh, { "b@in": "/b/wt" }, {})
-    expect(fresh["b@in"]?.forCwd).toBe("/b/wt")
+    expect(again["b@in"]).toEqual({ real: "/b/wt", forCwd: "/b/wt" })
+    const steady: R = { "b@in": { real: "/b/wt" } } // …and stays accepted (no flip-flop)
+    settleInAnswers(steady, { "b@in": "/b/wt" }, { "b@in": again["b@in"]! })
+    expect(steady["b@in"]?.kept).toBeUndefined()
+  })
+
+  it("keepPrs: a no-PR answer keeps the known PR of the same branch", () => {
+    const pr = { number: 5, state: "open" as const, url: "u" }
+    const res = { a: { branch: "x" }, b: { branch: "y" } }
+    keepPrs(res, { a: { branch: "x", pr }, b: { branch: "z", pr } })
+    expect(res).toEqual({ a: { branch: "x", pr }, b: { branch: "y" } })
   })
 })

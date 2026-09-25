@@ -14,7 +14,7 @@ import { FilePreview } from "./components/file-preview"
 import { ClosePaneDialog } from "./components/close-pane-dialog"
 import { RightPanelResizer } from "./components/right-panel-resizer"
 import { useActiveWorkCwd, getActiveWsl } from "./lib/use-active-cwd"
-import { claudeWorkDirs, planGitPoll, settleInAnswers } from "./lib/agent-dirs"
+import { claudeWorkDirs, keepPrs, planGitPoll, settleInAnswers } from "./lib/agent-dirs"
 import { TerminalManager } from "./terminal/terminal-manager"
 import { activeTheme, useStore } from "./store"
 import { ensureNotificationPermission } from "./lib/notify"
@@ -334,13 +334,18 @@ function App() {
         claudeWorkDirs(s.agents),
         s.sidebarCollapsed,
       )
-      if (reqs.length === 0) return
+      if (reqs.length === 0) {
+        if (polled.length) useStore.getState().setPaneGit({}, polled) // still clear stale `in`s
+        return
+      }
       const mine = ++seq
       const res = await ipc.paneGitInfo(reqs).catch(() => null)
       if (!res || stopped || mine !== seq) return // a newer poll has (or will have) the truth
       const pending = Object.values(res).some((i) => i.prPending)
       for (const i of Object.values(res)) delete i.prPending // transport flag, not state
-      settleInAnswers(res, inCwd, useStore.getState().paneGit)
+      const known = useStore.getState().paneGit
+      settleInAnswers(res, inCwd, known)
+      if (s.sidebarCollapsed) keepPrs(res, known) // no-PR lookups: don't blank the PR lines
       useStore.getState().setPaneGit(res, polled)
       if (pending) pollSoon(1500) // a PR is being fetched in main — pick it up shortly
     }

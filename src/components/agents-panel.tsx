@@ -149,6 +149,10 @@ export function AgentsPanel() {
             .map((cid) => agents.nodes[cid])
             .filter((c): c is AgentNode => !!c)
           const wts = root.worktrees ?? []
+          // The worktree Claude is in: the deepest containing its cwd (worktrees can nest).
+          const inWt = wts
+            .filter((w) => root.cwd && (samePath(root.cwd, w.path) || isInside(root.cwd, w.path)))
+            .sort((a, b) => b.path.length - a.path.length)[0]?.path
           const hasKids = childNodes.length > 0 || wts.length > 0
           const lastChildIdx = wts.length ? -1 : childNodes.length - 1
           const active = !!root.paneId && root.paneId === activePaneId
@@ -194,9 +198,7 @@ export function AgentsPanel() {
                     <span className="tree-primary">
                       {w.branch ?? base(w.path)}
                       {/* Claude works in this one now — the sidebar's `in` line. */}
-                      {root.cwd && (samePath(root.cwd, w.path) || isInside(root.cwd, w.path)) && (
-                        <span className="status-faint"> · in</span>
-                      )}
+                      {w.path === inWt && <span className="status-faint"> · in</span>}
                     </span>
                     <button
                       className="tree-sub folder-link"
