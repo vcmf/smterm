@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { reduceAgentEvents, type AgentEvent } from "./agent-graph"
+import { reduceAgentEvents, claudePaneIds, type AgentEvent } from "./agent-graph"
 import {
   claudeWorkDirs,
   claudeWorkFlat,
@@ -30,7 +30,7 @@ describe("claudeWorkDirs", () => {
   it("other worktrees exclude the one Claude is in; the newest session of a pane wins", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "old", paneId: "p", cwd: "/old" },
-      { event: "SessionStart", sessionId: "s", paneId: "p", cwd: "/r" },
+      { event: "SessionStart", sessionId: "s", paneId: "p", cwd: "/r", source: "resume" }, // /resume
       { event: "WorktreeCreate", sessionId: "s", paneId: "p", worktreePath: "/r/wt/a" },
       { event: "WorktreeCreate", sessionId: "s", paneId: "p", worktreePath: "/r/wt/b" },
       { event: "CwdChanged", sessionId: "s", paneId: "p", cwd: "/r/wt/a/" },
@@ -61,7 +61,7 @@ describe("claudeWorkDirs", () => {
   it("a newest session with no folder yet hides the pane's older folder", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
-      { event: "SessionStart", sessionId: "b", paneId: "p" },
+      { event: "SessionStart", sessionId: "b", paneId: "p", source: "clear" },
     ])
     expect(claudeWorkDirs(g).p).toBeUndefined()
   })
@@ -69,7 +69,7 @@ describe("claudeWorkDirs", () => {
   it("an older session restarting in the same pane (/resume back) is the live one again", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
-      { event: "SessionStart", sessionId: "b", paneId: "p", cwd: "/b" },
+      { event: "SessionStart", sessionId: "b", paneId: "p", cwd: "/b", source: "resume" },
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a", source: "resume" },
     ])
     expect(claudeWorkDirs(g).p?.cwd).toBe("/a")
@@ -79,7 +79,7 @@ describe("claudeWorkDirs", () => {
     const g = graph([
       { event: "SessionStart", sessionId: "a", paneId: "p", cwd: "/a" },
       { event: "SessionStart", sessionId: "b", paneId: "q", cwd: "/b" },
-      { event: "SessionStart", sessionId: "a", paneId: "q", cwd: "/a2" }, // resumed in q
+      { event: "SessionStart", sessionId: "a", paneId: "q", cwd: "/a2", source: "resume" }, // in q
     ])
     expect(claudeWorkDirs(g).q?.cwd).toBe("/a2")
     expect(claudeWorkFlat(g)).toBe(claudeWorkFlat(g))
@@ -225,5 +225,70 @@ describe("planGitPoll / settleInAnswers", () => {
     const res = { a: { branch: "x" }, b: { branch: "y" } }
     keepPrs(res, { a: { branch: "x", pr }, b: { branch: "z", pr } })
     expect(res).toEqual({ a: { branch: "x", pr }, b: { branch: "y" } })
+  })
+})
+
+describe("background agents don't take the pane over (main tags them nested)", () => {
+  it("a session tagged nested never becomes the pane's `in`, even started later or re-started", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", nested: false },
+      { event: "SessionStart", sessionId: "agent", paneId: "p", cwd: "/dimo", nested: true },
+      { event: "CwdChanged", sessionId: "agent", paneId: "p", cwd: "/tmp/pad", nested: true },
+      {
+        event: "SessionStart",
+        sessionId: "agent",
+        paneId: "p",
+        cwd: "/tmp/pad",
+        source: "compact",
+        nested: true,
+      },
+    ])
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/dimo")
+  })
+
+  it("after a renderer reload the agent may be seen first — the lead still wins", () => {
+    const g = graph([
+      { event: "PreToolUse", sessionId: "agent", paneId: "p", cwd: "/tmp/pad", nested: true },
+      { event: "PreToolUse", sessionId: "lead", paneId: "p", cwd: "/dimo", nested: false },
+    ])
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/dimo")
+  })
+
+  it("when the lead is replaced (/clear → new lead), the tag follows", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "old", paneId: "p", cwd: "/a", nested: false },
+      { event: "SessionEnd", sessionId: "old", paneId: "p" },
+      {
+        event: "SessionStart",
+        sessionId: "new",
+        paneId: "p",
+        cwd: "/b",
+        source: "clear",
+        nested: false,
+      },
+    ])
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/b")
+  })
+})
+
+describe("a background agent alone in a pane isn't the pane's Claude", () => {
+  it("after the lead ends, no `in` and no Claude icon from the agent", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", nested: false },
+      { event: "SessionStart", sessionId: "agent", paneId: "p", cwd: "/tmp/pad", nested: true },
+      { event: "SessionEnd", sessionId: "lead", paneId: "p" },
+    ])
+    expect(claudeWorkDirs(g).p).toBeUndefined()
+    expect(claudePaneIds(g)).toEqual([])
+  })
+})
+
+describe("a stray SessionStart main rejected doesn't move the lead", () => {
+  it("main drops a rejected folder (cwd undefined): the graph keeps the lead's folder", () => {
+    const g = graph([
+      { event: "SessionStart", sessionId: "lead", paneId: "p", cwd: "/dimo", nested: false },
+      { event: "SessionStart", sessionId: "lead", paneId: "p", source: "resume", nested: false },
+    ])
+    expect(claudeWorkDirs(g).p?.cwd).toBe("/dimo")
   })
 })

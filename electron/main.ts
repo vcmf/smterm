@@ -116,6 +116,19 @@ const PTY_MAX_FLUSH_BYTES = 256 * 1024
 // Recent output kept per session for replay when a reloaded renderer reattaches.
 const PTY_REPLAY_BYTES = 256 * 1024
 
+// Session lifecycle only (rare; never per-tool events or cwd changes): enough to trace resume.
+const TRACED_HOOKS = new Set(["SessionStart", "SessionEnd", "WorktreeCreate"])
+/** A hook event's diagnostics fields: which session, from which pane, where. */
+function hookTrace(ev: AgentEvent): Record<string, string> {
+  return {
+    ev: ev.event,
+    sid: ev.sessionId.slice(0, 8),
+    pane: (ev.paneId ?? "-").slice(0, 8),
+    src: ev.source ?? ev.reason ?? "",
+    cwd: ev.cwd ?? "",
+  }
+}
+
 // Send PTY output to the session's current renderer (skips a destroyed one).
 function emit(rec: PtySession, data: string): void {
   // Quitting: the dying shells' last output (a bell, OSC 9) mustn't reach the hidden window.
@@ -230,19 +243,35 @@ async function startAgentObservability(): Promise<void> {
     hookWatcher = await startHookWatcher({
       dir: eventsDir,
       onBatch: (events: AgentEvent[]) => {
-        // Forward the hook events immediately (keeps the board live), then price any
-        // finished turns/sub-agents from their transcripts asynchronously and forward the
-        // resulting token totals as a follow-up batch. The read is off the terminal hot
-        // path and incremental, so it never delays the events above or the agent's loop.
-        mainWindow?.webContents.send("agents:events", events)
-        // Which pane is inside which Claude session (+ its WSL distro, for the transcript).
+        // Fold the batch into the resume ledger (which pane is inside which Claude session,
+        // + its WSL distro) and tag each event lead/nested from it, then forward it at once
+        // (keeps the board live). Token totals are priced from the transcripts afterwards,
+        // async and incremental — off the terminal hot path and the agent's loop.
         for (const ev of events) {
-          sessionLedger().apply(ev, ev.paneId ? sessions.get(ev.paneId)?.wslDistro : undefined)
+          // Session lifecycle only (never per-tool events): traceable when resume goes wrong.
+          if (TRACED_HOOKS.has(ev.event)) diag("hook", hookTrace(ev))
+          const r = sessionLedger().apply(
+            ev,
+            ev.paneId ? sessions.get(ev.paneId)?.wslDistro : undefined,
+          )
+          if (r.verdict) diag(`hook-cwd-${r.verdict}`, hookTrace(ev))
+          // The renderer's graph takes the ledger's folder: a replaced one is rewritten, a
+          // rejected one dropped (the graph keeps what it knew) — no second classifier there.
+          if (r.verdict === "fallback") ev.cwd = r.cwd
+          else if (r.verdict === "rejected") ev.cwd = undefined
+          // One classifier for "who leads this pane": the ledger. Tag every root event so the
+          // graph and the accent agree (and survive a renderer reload — the ledger lives here).
+          if (ev.paneId && !ev.agentId)
+            ev.nested = sessionLedger().isNested(ev.paneId, ev.sessionId)
         }
+        mainWindow?.webContents.send("agents:events", events)
         // Session-level events locate each Claude pane's transcript → track its /color and
         // /rename for the pane accent (async + debounced; SessionEnd stops it).
         for (const ev of events) {
           if (!ev.paneId || !ev.transcriptPath || ev.agentId) continue
+          // Only the pane's own session (this event's own verdict, not the state after the whole
+          // batch): a background agent inherits the pane but mustn't take its accent.
+          if (ev.nested) continue
           if (ev.event === "SessionEnd") agentMeta.untrack(ev.paneId, true, ev.transcriptPath)
           else
             agentMeta.track(

@@ -51,7 +51,7 @@ export function Sidebar() {
       const latest: Record<string, string> = {}
       for (const rid of s.agents.rootIds) {
         const n = s.agents.nodes[rid]
-        if (n?.paneId && n.lastMessage) latest[n.paneId] = n.lastMessage
+        if (n?.paneId && n.lastMessage && !n.nested) latest[n.paneId] = n.lastMessage // lead only
       }
       return Object.entries(latest).flat()
     }),

@@ -307,6 +307,27 @@ and `terminal-manager` types `claude --resume <id> [--permission-mode m]` at the
 - A shell **without** integration (e.g. a cold WSL VM whose injection timed out) can't confirm
   a resume — no hooks, no OSC 133 — so after typing the banner only says it was **sent**; it
   never reports failure or offers buttons that would type into a possibly-running Claude.
+- **The resume folder must be where Claude filed the session.** Claude files a session under
+  `~/.claude/projects/<cwd with every non-alphanumeric → "-">/`, and `claude --resume` only finds
+  it from that folder. A `SessionStart` whose folder doesn't encode to its transcript's project
+  dir falls back to the pane's last verified folder that fits (a stray event from an agent's
+  scratchpad; `/clear` while Claude sits in a subfolder); with none, the session is still
+  recorded as the pane's lead but never resumed — logged as
+  `hook-cwd-fallback` / `hook-cwd-rejected`. A later event whose folder does match is followed
+  (a session re-filed under a worktree); `plan()` skips a mismatching entry instead of
+  `cd`-ing into it (`src/lib/claude-project.ts`).
+- **Background agents inherit the pane.** Claude's named agents run as separate `claude`
+  processes with our `SMTERM_PANE_ID` + hooks. **One classifier decides the pane's lead: the
+  ledger** — while a live lead exists, any other session's `SessionStart` (startup, compact,
+  resume) is nested, and stays nested until it ends (an agent outlives its lead); a real switch
+  ends the old session first, and `/clear` / `fork` count as one regardless. Main rewrites a
+  replaced/rejected folder and tags every root event `nested` before forwarding, so the
+  renderer's graph (`in`, status bar, panels) and the pane accent follow only the lead — no
+  second classifier. Known limits: a lead killed with no `SessionEnd` in a shell without our
+  integration (no prompt mark to notice it) keeps leading until the pane closes; and after the
+  lead exits, a surviving agent that runs `claude -p` itself looks exactly like the user starting
+  a new `claude` there, so it can lead.
+  Session lifecycle hooks are traced as `hook …` lines in `diagnostics.log`.
 - Known limit: vi-mode users in **normal** mode — ^U doesn't clear the line there, so a banner
   button's keystrokes are read as vi commands. Stay in insert mode (the default) to use them.
 - **rc-time commands are fine** (`conda activate`, nvm, direnv in `.zshrc`): the first `D` only

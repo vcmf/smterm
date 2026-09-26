@@ -3,6 +3,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { SessionLedger, resumeCommand } from "./agent-sessions"
+import { claudeProjectDirName } from "../src/lib/claude-project"
 import type { AgentEvent } from "../src/lib/agent-graph"
 
 const ID = "7fe87f63-8ccf-437e-b991-94aa4ee44a0e"
@@ -59,6 +60,7 @@ describe("SessionLedger rules", () => {
     const l = new SessionLedger(null)
     l.apply(start())
     expect(l.get("p1")).toMatchObject({ sessionId: ID, cwd: "/repo" })
+    l.apply(end({ reason: "clear" })) // Claude ends the old session first
     l.apply(start({ sessionId: ID2, source: "clear" }))
     expect(l.get("p1")?.sessionId).toBe(ID2)
   })
@@ -308,5 +310,164 @@ describe("SessionLedger persistence", () => {
     const file = path.join(dir, "agent-sessions.json")
     fs.writeFileSync(file, "{nope")
     expect(new SessionLedger(file).get("p1")).toBeUndefined()
+  })
+})
+
+describe("SessionLedger — a session launched inside the lead never replaces it", () => {
+  it("a background agent's own compact / resume (not just its startup) is nested", () => {
+    for (const source of ["startup", "compact", "resume"]) {
+      const l = new SessionLedger(null)
+      l.apply(start())
+      l.apply(start({ sessionId: ID2, source }))
+      expect(l.get("p1")?.sessionId, source).toBe(ID)
+      expect(l.isNested("p1", ID2)).toBe(true)
+      expect(l.isNested("p1", ID)).toBe(false)
+    }
+  })
+
+  it("/clear or fork switches even if the old session's SessionEnd got lost", () => {
+    for (const source of ["clear", "fork"]) {
+      const l = new SessionLedger(null)
+      l.apply(start())
+      l.apply(start({ sessionId: ID2, source }))
+      expect(l.get("p1")?.sessionId, source).toBe(ID2)
+    }
+  })
+
+  it("a nested session stays nested after the lead ends — it never becomes the lead", () => {
+    const ID3 = "11111111-2222-4333-8444-555555555555"
+    const l = new SessionLedger(null)
+    l.apply(start())
+    l.apply(start({ sessionId: ID2 })) // the background agent
+    l.apply(end()) // the user leaves Claude; the agent keeps running
+    l.apply(start({ sessionId: ID2, source: "compact" })) // the agent compacts
+    expect(l.get("p1")).toBeUndefined()
+    expect(l.isNested("p1", ID2)).toBe(true)
+    l.apply(start({ sessionId: ID3 })) // the user's next real claude leads
+    expect(l.get("p1")?.sessionId).toBe(ID3)
+  })
+})
+
+describe("SessionLedger — the folder must be where Claude filed the session", () => {
+  const DIMO = "/Users/me/workspace/dimo"
+  const tr = (dir: string, id = ID) => `/Users/me/.claude/projects/${dir}/${id}.jsonl`
+  const T_DIMO = tr("-Users-me-workspace-dimo")
+  const PAD = "/private/tmp/claude-501/-Users-me-workspace-dimo/7aaf8a32/scratchpad"
+
+  it("a SessionStart carrying another folder (a background agent's scratchpad) keeps the real one", () => {
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: DIMO, transcriptPath: T_DIMO }))
+    expect(
+      l.apply(
+        start({ cwd: PAD, transcriptPath: T_DIMO, source: "resume", permissionMode: undefined }),
+      ),
+    ).toEqual({ verdict: "fallback", cwd: DIMO })
+    expect(l.get("p1")?.cwd).toBe(DIMO)
+    expect(l.get("p1")?.permissionMode).toBe("default") // kept, not wiped by the stray event
+  })
+
+  it("/clear while Claude sits in a subfolder: the new session is recorded at the verified folder", () => {
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: DIMO, transcriptPath: T_DIMO }))
+    l.apply(end({ reason: "clear" }))
+    l.apply(
+      start({
+        sessionId: ID2,
+        cwd: `${DIMO}/src`,
+        transcriptPath: tr("-Users-me-workspace-dimo", ID2),
+        source: "clear",
+      }),
+    )
+    expect(l.get("p1")).toMatchObject({ sessionId: ID2, cwd: DIMO })
+  })
+
+  it("no verified folder fits → recorded as the pane's lead (so its agents stay nested) but never resumed", async () => {
+    const l = new SessionLedger(null)
+    expect(l.apply(start({ cwd: PAD, transcriptPath: T_DIMO }))).toEqual({ verdict: "rejected" })
+    expect(l.get("p1")?.sessionId).toBe(ID)
+    l.apply(start({ sessionId: ID2 })) // its background agent
+    expect(l.isNested("p1", ID2)).toBe(true)
+    expect((await plan(l)).p1).toMatchObject({
+      status: "skip",
+      reason: "its folder doesn't match the session",
+    })
+  })
+
+  it("the prompt returning after the lead ends keeps its agents nested (they may still run)", () => {
+    const l = new SessionLedger(null)
+    l.apply(start())
+    l.apply(start({ sessionId: ID2 }))
+    l.shellIdle("p1") // /exit → the shell prompt is back
+    expect(l.get("p1")).toBeUndefined()
+    expect(l.isNested("p1", ID2)).toBe(true)
+    l.apply(start({ sessionId: ID2, source: "compact" }))
+    expect(l.get("p1")).toBeUndefined() // the agent never becomes the lead
+    l.drop("p1") // the pane itself closes → forgotten
+    expect(l.isNested("p1", ID2)).toBe(false)
+  })
+
+  it("later events never move the folder to a non-matching one (cd into a subfolder / scratchpad)", () => {
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: DIMO, transcriptPath: T_DIMO }))
+    l.apply({ event: "CwdChanged", sessionId: ID, paneId: "p1", cwd: PAD, transcriptPath: T_DIMO })
+    l.apply({
+      event: "PreToolUse",
+      sessionId: ID,
+      paneId: "p1",
+      cwd: `${DIMO}/src`,
+      transcriptPath: T_DIMO,
+    })
+    expect(l.get("p1")?.cwd).toBe(DIMO)
+  })
+
+  it("a session re-filed under a worktree's folder follows it (resume must cd there)", () => {
+    const l = new SessionLedger(null)
+    const repo = "/Users/me/up/asianf"
+    const wt = `${repo}/.claude/worktrees/x`
+    l.apply(start({ cwd: repo, transcriptPath: tr("-Users-me-up-asianf") }))
+    l.apply({
+      event: "CwdChanged",
+      sessionId: ID,
+      paneId: "p1",
+      cwd: wt,
+      transcriptPath: tr("-Users-me-up-asianf--claude-worktrees-x"),
+    })
+    expect(l.get("p1")).toMatchObject({
+      cwd: wt,
+      transcriptPath: tr("-Users-me-up-asianf--claude-worktrees-x"),
+    })
+  })
+
+  it("an undecided check (very long path) keeps a restarting session's recorded folder", () => {
+    const long = "/Users/me/" + "x".repeat(210)
+    const t = tr(claudeProjectDirName(long))
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: long, transcriptPath: t }))
+    l.apply(start({ cwd: `${long}/packages/a`, transcriptPath: t, source: "compact" }))
+    expect(l.get("p1")?.cwd).toBe(long)
+  })
+
+  it("an entry recorded with a mismatching folder (before this check) is skipped, never cd'd into", async () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "smterm-ledger-m-")), "l.json")
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ p1: { sessionId: ID, cwd: PAD, transcriptPath: T_DIMO } }),
+    )
+    const l = new SessionLedger(file)
+    expect((await plan(l)).p1).toMatchObject({
+      status: "skip",
+      reason: "its folder doesn't match the session",
+    })
+  })
+})
+
+describe("SessionLedger — an unverifiable restart never costs a resumable folder", () => {
+  it("very long project path: a same-session restart from a short mismatching folder keeps it", async () => {
+    const long = "/Users/me/" + "x".repeat(210)
+    const t = `/Users/me/.claude/projects/${claudeProjectDirName(long)}/${ID}.jsonl`
+    const l = new SessionLedger(null)
+    l.apply(start({ cwd: long, transcriptPath: t }))
+    l.apply(start({ cwd: "/tmp/x", transcriptPath: t, source: "compact" }))
+    expect(l.get("p1")?.cwd).toBe(long)
   })
 })

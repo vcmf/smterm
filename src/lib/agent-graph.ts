@@ -40,6 +40,7 @@ export interface AgentEvent {
   agentTranscriptPath?: string // agent_transcript_path — a sub-agent's own JSONL
   tokens?: TokenUsage // synthetic "TokenUsage" event: cumulative usage for the target node
   source?: string // SessionStart: startup | resume | clear | compact | fork
+  nested?: boolean // main's verdict: a session launched inside the pane's lead (background agent)
   reason?: string // SessionEnd: prompt_input_exit | logout | clear | resume | other
   permissionMode?: string // permission_mode (default | acceptEdits | plan | bypassPermissions …)
 }
@@ -61,6 +62,7 @@ export interface AgentNode {
   recentFiles: string[] // most-recent-first, capped
   worktrees?: Worktree[] // worktrees created in this session (WorktreeCreate), root only
   started?: number // root: order of its latest SessionStart — the newest per pane is live
+  nested?: boolean // root: launched inside the pane's lead (background agent) — main decides
   lastMessage?: string
   tokens?: TokenUsage // cumulative token usage (session root or sub-agent), off-band via hooks
   parentId?: string // undefined for a root
@@ -133,6 +135,11 @@ export function reduceAgentEvent(graph: AgentGraph, ev: AgentEvent): AgentGraph 
       nodes[rid] = { ...root, childIds: [...root.childIds, ev.agentId] }
     }
   }
+
+  // Main decides which session leads the pane (one classifier, shared with resume + accent):
+  // a background agent inherits the pane but mustn't take `in` over.
+  if (ev.nested !== undefined && !ev.agentId && nodes[rid]?.nested !== ev.nested)
+    nodes[rid] = { ...at(rid), nested: ev.nested }
 
   const targetId = ev.agentId ?? rid
   const set = (id: string, changes: Partial<AgentNode>) => {
@@ -250,8 +257,8 @@ export function claudePaneIds(graph: AgentGraph): string[] {
   if (hit) return hit
   const ids = new Set<string>()
   for (const rid of graph.rootIds) {
-    const pane = graph.nodes[rid]?.paneId
-    if (pane) ids.add(pane)
+    const n = graph.nodes[rid]
+    if (n?.paneId && !n.nested) ids.add(n.paneId) // a background agent alone isn't "Claude here"
   }
   const out = [...ids].sort()
   paneIdsMemo.set(graph, out)

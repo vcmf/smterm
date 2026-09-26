@@ -35,11 +35,14 @@ export function claudeWorkDirs(graph: AgentGraph): Record<string, WorkDir> {
   const hit = memo.get(graph)
   if (hit) return hit
   const out: Record<string, WorkDir> = {}
-  const newest: Record<string, number> = {}
+  const best: Record<string, number> = {}
   for (const rid of graph.rootIds) {
     const n = graph.nodes[rid]
-    if (!n?.paneId || (n.started ?? 0) < (newest[n.paneId] ?? -1)) continue // older session
-    newest[n.paneId] = n.started ?? 0
+    // Never a nested session (a background agent), even alone: it isn't the pane's Claude.
+    if (!n?.paneId || n.nested) continue
+    const rank = n.started ?? 0 // the newest-started lead wins
+    if (rank < (best[n.paneId] ?? -1)) continue
+    best[n.paneId] = rank
     const cwd = n.cwd
     if (!cwd) {
       delete out[n.paneId] // the pane's newest session hasn't said where it is yet
